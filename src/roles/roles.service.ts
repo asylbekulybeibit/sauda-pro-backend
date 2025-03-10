@@ -64,6 +64,7 @@ export class RolesService {
   async findByUserAndShop(userId: string, shopId: string): Promise<UserRole[]> {
     return this.userRoleRepository.find({
       where: { userId, shopId },
+      relations: ['shop'],
     });
   }
 
