@@ -11,6 +11,7 @@ import { User } from '../../users/entities/user.entity';
 import { Shop } from '../../shops/entities/shop.entity';
 
 export enum RoleType {
+  SUPERADMIN = 'superadmin',
   OWNER = 'owner',
   MANAGER = 'manager',
   CASHIER = 'cashier',

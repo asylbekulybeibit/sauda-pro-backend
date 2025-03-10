@@ -8,6 +8,12 @@ import {
 } from 'typeorm';
 import { UserRole } from '../../roles/entities/user-role.entity';
 
+export enum ShopType {
+  SHOP = 'shop',
+  WAREHOUSE = 'warehouse',
+  POINT_OF_SALE = 'point_of_sale',
+}
+
 @Entity('shops')
 export class Shop {
   @PrimaryGeneratedColumn('uuid')
@@ -27,10 +33,10 @@ export class Shop {
 
   @Column({
     type: 'enum',
-    enum: ['shop', 'warehouse', 'point_of_sale'],
-    default: 'shop',
+    enum: ShopType,
+    default: ShopType.SHOP,
   })
-  type: 'shop' | 'warehouse' | 'point_of_sale';
+  type: ShopType;
 
   @CreateDateColumn()
   createdAt: Date;
