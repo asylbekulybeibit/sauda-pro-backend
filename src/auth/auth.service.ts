@@ -7,10 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { HttpService } from '@nestjs/axios';
-import { firstValueFrom, catchError } from 'rxjs';
-import { AxiosError } from 'axios';
+import { Repository, LessThan, MoreThan } from 'typeorm';
 import { UsersService } from '../users/users.service';
 import { OTP } from './entities/otp.entity';
 
@@ -22,7 +19,6 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private usersService: UsersService,
-    private httpService: HttpService,
     @InjectRepository(OTP)
     private otpRepository: Repository<OTP>
   ) {}
@@ -32,67 +28,51 @@ export class AuthService {
   }
 
   async generateOTP(phone: string): Promise<void> {
+    console.log('\n==================================');
+    console.log('Генерация OTP кода');
+    console.log('==================================\n');
+
     // Проверяем, существует ли активный OTP для этого номера
     const existingOTP = await this.otpRepository.findOne({
       where: {
         phone,
         isUsed: false,
-        expiresAt: new Date(Date.now()),
+        expiresAt: MoreThan(new Date()),
       },
     });
 
     if (existingOTP) {
-      throw new BadRequestException('OTP уже был отправлен. Попробуйте позже.');
+      console.log(`🔑 Существующий код для ${phone}:`);
+      console.log(`👉 ${existingOTP.code}`);
+      console.log(`⏰ Действителен до: ${existingOTP.expiresAt}`);
+      console.log('\n==================================\n');
+      return;
     }
 
+    // Удаляем старые OTP для этого номера
+    await this.otpRepository.delete({
+      phone,
+      expiresAt: LessThan(new Date()),
+    });
+
     const code = this.randomNumber(1111, 9999).toString();
-    const message = `SaudaPro one time password: ${code}`;
     const expiresAt = new Date(
       Date.now() + parseInt(this.configService.get('OTP_EXPIRES_IN')) * 1000
     );
 
-    // Отправляем код через WhatsApp
-    try {
-      const url = this.configService.getOrThrow('WHATSAPP_SERVICE_URL');
-      const authToken = this.configService.getOrThrow('WHATSAPP_SERVICE_TOKEN');
+    // Сохраняем OTP в базе
+    const otp = this.otpRepository.create({
+      phone,
+      code,
+      expiresAt,
+    });
+    await this.otpRepository.save(otp);
 
-      await firstValueFrom(
-        this.httpService
-          .post(
-            url,
-            { to: phone, msg: message },
-            {
-              headers: {
-                Authorization: `Bearer ${authToken}`,
-              },
-            }
-          )
-          .pipe(
-            catchError((error: AxiosError) => {
-              this.logger.error(error.response?.data);
-              throw new BadRequestException('Ошибка отправки кода');
-            })
-          )
-      );
-
-      // Сохраняем OTP в базе
-      const otp = this.otpRepository.create({
-        phone,
-        code,
-        expiresAt,
-      });
-      await this.otpRepository.save(otp);
-
-      // В режиме разработки выводим код в консоль
-      if (process.env.NODE_ENV !== 'production') {
-        this.logger.debug(`OTP для ${phone}: ${code}`);
-      }
-    } catch (error) {
-      this.logger.error('Ошибка при отправке OTP:', error);
-      throw new BadRequestException(
-        'Не удалось отправить код. Попробуйте позже.'
-      );
-    }
+    // Выводим код в консоль
+    console.log(`🔑 Новый код для ${phone}:`);
+    console.log(`👉 ${code}`);
+    console.log(`⏰ Действителен до: ${expiresAt}`);
+    console.log('\n==================================\n');
   }
 
   async verifyOTP(
@@ -104,7 +84,7 @@ export class AuthService {
         phone,
         code,
         isUsed: false,
-        expiresAt: new Date(Date.now()),
+        expiresAt: MoreThan(new Date()),
       },
     });
 
@@ -123,7 +103,12 @@ export class AuthService {
     }
 
     // Генерируем токены
-    const payload = { sub: user.id, phone: user.phone };
+    const payload = {
+      sub: user.id,
+      phone: user.phone,
+      isSuperAdmin: user.isSuperAdmin,
+    };
+
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = this.jwtService.sign(payload, {
       secret: this.configService.get('REFRESH_TOKEN_SECRET'),

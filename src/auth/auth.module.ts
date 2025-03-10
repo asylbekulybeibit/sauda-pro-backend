@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { HttpModule } from '@nestjs/axios';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
@@ -24,7 +23,6 @@ import { PassportModule } from '@nestjs/passport';
         },
       }),
     }),
-    HttpModule,
     UsersModule,
   ],
   providers: [AuthService, JwtStrategy],
