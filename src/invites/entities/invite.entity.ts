@@ -1,0 +1,78 @@
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+  BeforeInsert,
+  BeforeUpdate,
+} from 'typeorm';
+import { User } from '../../users/entities/user.entity';
+import { Shop } from '../../shops/entities/shop.entity';
+import { RoleType } from '../../roles/entities/user-role.entity';
+import { normalizePhoneNumber } from '../../common/utils/phone.util';
+
+@Entity('invites')
+export class Invite {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @Column()
+  phone: string;
+
+  @Column({ nullable: true })
+  email: string;
+
+  @Column({
+    type: 'enum',
+    enum: RoleType,
+    default: RoleType.CASHIER,
+  })
+  role: RoleType;
+
+  @Column({ default: false })
+  isAccepted: boolean;
+
+  @Column({ nullable: true })
+  otp: string;
+
+  @Column({ nullable: true })
+  otpExpiresAt: Date;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
+
+  @ManyToOne(() => User, (user) => user.sentInvites)
+  @JoinColumn({ name: 'createdById' })
+  createdBy: User;
+
+  @Column()
+  createdById: string;
+
+  @ManyToOne(() => User, (user) => user.receivedInvites, { nullable: true })
+  @JoinColumn({ name: 'invitedUserId' })
+  invitedUser: User;
+
+  @Column({ nullable: true })
+  invitedUserId: string;
+
+  @ManyToOne(() => Shop)
+  @JoinColumn({ name: 'shopId' })
+  shop: Shop;
+
+  @Column()
+  shopId: string;
+
+  @BeforeInsert()
+  @BeforeUpdate()
+  normalizePhone() {
+    if (this.phone) {
+      this.phone = normalizePhoneNumber(this.phone);
+    }
+  }
+}
