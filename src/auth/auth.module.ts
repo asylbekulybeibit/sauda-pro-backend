@@ -5,6 +5,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { UsersModule } from '../users/users.module';
+import { InvitesModule } from '../invites/invites.module';
+import { RolesModule } from '../roles/roles.module';
 import { OTP } from './entities/otp.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { PassportModule } from '@nestjs/passport';
@@ -24,6 +26,8 @@ import { PassportModule } from '@nestjs/passport';
       }),
     }),
     UsersModule,
+    InvitesModule,
+    RolesModule,
   ],
   providers: [AuthService, JwtStrategy],
   controllers: [AuthController],

@@ -3,11 +3,13 @@ import {
   BadRequestException,
   NotFoundException,
   Logger,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Invite } from './entities/invite.entity';
 import { UsersService } from '../users/users.service';
+import { RolesService } from '../roles/roles.service';
 import { CreateInviteDto } from './dto/create-invite.dto';
 import { RoleType } from '../roles/entities/user-role.entity';
 import { normalizePhoneNumber } from '../common/utils/phone.util';
@@ -19,20 +21,15 @@ export class InvitesService {
   constructor(
     @InjectRepository(Invite)
     private invitesRepository: Repository<Invite>,
-    private usersService: UsersService
+    private usersService: UsersService,
+    private rolesService: RolesService
   ) {}
 
-  async create(
-    createInviteDto: CreateInviteDto,
-    createdById: string
-  ): Promise<Invite> {
-    // Проверяем существование пользователя, создающего инвайт
+  async create(createInviteDto: CreateInviteDto, createdById: string) {
     const creator = await this.usersService.findOne(createdById);
-
-    // Нормализуем номер телефона
     const normalizedPhone = normalizePhoneNumber(createInviteDto.phone);
 
-    // Проверяем, есть ли уже активный инвайт для этого номера телефона
+    // Проверяем, нет ли уже активного инвайта для этого номера
     const existingInvite = await this.invitesRepository.findOne({
       where: {
         phone: normalizedPhone,
@@ -46,16 +43,14 @@ export class InvitesService {
       );
     }
 
-    // Создаем новый инвайт с нормализованным номером
     const invite = this.invitesRepository.create({
-      ...createInviteDto,
       phone: normalizedPhone,
+      role: createInviteDto.role,
+      shopId: createInviteDto.shopId,
       createdById: creator.id,
     });
 
     await this.invitesRepository.save(invite);
-
-    // TODO: Здесь будет интеграция с WhatsApp для отправки уведомления
     this.logger.debug(`Отправка инвайта на WhatsApp: ${normalizedPhone}`);
 
     return invite;
@@ -88,17 +83,65 @@ export class InvitesService {
     });
   }
 
+  async findPendingInvitesByPhone(phone: string): Promise<Invite[]> {
+    const normalizedPhone = normalizePhoneNumber(phone);
+    return this.invitesRepository.find({
+      where: {
+        phone: normalizedPhone,
+        isAccepted: false,
+      },
+      relations: ['createdBy', 'shop'],
+    });
+  }
+
   async acceptInvite(id: string, userId: string): Promise<Invite> {
     const invite = await this.findOne(id);
     const user = await this.usersService.findOne(userId);
+
+    // Проверяем, что инвайт предназначен этому пользователю
+    if (
+      normalizePhoneNumber(user.phone) !== normalizePhoneNumber(invite.phone)
+    ) {
+      throw new ForbiddenException(
+        'Этот инвайт предназначен другому пользователю'
+      );
+    }
 
     if (invite.isAccepted) {
       throw new BadRequestException('Инвайт уже был принят');
     }
 
+    // Создаем новую роль для пользователя
+    await this.rolesService.create({
+      userId: user.id,
+      shopId: invite.shopId,
+      role: invite.role,
+    });
+
+    // Обновляем статус инвайта
     invite.isAccepted = true;
     invite.invitedUser = user;
 
     return this.invitesRepository.save(invite);
+  }
+
+  async rejectInvite(id: string, userId: string): Promise<void> {
+    const invite = await this.findOne(id);
+    const user = await this.usersService.findOne(userId);
+
+    // Проверяем, что инвайт предназначен этому пользователю
+    if (
+      normalizePhoneNumber(user.phone) !== normalizePhoneNumber(invite.phone)
+    ) {
+      throw new ForbiddenException(
+        'Этот инвайт предназначен другому пользователю'
+      );
+    }
+
+    if (invite.isAccepted) {
+      throw new BadRequestException('Инвайт уже был принят');
+    }
+
+    await this.invitesRepository.remove(invite);
   }
 }

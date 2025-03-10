@@ -18,7 +18,9 @@ export class UsersService {
   }
 
   async findAll(): Promise<User[]> {
-    return this.usersRepository.find();
+    return this.usersRepository.find({
+      relations: ['roles', 'roles.shop'],
+    });
   }
 
   async findOne(id: string): Promise<User> {
@@ -47,6 +49,7 @@ export class UsersService {
 
   async remove(id: string): Promise<void> {
     const user = await this.findOne(id);
-    await this.usersRepository.remove(user);
+    user.isActive = false;
+    await this.usersRepository.save(user);
   }
 }

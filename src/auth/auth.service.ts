@@ -10,6 +10,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan, MoreThan } from 'typeorm';
 import { UsersService } from '../users/users.service';
 import { OTP } from './entities/otp.entity';
+import { InvitesService } from '../invites/invites.service';
+import { RolesService } from '../roles/roles.service';
 
 @Injectable()
 export class AuthService {
@@ -19,6 +21,8 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private usersService: UsersService,
+    private invitesService: InvitesService,
+    private rolesService: RolesService,
     @InjectRepository(OTP)
     private otpRepository: Repository<OTP>
   ) {}
@@ -100,6 +104,20 @@ export class AuthService {
     let user = await this.usersService.findByPhone(phone);
     if (!user) {
       user = await this.usersService.create({ phone });
+
+      // Только для новых пользователей проверяем и принимаем первый инвайт
+      const invite = await this.invitesService.findByPhone(phone);
+      if (invite && !invite.isAccepted) {
+        // Создаем роль для пользователя
+        await this.rolesService.create({
+          userId: user.id,
+          shopId: invite.shopId,
+          role: invite.role,
+        });
+
+        // Принимаем инвайт
+        await this.invitesService.acceptInvite(invite.id, user.id);
+      }
     }
 
     // Генерируем токены

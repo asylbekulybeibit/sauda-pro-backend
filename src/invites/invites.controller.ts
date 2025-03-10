@@ -31,6 +31,11 @@ export class InvitesController {
     return this.invitesService.findAll();
   }
 
+  @Get('pending')
+  async findPendingInvites(@Request() req) {
+    return this.invitesService.findPendingInvitesByPhone(req.user.phone);
+  }
+
   @Get(':id')
   @Roles(RoleType.OWNER, RoleType.MANAGER)
   async findOne(@Param('id') id: string) {
@@ -40,5 +45,10 @@ export class InvitesController {
   @Post(':id/accept')
   async acceptInvite(@Param('id') id: string, @Request() req) {
     return this.invitesService.acceptInvite(id, req.user.id);
+  }
+
+  @Post(':id/reject')
+  async rejectInvite(@Param('id') id: string, @Request() req) {
+    return this.invitesService.rejectInvite(id, req.user.id);
   }
 }
