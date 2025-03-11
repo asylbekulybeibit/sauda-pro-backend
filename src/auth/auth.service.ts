@@ -12,6 +12,7 @@ import { UsersService } from '../users/users.service';
 import { OTP } from './entities/otp.entity';
 import { InvitesService } from '../invites/invites.service';
 import { RolesService } from '../roles/roles.service';
+import { normalizePhoneNumber } from '../common/utils/phone.util';
 
 @Injectable()
 export class AuthService {
@@ -83,9 +84,12 @@ export class AuthService {
     phone: string,
     code: string
   ): Promise<{ accessToken: string; refreshToken: string }> {
+    const normalizedPhone = normalizePhoneNumber(phone);
+
+    // Находим OTP в базе
     const otp = await this.otpRepository.findOne({
       where: {
-        phone,
+        phone: normalizedPhone,
         code,
         isUsed: false,
         expiresAt: MoreThan(new Date()),
@@ -100,24 +104,11 @@ export class AuthService {
     otp.isUsed = true;
     await this.otpRepository.save(otp);
 
-    // Находим или создаем пользователя
-    let user = await this.usersService.findByPhone(phone);
+    // Ищем пользователя или создаем нового
+    let user = await this.usersService.findByPhone(normalizedPhone);
     if (!user) {
-      user = await this.usersService.create({ phone });
-
-      // Только для новых пользователей проверяем и принимаем первый инвайт
-      const invite = await this.invitesService.findByPhone(phone);
-      if (invite && !invite.isAccepted) {
-        // Создаем роль для пользователя
-        await this.rolesService.create({
-          userId: user.id,
-          shopId: invite.shopId,
-          role: invite.role,
-        });
-
-        // Принимаем инвайт
-        await this.invitesService.acceptInvite(invite.id, user.id);
-      }
+      user = await this.usersService.create({ phone: normalizedPhone });
+      this.logger.debug('Создан новый пользователь:', user);
     }
 
     // Генерируем токены

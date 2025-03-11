@@ -18,6 +18,19 @@ import { normalizePhoneNumber } from '../common/utils/phone.util';
 export class InvitesService {
   private readonly logger = new Logger(InvitesService.name);
 
+  private getRoleName(role: RoleType): string {
+    switch (role) {
+      case RoleType.OWNER:
+        return 'Владелец';
+      case RoleType.MANAGER:
+        return 'Менеджер';
+      case RoleType.CASHIER:
+        return 'Кассир';
+      default:
+        return role;
+    }
+  }
+
   constructor(
     @InjectRepository(Invite)
     private invitesRepository: Repository<Invite>,
@@ -29,17 +42,47 @@ export class InvitesService {
     const creator = await this.usersService.findOne(createdById);
     const normalizedPhone = normalizePhoneNumber(createInviteDto.phone);
 
-    // Проверяем, нет ли уже активного инвайта для этого номера
-    const existingInvite = await this.invitesRepository.findOne({
+    // Проверяем, существует ли пользователь с таким номером
+    const existingUser = await this.usersService.findByPhone(normalizedPhone);
+
+    if (existingUser) {
+      // Проверяем, есть ли у пользователя уже такая роль в этом проекте
+      const existingRoles = await this.rolesService.findByUserAndShop(
+        existingUser.id,
+        createInviteDto.shopId
+      );
+
+      const hasRole = existingRoles.some(
+        (role) => role.role === createInviteDto.role
+      );
+      if (hasRole) {
+        throw new BadRequestException(
+          `У пользователя уже есть роль "${this.getRoleName(
+            createInviteDto.role
+          )}" в этом проекте`
+        );
+      }
+    }
+
+    // Проверяем, нет ли уже активного инвайта для этого номера на эту роль в этом проекте
+    const existingInvites = await this.invitesRepository.find({
       where: {
         phone: normalizedPhone,
         isAccepted: false,
       },
     });
 
-    if (existingInvite) {
+    const duplicateInvite = existingInvites.find(
+      (invite) =>
+        invite.role === createInviteDto.role &&
+        invite.shopId === createInviteDto.shopId
+    );
+
+    if (duplicateInvite) {
       throw new BadRequestException(
-        'Активный инвайт для этого номера уже существует'
+        `Активный инвайт на роль "${this.getRoleName(
+          createInviteDto.role
+        )}" в этом проекте уже существует для номера ${normalizedPhone}`
       );
     }
 
