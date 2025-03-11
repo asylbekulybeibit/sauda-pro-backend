@@ -36,6 +36,12 @@ export class InvitesController {
     return this.invitesService.findPendingInvitesByPhone(req.user.phone);
   }
 
+  @Get('rejected')
+  @Roles(RoleType.OWNER, RoleType.MANAGER)
+  async findRejectedInvites() {
+    return this.invitesService.findRejectedInvites();
+  }
+
   @Get(':id')
   @Roles(RoleType.OWNER, RoleType.MANAGER)
   async findOne(@Param('id') id: string) {

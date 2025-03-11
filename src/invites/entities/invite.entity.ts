@@ -14,6 +14,12 @@ import { Shop } from '../../shops/entities/shop.entity';
 import { RoleType } from '../../roles/entities/user-role.entity';
 import { normalizePhoneNumber } from '../../common/utils/phone.util';
 
+export enum InviteStatus {
+  PENDING = 'pending',
+  ACCEPTED = 'accepted',
+  REJECTED = 'rejected',
+}
+
 @Entity('invites')
 export class Invite {
   @PrimaryGeneratedColumn('uuid')
@@ -32,8 +38,15 @@ export class Invite {
   })
   role: RoleType;
 
-  @Column({ default: false })
-  isAccepted: boolean;
+  @Column({
+    type: 'enum',
+    enum: InviteStatus,
+    default: InviteStatus.PENDING,
+  })
+  status: InviteStatus;
+
+  @Column({ nullable: true })
+  statusChangedAt: Date;
 
   @Column({ nullable: true })
   otp: string;

@@ -1,4 +1,5 @@
 import { IsString, IsEmail, IsOptional, IsBoolean } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class UpdateUserDto {
   @IsString()
@@ -13,8 +14,9 @@ export class UpdateUserDto {
   @IsOptional()
   lastName?: string;
 
-  @IsEmail()
   @IsOptional()
+  @Transform(({ value }) => (value === '' ? null : value))
+  @IsEmail(undefined, { message: 'Некорректный формат email' })
   email?: string;
 
   @IsBoolean()

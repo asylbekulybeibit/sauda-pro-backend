@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Invite } from './entities/invite.entity';
+import { Invite, InviteStatus } from './entities/invite.entity';
 import { UsersService } from '../users/users.service';
 import { RolesService } from '../roles/roles.service';
 import { CreateInviteDto } from './dto/create-invite.dto';
@@ -68,7 +68,7 @@ export class InvitesService {
     const existingInvites = await this.invitesRepository.find({
       where: {
         phone: normalizedPhone,
-        isAccepted: false,
+        status: InviteStatus.PENDING,
       },
     });
 
@@ -91,6 +91,7 @@ export class InvitesService {
       role: createInviteDto.role,
       shopId: createInviteDto.shopId,
       createdById: creator.id,
+      status: InviteStatus.PENDING,
     });
 
     await this.invitesRepository.save(invite);
@@ -121,7 +122,7 @@ export class InvitesService {
   async findByPhone(phone: string): Promise<Invite | null> {
     const normalizedPhone = normalizePhoneNumber(phone);
     return this.invitesRepository.findOne({
-      where: { phone: normalizedPhone, isAccepted: false },
+      where: { phone: normalizedPhone, status: InviteStatus.PENDING },
       relations: ['createdBy', 'shop'],
     });
   }
@@ -131,9 +132,21 @@ export class InvitesService {
     return this.invitesRepository.find({
       where: {
         phone: normalizedPhone,
-        isAccepted: false,
+        status: InviteStatus.PENDING,
       },
       relations: ['createdBy', 'shop'],
+    });
+  }
+
+  async findRejectedInvites(): Promise<Invite[]> {
+    return this.invitesRepository.find({
+      where: {
+        status: InviteStatus.REJECTED,
+      },
+      relations: ['createdBy', 'invitedUser', 'shop'],
+      order: {
+        statusChangedAt: 'DESC',
+      },
     });
   }
 
@@ -150,8 +163,12 @@ export class InvitesService {
       );
     }
 
-    if (invite.isAccepted) {
-      throw new BadRequestException('Инвайт уже был принят');
+    if (invite.status !== InviteStatus.PENDING) {
+      throw new BadRequestException(
+        invite.status === InviteStatus.ACCEPTED
+          ? 'Инвайт уже был принят'
+          : 'Инвайт был отклонен'
+      );
     }
 
     // Создаем новую роль для пользователя
@@ -162,7 +179,8 @@ export class InvitesService {
     });
 
     // Обновляем статус инвайта
-    invite.isAccepted = true;
+    invite.status = InviteStatus.ACCEPTED;
+    invite.statusChangedAt = new Date();
     invite.invitedUser = user;
 
     return this.invitesRepository.save(invite);
@@ -181,10 +199,53 @@ export class InvitesService {
       );
     }
 
-    if (invite.isAccepted) {
-      throw new BadRequestException('Инвайт уже был принят');
+    if (invite.status !== InviteStatus.PENDING) {
+      throw new BadRequestException(
+        invite.status === InviteStatus.ACCEPTED
+          ? 'Инвайт уже был принят'
+          : 'Инвайт уже был отклонен'
+      );
     }
 
-    await this.invitesRepository.remove(invite);
+    // Обновляем статус инвайта
+    invite.status = InviteStatus.REJECTED;
+    invite.statusChangedAt = new Date();
+    invite.invitedUser = user;
+
+    await this.invitesRepository.save(invite);
+  }
+
+  async getStats() {
+    const [invites, total] = await this.invitesRepository.findAndCount();
+
+    const pending = invites.filter(
+      (invite) => invite.status === InviteStatus.PENDING
+    ).length;
+    const accepted = invites.filter(
+      (invite) => invite.status === InviteStatus.ACCEPTED
+    ).length;
+    const rejected = invites.filter(
+      (invite) => invite.status === InviteStatus.REJECTED
+    ).length;
+
+    const byRole = {
+      [RoleType.OWNER]: invites.filter(
+        (invite) => invite.role === RoleType.OWNER
+      ).length,
+      [RoleType.MANAGER]: invites.filter(
+        (invite) => invite.role === RoleType.MANAGER
+      ).length,
+      [RoleType.CASHIER]: invites.filter(
+        (invite) => invite.role === RoleType.CASHIER
+      ).length,
+    };
+
+    return {
+      total,
+      pending,
+      accepted,
+      rejected,
+      byRole,
+    };
   }
 }

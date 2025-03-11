@@ -26,7 +26,7 @@ export class User {
   @Column({ nullable: true })
   email: string;
 
-  @Column({ default: false })
+  @Column({ default: true })
   isActive: boolean;
 
   @Column({ default: false })
