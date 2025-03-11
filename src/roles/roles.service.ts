@@ -16,18 +16,19 @@ export class RolesService {
   ) {}
 
   async create(createUserRoleDto: CreateUserRoleDto): Promise<UserRole> {
-    // Проверяем, нет ли уже такой роли у пользователя в этом магазине
+    // Проверяем, нет ли уже активной роли у пользователя в этом магазине
     const existingRole = await this.userRoleRepository.findOne({
       where: {
         userId: createUserRoleDto.userId,
         shopId: createUserRoleDto.shopId,
         role: createUserRoleDto.role,
+        isActive: true,
       },
     });
 
     if (existingRole) {
       throw new BadRequestException(
-        'Пользователь уже имеет такую роль в этом магазине'
+        'Пользователь уже имеет активную роль в этом магазине'
       );
     }
 

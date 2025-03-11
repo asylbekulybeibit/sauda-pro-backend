@@ -211,8 +211,10 @@ export class OwnerService {
       throw new ForbiddenException('Сотрудник уже деактивирован');
     }
 
+    // Обновляем оба поля при деактивации
+    const now = new Date();
     staffRole.isActive = false;
-    staffRole.deactivatedAt = new Date();
+    staffRole.deactivatedAt = now;
     await this.userRoleRepository.save(staffRole);
   }
 

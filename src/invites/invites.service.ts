@@ -42,6 +42,8 @@ export class InvitesService {
     const creator = await this.usersService.findOne(createdById);
     const normalizedPhone = normalizePhoneNumber(createInviteDto.phone);
 
+    this.logger.debug(`Создание инвайта для номера ${normalizedPhone}`);
+
     // Проверяем, существует ли пользователь с таким номером
     const existingUser = await this.usersService.findByPhone(normalizedPhone);
 
@@ -52,10 +54,16 @@ export class InvitesService {
         createInviteDto.shopId
       );
 
-      const hasRole = existingRoles.some(
-        (role) => role.role === createInviteDto.role
+      this.logger.debug(
+        `Найдены роли для пользователя: ${JSON.stringify(existingRoles)}`
       );
-      if (hasRole) {
+
+      // Проверяем только активные роли
+      const hasActiveRole = existingRoles.some(
+        (role) => role.role === createInviteDto.role && role.isActive === true
+      );
+
+      if (hasActiveRole) {
         throw new BadRequestException(
           `У пользователя уже есть роль "${this.getRoleName(
             createInviteDto.role
@@ -71,6 +79,10 @@ export class InvitesService {
         status: InviteStatus.PENDING,
       },
     });
+
+    this.logger.debug(
+      `Найдены существующие инвайты: ${JSON.stringify(existingInvites)}`
+    );
 
     const duplicateInvite = existingInvites.find(
       (invite) =>
@@ -168,6 +180,43 @@ export class InvitesService {
         invite.status === InviteStatus.ACCEPTED
           ? 'Инвайт уже был принят'
           : 'Инвайт был отклонен'
+      );
+    }
+
+    // Проверяем, нет ли у пользователя активной роли такого типа в этом магазине
+    const existingRoles = await this.rolesService.findByUserAndShop(
+      user.id,
+      invite.shopId
+    );
+
+    this.logger.debug(
+      `Найдены роли для пользователя при принятии инвайта: ${JSON.stringify(
+        existingRoles
+      )}`
+    );
+
+    // Проверяем только действительно активные роли
+    const hasActiveRole = existingRoles.some(
+      (role) => role.role === invite.role && role.isActive
+    );
+
+    this.logger.debug(
+      `Проверка роли: invite.role=${
+        invite.role
+      }, hasActiveRole=${hasActiveRole}, existingRoles=${JSON.stringify(
+        existingRoles.map((r) => ({
+          role: r.role,
+          isActive: r.isActive,
+          deactivatedAt: r.deactivatedAt,
+        }))
+      )}`
+    );
+
+    if (hasActiveRole) {
+      throw new BadRequestException(
+        `У пользователя уже есть активная роль "${this.getRoleName(
+          invite.role
+        )}" в этом магазине`
       );
     }
 
