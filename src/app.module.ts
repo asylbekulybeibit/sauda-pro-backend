@@ -7,6 +7,7 @@ import { InvitesModule } from './invites/invites.module';
 import { ShopsModule } from './shops/shops.module';
 import { RolesModule } from './roles/roles.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { OwnerModule } from './owner/owner.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     ShopsModule,
     RolesModule,
     DashboardModule,
+    OwnerModule,
   ],
 })
-export class AppModule {} 
+export class AppModule {}

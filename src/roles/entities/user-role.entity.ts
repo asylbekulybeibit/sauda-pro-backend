@@ -32,6 +32,9 @@ export class UserRole {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ nullable: true, type: 'timestamp' })
+  deactivatedAt: Date;
+
   @CreateDateColumn()
   createdAt: Date;
 

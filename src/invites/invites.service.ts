@@ -215,6 +215,26 @@ export class InvitesService {
     await this.invitesRepository.save(invite);
   }
 
+  async cancelInvite(id: string): Promise<void> {
+    const invite = await this.findOne(id);
+
+    if (invite.status !== InviteStatus.PENDING) {
+      throw new BadRequestException(
+        invite.status === InviteStatus.ACCEPTED
+          ? 'Инвайт уже был принят'
+          : invite.status === InviteStatus.REJECTED
+          ? 'Инвайт уже был отклонен'
+          : 'Инвайт уже был отменен'
+      );
+    }
+
+    // Обновляем статус инвайта
+    invite.status = InviteStatus.CANCELLED;
+    invite.statusChangedAt = new Date();
+
+    await this.invitesRepository.save(invite);
+  }
+
   async getStats() {
     const [invites, total] = await this.invitesRepository.findAndCount();
 
@@ -226,6 +246,9 @@ export class InvitesService {
     ).length;
     const rejected = invites.filter(
       (invite) => invite.status === InviteStatus.REJECTED
+    ).length;
+    const cancelled = invites.filter(
+      (invite) => invite.status === InviteStatus.CANCELLED
     ).length;
 
     const byRole = {
@@ -245,6 +268,7 @@ export class InvitesService {
       pending,
       accepted,
       rejected,
+      cancelled,
       byRole,
     };
   }

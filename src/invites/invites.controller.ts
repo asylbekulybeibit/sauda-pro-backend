@@ -6,6 +6,7 @@ import {
   Param,
   UseGuards,
   Request,
+  Patch,
 } from '@nestjs/common';
 import { InvitesService } from './invites.service';
 import { CreateInviteDto } from './dto/create-invite.dto';
@@ -56,5 +57,11 @@ export class InvitesController {
   @Post(':id/reject')
   async rejectInvite(@Param('id') id: string, @Request() req) {
     return this.invitesService.rejectInvite(id, req.user.id);
+  }
+
+  @Patch(':id/cancel')
+  @Roles(RoleType.SUPERADMIN)
+  async cancelInvite(@Param('id') id: string) {
+    return this.invitesService.cancelInvite(id);
   }
 }
