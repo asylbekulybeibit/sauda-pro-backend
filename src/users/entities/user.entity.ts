@@ -32,6 +32,9 @@ export class User {
   @Column({ default: false })
   isSuperAdmin: boolean;
 
+  @Column({ select: false })
+  salt: string;
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -46,4 +49,8 @@ export class User {
 
   @OneToMany(() => Invite, (invite) => invite.invitedUser)
   receivedInvites: Invite[];
+
+  get name(): string {
+    return `${this.firstName} ${this.lastName}`;
+  }
 }

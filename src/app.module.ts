@@ -8,6 +8,8 @@ import { ShopsModule } from './shops/shops.module';
 import { RolesModule } from './roles/roles.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { OwnerModule } from './owner/owner.module';
+import { ManagerModule } from './manager/manager.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { OwnerModule } from './owner/owner.module';
     RolesModule,
     DashboardModule,
     OwnerModule,
+    ManagerModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}
