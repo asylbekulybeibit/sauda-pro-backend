@@ -7,6 +7,7 @@ import {
   Param,
   UseGuards,
   Request,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -21,26 +22,35 @@ import { CreateStaffInviteDto } from '../dto/staff/create-staff-invite.dto';
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
 
-  @Get()
-  getStaff(@Request() req) {
-    return this.staffService.getStaff(req.user.id);
+  @Get('shop/:shopId')
+  getStaff(@Request() req, @Param('shopId', ParseUUIDPipe) shopId: string) {
+    return this.staffService.getStaff(req.user.id, shopId);
   }
 
-  @Post('invite')
+  @Post('shop/:shopId/invite')
   createInvite(
     @Body() createStaffInviteDto: CreateStaffInviteDto,
-    @Request() req
+    @Request() req,
+    @Param('shopId', ParseUUIDPipe) shopId: string
   ) {
-    return this.staffService.createInvite(createStaffInviteDto, req.user.id);
+    return this.staffService.createInvite(
+      createStaffInviteDto,
+      req.user.id,
+      shopId
+    );
   }
 
-  @Get('invites')
-  getInvites(@Request() req) {
-    return this.staffService.getInvites(req.user.id);
+  @Get('shop/:shopId/invites')
+  getInvites(@Request() req, @Param('shopId', ParseUUIDPipe) shopId: string) {
+    return this.staffService.getInvites(req.user.id, shopId);
   }
 
-  @Patch(':id/deactivate')
-  deactivateStaff(@Param('id') id: string, @Request() req) {
-    return this.staffService.deactivateStaff(id, req.user.id);
+  @Patch('shop/:shopId/staff/:id/deactivate')
+  deactivateStaff(
+    @Param('id') id: string,
+    @Request() req,
+    @Param('shopId', ParseUUIDPipe) shopId: string
+  ) {
+    return this.staffService.deactivateStaff(id, req.user.id, shopId);
   }
 }
