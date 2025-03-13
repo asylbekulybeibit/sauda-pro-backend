@@ -7,6 +7,8 @@ import {
   OneToMany,
 } from 'typeorm';
 import { UserRole } from '../../roles/entities/user-role.entity';
+import { Product } from '../../manager/entities/product.entity';
+import { InventoryTransaction } from '../../manager/entities/inventory-transaction.entity';
 
 export enum ShopType {
   SHOP = 'shop',
@@ -28,6 +30,9 @@ export class Shop {
   @Column({ nullable: true })
   phone: string;
 
+  @Column({ nullable: true })
+  email: string;
+
   @Column({ default: true })
   isActive: boolean;
 
@@ -46,4 +51,10 @@ export class Shop {
 
   @OneToMany(() => UserRole, (userRole) => userRole.shop)
   userRoles: UserRole[];
+
+  @OneToMany(() => Product, (product) => product.shop)
+  products: Product[];
+
+  @OneToMany(() => InventoryTransaction, (transaction) => transaction.shop)
+  transactions: InventoryTransaction[];
 }

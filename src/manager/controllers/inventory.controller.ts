@@ -12,10 +12,11 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { InventoryService } from '../services/inventory.service';
 import { CreateTransactionDto } from '../dto/inventory/create-transaction.dto';
+import { RoleType } from '../../auth/types/role.type';
 
 @Controller('manager/inventory')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('manager')
+@Roles(RoleType.MANAGER)
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
@@ -25,8 +26,8 @@ export class InventoryController {
     @Request() req
   ) {
     return this.inventoryService.createTransaction(
-      createTransactionDto,
-      req.user.id
+      req.user.id,
+      createTransactionDto
     );
   }
 

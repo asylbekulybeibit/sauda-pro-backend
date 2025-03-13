@@ -5,7 +5,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { UserRole, RoleType } from '../../roles/entities/user-role.entity';
+import { UserRole } from '../../roles/entities/user-role.entity';
+import { RoleType } from '../../auth/types/role.type';
 import { Invite, InviteStatus } from '../../invites/entities/invite.entity';
 import { CreateStaffInviteDto } from '../dto/staff/create-staff-invite.dto';
 
@@ -22,7 +23,7 @@ export class StaffService {
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
-        role: RoleType.MANAGER,
+        type: RoleType.MANAGER,
         isActive: true,
       },
       relations: ['shop'],
@@ -126,7 +127,7 @@ export class StaffService {
       throw new NotFoundException('Сотрудник не найден');
     }
 
-    if (staffRole.role !== RoleType.CASHIER) {
+    if (staffRole.type !== RoleType.CASHIER) {
       throw new ForbiddenException('Вы можете деактивировать только кассиров');
     }
 

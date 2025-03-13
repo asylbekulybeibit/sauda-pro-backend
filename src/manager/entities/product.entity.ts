@@ -5,11 +5,12 @@ import {
   ManyToOne,
   CreateDateColumn,
   UpdateDateColumn,
+  JoinColumn,
 } from 'typeorm';
 import { Shop } from '../../shops/entities/shop.entity';
 import { Category } from './category.entity';
 
-@Entity()
+@Entity('products')
 export class Product {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -17,23 +18,40 @@ export class Product {
   @Column()
   name: string;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ nullable: true })
   description: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 2 })
+  @Column()
+  sku: string;
+
+  @Column('decimal', { precision: 10, scale: 2 })
   price: number;
 
-  @Column({ type: 'int' })
+  @Column('decimal', { precision: 10, scale: 2 })
+  cost: number;
+
+  @Column('int')
   quantity: number;
 
-  @Column({ type: 'int', nullable: true })
+  @Column('int', { default: 0 })
   minQuantity: number;
+
+  @Column({ nullable: true })
+  categoryId: string;
+
+  @Column()
+  shopId: string;
 
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ nullable: true })
-  barcode: string;
+  @ManyToOne(() => Shop, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'shopId' })
+  shop: Shop;
+
+  @ManyToOne(() => Category)
+  @JoinColumn({ name: 'categoryId' })
+  category: Category;
 
   @Column({ type: 'jsonb', nullable: true })
   barcodes: string[]; // Массив штрих-кодов для разных фасовок
@@ -44,18 +62,6 @@ export class Product {
     template: string; // Шаблон для печати
     data: Record<string, any>; // Дополнительные данные для печати
   }[];
-
-  @ManyToOne(() => Shop)
-  shop: Shop;
-
-  @Column()
-  shopId: string;
-
-  @ManyToOne(() => Category)
-  category: Category;
-
-  @Column({ nullable: true })
-  categoryId: string;
 
   @CreateDateColumn()
   createdAt: Date;

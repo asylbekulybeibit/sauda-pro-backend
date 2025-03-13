@@ -11,7 +11,7 @@ import { Invite, InviteStatus } from './entities/invite.entity';
 import { UsersService } from '../users/users.service';
 import { RolesService } from '../roles/roles.service';
 import { CreateInviteDto } from './dto/create-invite.dto';
-import { RoleType } from '../roles/entities/user-role.entity';
+import { RoleType } from '../auth/types/role.type';
 import { normalizePhoneNumber } from '../common/utils/phone.util';
 
 @Injectable()
@@ -20,6 +20,8 @@ export class InvitesService {
 
   private getRoleName(role: RoleType): string {
     switch (role) {
+      case RoleType.SUPERADMIN:
+        return 'Администратор';
       case RoleType.OWNER:
         return 'Владелец';
       case RoleType.MANAGER:
@@ -60,7 +62,7 @@ export class InvitesService {
 
       // Проверяем только активные роли
       const hasActiveRole = existingRoles.some(
-        (role) => role.role === createInviteDto.role && role.isActive === true
+        (role) => role.type === createInviteDto.role && role.isActive
       );
 
       if (hasActiveRole) {
@@ -197,7 +199,7 @@ export class InvitesService {
 
     // Проверяем только действительно активные роли
     const hasActiveRole = existingRoles.some(
-      (role) => role.role === invite.role && role.isActive
+      (role) => role.type === invite.role && role.isActive
     );
 
     this.logger.debug(
@@ -205,7 +207,7 @@ export class InvitesService {
         invite.role
       }, hasActiveRole=${hasActiveRole}, existingRoles=${JSON.stringify(
         existingRoles.map((r) => ({
-          role: r.role,
+          type: r.type,
           isActive: r.isActive,
           deactivatedAt: r.deactivatedAt,
         }))
@@ -224,7 +226,7 @@ export class InvitesService {
     await this.rolesService.create({
       userId: user.id,
       shopId: invite.shopId,
-      role: invite.role,
+      type: invite.role,
     });
 
     // Обновляем статус инвайта
@@ -284,6 +286,20 @@ export class InvitesService {
     await this.invitesRepository.save(invite);
   }
 
+  async remove(id: string): Promise<void> {
+    const invite = await this.findOne(id);
+    await this.invitesRepository.remove(invite);
+  }
+
+  async findAllForAdmin(): Promise<Invite[]> {
+    return this.invitesRepository.find({
+      relations: ['createdBy', 'invitedUser', 'shop'],
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+  }
+
   async getStats() {
     const [invites, total] = await this.invitesRepository.findAndCount();
 
@@ -301,6 +317,9 @@ export class InvitesService {
     ).length;
 
     const byRole = {
+      [RoleType.SUPERADMIN]: invites.filter(
+        (invite) => invite.role === RoleType.SUPERADMIN
+      ).length,
       [RoleType.OWNER]: invites.filter(
         (invite) => invite.role === RoleType.OWNER
       ).length,

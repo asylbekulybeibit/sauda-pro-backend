@@ -12,12 +12,13 @@ import {
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
+import { RoleType } from '../../auth/types/role.type';
 import { CategoriesService } from '../services/categories.service';
 import { CreateCategoryDto } from '../dto/categories/create-category.dto';
 
 @Controller('manager/categories')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('manager')
+@Roles(RoleType.MANAGER)
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 

@@ -11,8 +11,9 @@ import {
   TransactionType,
 } from '../entities/inventory-transaction.entity';
 import { Product } from '../entities/product.entity';
-import { Shop } from '../entities/shop.entity';
-import { UserRole, RoleType } from '../../roles/entities/user-role.entity';
+import { Shop } from '../../shops/entities/shop.entity';
+import { UserRole } from '../../roles/entities/user-role.entity';
+import { RoleType } from '../../auth/types/role.type';
 import {
   CreateTransactionDto,
   TransferMetadata,

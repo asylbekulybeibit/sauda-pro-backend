@@ -7,7 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { Shop } from '../../manager/entities/shop.entity';
+import { Shop } from '../../shops/entities/shop.entity';
 
 export enum NotificationType {
   LOW_STOCK = 'LOW_STOCK',

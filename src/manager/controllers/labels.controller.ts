@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import { GetUser } from '../../auth/decorators/get-user.decorator';
 import { LabelsService } from '../services/labels.service';
 import { CreateTemplateDto } from '../dto/products/create-template.dto';
 import { GenerateLabelsDto } from '../dto/products/generate-labels.dto';
@@ -24,7 +24,7 @@ export class LabelsController {
 
   @Post('templates')
   async createTemplate(
-    @CurrentUser('id') userId: string,
+    @GetUser('id') userId: string,
     @Body() createTemplateDto: CreateTemplateDto
   ): Promise<LabelTemplate> {
     return this.labelsService.createTemplate(userId, createTemplateDto);
@@ -32,7 +32,7 @@ export class LabelsController {
 
   @Get('templates')
   async findTemplates(
-    @CurrentUser('id') userId: string,
+    @GetUser('id') userId: string,
     @Query('shopId') shopId: string
   ): Promise<LabelTemplate[]> {
     return this.labelsService.findTemplates(userId, shopId);
@@ -40,7 +40,7 @@ export class LabelsController {
 
   @Get('templates/:id')
   async findTemplate(
-    @CurrentUser('id') userId: string,
+    @GetUser('id') userId: string,
     @Query('shopId') shopId: string,
     @Param('id') id: string
   ): Promise<LabelTemplate> {
@@ -49,7 +49,7 @@ export class LabelsController {
 
   @Delete('templates/:id')
   async deleteTemplate(
-    @CurrentUser('id') userId: string,
+    @GetUser('id') userId: string,
     @Query('shopId') shopId: string,
     @Param('id') id: string
   ): Promise<void> {
@@ -58,7 +58,7 @@ export class LabelsController {
 
   @Post('generate')
   async generateLabels(
-    @CurrentUser('id') userId: string,
+    @GetUser('id') userId: string,
     @Body() generateLabelsDto: GenerateLabelsDto,
     @Res() res: Response
   ): Promise<void> {
@@ -79,7 +79,7 @@ export class LabelsController {
 
   @Get('preview')
   async generatePreview(
-    @CurrentUser('id') userId: string,
+    @GetUser('id') userId: string,
     @Query('shopId') shopId: string,
     @Query('productId') productId: string,
     @Query('templateId') templateId: string,
@@ -103,7 +103,7 @@ export class LabelsController {
 
   @Get('barcode')
   async findProductByBarcode(
-    @CurrentUser('id') userId: string,
+    @GetUser('id') userId: string,
     @Query('shopId') shopId: string,
     @Query('barcode') barcode: string
   ) {

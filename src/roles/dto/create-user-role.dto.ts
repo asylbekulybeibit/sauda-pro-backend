@@ -1,5 +1,5 @@
 import { IsUUID, IsEnum } from 'class-validator';
-import { RoleType } from '../entities/user-role.entity';
+import { RoleType } from '../../auth/types/role.type';
 
 export class CreateUserRoleDto {
   @IsUUID()
@@ -9,5 +9,5 @@ export class CreateUserRoleDto {
   shopId: string;
 
   @IsEnum(RoleType)
-  role: RoleType;
+  type: RoleType;
 }

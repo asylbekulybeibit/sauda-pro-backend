@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Supplier } from '../entities/supplier.entity';
 import { CreateSupplierDto } from '../dto/suppliers/create-supplier.dto';
 import { UserRole } from '../../roles/entities/user-role.entity';
+import { RoleType } from '../../auth/types/role.type';
 
 @Injectable()
 export class SuppliersService {
@@ -23,7 +24,7 @@ export class SuppliersService {
     shopId: string
   ): Promise<void> {
     const hasAccess = await this.userRoleRepository.findOne({
-      where: { userId, shopId, role: 'manager', isActive: true },
+      where: { userId, shopId, type: RoleType.MANAGER, isActive: true },
     });
 
     if (!hasAccess) {

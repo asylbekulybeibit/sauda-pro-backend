@@ -13,7 +13,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { OwnerService } from './owner.service';
 import { Invite } from '../invites/entities/invite.entity';
-import { UserRole, RoleType } from '../roles/entities/user-role.entity';
+import { UserRole } from '../roles/entities/user-role.entity';
+import { RoleType } from '../auth/types/role.type';
 import { CreateOwnerInviteDto } from './dto/create-owner-invite.dto';
 
 @Controller('owner')

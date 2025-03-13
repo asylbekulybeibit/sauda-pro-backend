@@ -18,6 +18,9 @@ export class ProductLabelDto {
 }
 
 export class GenerateLabelsDto {
+  @IsUUID()
+  shopId: string;
+
   @IsString()
   templateId: string;
 

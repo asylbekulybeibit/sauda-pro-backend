@@ -4,7 +4,8 @@ import { Repository, MoreThan } from 'typeorm';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { RoleType } from '../roles/entities/user-role.entity';
+import { UserRole } from '../roles/entities/user-role.entity';
+import { RoleType } from '../auth/types/role.type';
 
 @Injectable()
 export class UsersService {
@@ -90,7 +91,7 @@ export class UsersService {
         isActive: u.isActive,
         isSuperAdmin: u.isSuperAdmin,
         roles: u.roles.map((r) => ({
-          role: r.role,
+          type: r.type,
           isActive: r.isActive,
           shopId: r.shop?.id,
         })),
@@ -109,19 +110,19 @@ export class UsersService {
       [RoleType.OWNER]: activeUsers.reduce(
         (count, user) =>
           count +
-          user.roles.filter((role) => role.role === RoleType.OWNER).length,
+          user.roles.filter((role) => role.type === RoleType.OWNER).length,
         0
       ),
       [RoleType.MANAGER]: activeUsers.reduce(
         (count, user) =>
           count +
-          user.roles.filter((role) => role.role === RoleType.MANAGER).length,
+          user.roles.filter((role) => role.type === RoleType.MANAGER).length,
         0
       ),
       [RoleType.CASHIER]: activeUsers.reduce(
         (count, user) =>
           count +
-          user.roles.filter((role) => role.role === RoleType.CASHIER).length,
+          user.roles.filter((role) => role.type === RoleType.CASHIER).length,
         0
       ),
     };
@@ -135,7 +136,7 @@ export class UsersService {
       activeUsers.map((user) => ({
         userId: user.id,
         roles: user.roles.map((r) => ({
-          role: r.role,
+          type: r.type,
           shopId: r.shop?.id,
         })),
       }))

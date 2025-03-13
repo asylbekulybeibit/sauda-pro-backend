@@ -9,12 +9,7 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Shop } from '../../shops/entities/shop.entity';
-
-export enum RoleType {
-  ADMIN = 'ADMIN',
-  MANAGER = 'MANAGER',
-  CASHIER = 'CASHIER',
-}
+import { RoleType } from '../../auth/types/role.type';
 
 @Entity('user_roles')
 export class UserRole {
@@ -32,6 +27,12 @@ export class UserRole {
     enum: RoleType,
   })
   type: RoleType;
+
+  @Column({ default: true })
+  isActive: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  deactivatedAt: Date;
 
   @CreateDateColumn()
   createdAt: Date;

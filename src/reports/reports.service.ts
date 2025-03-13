@@ -18,7 +18,7 @@ import { CashierStats } from '../manager/entities/cashier-stats.entity';
 import { Promotion } from '../manager/entities/promotion.entity';
 import { Shop } from '../shops/entities/shop.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
-import { RoleType } from '../roles/entities/user-role.entity';
+import { RoleType } from '../auth/types/role.type';
 import { ReportGeneratorService } from './services/report-generator.service';
 
 @Injectable()

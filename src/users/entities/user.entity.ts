@@ -32,7 +32,7 @@ export class User {
   @Column({ default: false })
   isSuperAdmin: boolean;
 
-  @Column({ select: false })
+  @Column({ select: false, nullable: true })
   salt: string;
 
   @CreateDateColumn()

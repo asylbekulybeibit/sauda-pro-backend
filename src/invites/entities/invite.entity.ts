@@ -11,7 +11,7 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Shop } from '../../shops/entities/shop.entity';
-import { RoleType } from '../../roles/entities/user-role.entity';
+import { RoleType } from '../../auth/types/role.type';
 import { normalizePhoneNumber } from '../../common/utils/phone.util';
 
 export enum InviteStatus {

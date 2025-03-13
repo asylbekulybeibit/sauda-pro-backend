@@ -7,7 +7,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Shop } from '../shops/entities/shop.entity';
-import { UserRole, RoleType } from '../roles/entities/user-role.entity';
+import { UserRole } from '../roles/entities/user-role.entity';
+import { RoleType } from '../auth/types/role.type';
 import { Invite, InviteStatus } from '../invites/entities/invite.entity';
 import { CreateOwnerInviteDto } from './dto/create-owner-invite.dto';
 
@@ -52,7 +53,7 @@ export class OwnerService {
       .innerJoin('shop.userRoles', 'role')
       .where('shop.id = :shopId', { shopId: createInviteDto.shopId })
       .andWhere('role.userId = :ownerId', { ownerId })
-      .andWhere('role.role = :role', { role: RoleType.OWNER })
+      .andWhere('role.type = :type', { type: RoleType.OWNER })
       .getOne();
 
     if (!shop) {
@@ -65,7 +66,7 @@ export class OwnerService {
       .innerJoin('role.user', 'user')
       .where('user.phone = :phone', { phone: createInviteDto.phone })
       .andWhere('role.shopId = :shopId', { shopId: createInviteDto.shopId })
-      .andWhere('role.role = :role', { role: createInviteDto.role })
+      .andWhere('role.type = :type', { type: createInviteDto.role })
       .andWhere('role.isActive = :isActive', { isActive: true })
       .getOne();
 
@@ -109,7 +110,7 @@ export class OwnerService {
       .createQueryBuilder('shop')
       .innerJoin('shop.userRoles', 'role')
       .where('role.userId = :ownerId', { ownerId })
-      .andWhere('role.role = :role', { role: RoleType.OWNER })
+      .andWhere('role.type = :type', { type: RoleType.OWNER })
       .getMany();
 
     const shopIds = ownerShops.map((shop) => shop.id);
@@ -132,7 +133,7 @@ export class OwnerService {
       .leftJoin('shop.userRoles', 'role')
       .where('invite.id = :inviteId', { inviteId })
       .andWhere('role.userId = :ownerId', { ownerId })
-      .andWhere('role.role = :role', { role: RoleType.OWNER })
+      .andWhere('role.type = :type', { type: RoleType.OWNER })
       .getOne();
 
     if (!invite) {
@@ -156,7 +157,7 @@ export class OwnerService {
       .innerJoin('shop.userRoles', 'ownerRole')
       .where('shop.id = :shopId', { shopId })
       .andWhere('ownerRole.userId = :ownerId', { ownerId })
-      .andWhere('ownerRole.role = :role', { role: RoleType.OWNER })
+      .andWhere('ownerRole.type = :type', { type: RoleType.OWNER })
       .getOne();
 
     if (!shop) {
@@ -170,7 +171,7 @@ export class OwnerService {
       .leftJoinAndSelect('role.shop', 'shop')
       .select([
         'role.id',
-        'role.role',
+        'role.type',
         'role.isActive',
         'role.createdAt',
         'role.deactivatedAt',
@@ -185,8 +186,8 @@ export class OwnerService {
         'shop.address',
       ])
       .where('role.shopId = :shopId', { shopId })
-      .andWhere('role.role IN (:...roles)', {
-        roles: [RoleType.OWNER, RoleType.MANAGER, RoleType.CASHIER],
+      .andWhere('role.type IN (:...types)', {
+        types: [RoleType.OWNER, RoleType.MANAGER, RoleType.CASHIER],
       })
       .orderBy('user.id', 'ASC')
       .addOrderBy('role.createdAt', 'DESC')
@@ -200,7 +201,7 @@ export class OwnerService {
       .leftJoin('shop.userRoles', 'ownerRole')
       .where('role.id = :staffId', { staffId })
       .andWhere('ownerRole.userId = :ownerId', { ownerId })
-      .andWhere('ownerRole.role = :role', { role: RoleType.OWNER })
+      .andWhere('ownerRole.type = :type', { type: RoleType.OWNER })
       .getOne();
 
     if (!staffRole) {
@@ -225,7 +226,7 @@ export class OwnerService {
       .innerJoin('shop.userRoles', 'role')
       .where('shop.id = :shopId', { shopId })
       .andWhere('role.userId = :ownerId', { ownerId })
-      .andWhere('role.role = :role', { role: RoleType.OWNER })
+      .andWhere('role.type = :type', { type: RoleType.OWNER })
       .getOne();
 
     if (!shop) {

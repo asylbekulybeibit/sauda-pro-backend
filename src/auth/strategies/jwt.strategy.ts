@@ -32,7 +32,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         id: payload.sub,
         phone: payload.phone,
         isSuperAdmin: user.isSuperAdmin,
-        roles: user.roles?.map((role) => role.role) || [],
+        roles: user.roles?.map((role) => role.type) || [],
       };
     } catch (error) {
       this.logger.error('Ошибка при получении пользователя:', error);

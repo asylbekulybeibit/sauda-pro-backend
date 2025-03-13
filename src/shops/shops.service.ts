@@ -5,9 +5,12 @@ import { Shop, ShopType } from './entities/shop.entity';
 import { CreateShopDto } from './dto/create-shop.dto';
 import { UpdateShopDto } from './dto/update-shop.dto';
 import { MoreThan } from 'typeorm';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class ShopsService {
+  private readonly logger = new Logger(ShopsService.name);
+
   constructor(
     @InjectRepository(Shop)
     private shopsRepository: Repository<Shop>
@@ -20,6 +23,7 @@ export class ShopsService {
 
   async findAll(): Promise<Shop[]> {
     return this.shopsRepository.find({
+      where: { isActive: true },
       relations: ['userRoles', 'userRoles.user'],
     });
   }
@@ -44,8 +48,13 @@ export class ShopsService {
   }
 
   async remove(id: string): Promise<void> {
-    const shop = await this.findOne(id);
-    await this.shopsRepository.remove(shop);
+    const shop = await this.shopsRepository.findOne({ where: { id } });
+    if (!shop) {
+      throw new NotFoundException('Магазин не найден');
+    }
+
+    await this.shopsRepository.update(id, { isActive: false });
+    this.logger.debug(`Магазин ${id} деактивирован`);
   }
 
   async getStats() {

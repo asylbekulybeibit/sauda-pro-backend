@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Shop } from '../../shops/entities/shop.entity';
 import { UserRole } from '../../roles/entities/user-role.entity';
+import { RoleType } from '../../auth/types/role.type';
 
 @Injectable()
 export class ManagerService {
@@ -18,7 +19,7 @@ export class ManagerService {
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId: userId,
-        role: 'manager',
+        type: RoleType.MANAGER,
         isActive: true,
       },
       relations: ['shop'],

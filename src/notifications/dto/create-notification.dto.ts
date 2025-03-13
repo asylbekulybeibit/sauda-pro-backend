@@ -27,8 +27,9 @@ export class CreateNotificationDto {
   @IsObject()
   metadata?: Record<string, any>;
 
+  @IsOptional()
   @IsUUID()
-  userId: string;
+  userId?: string;
 
   @IsUUID()
   shopId: string;

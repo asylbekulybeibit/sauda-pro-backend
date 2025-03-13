@@ -25,7 +25,7 @@ import { PriceHistory } from './entities/price-history.entity';
 import { Promotion } from './entities/promotion.entity';
 import { CashierStats } from './entities/cashier-stats.entity';
 import { Supplier } from './entities/supplier.entity';
-import { Shop } from './entities/shop.entity';
+import { Shop } from '../shops/entities/shop.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
 import { Invite } from '../invites/entities/invite.entity';
 import { LabelTemplate } from './entities/label-template.entity';

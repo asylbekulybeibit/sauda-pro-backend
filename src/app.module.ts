@@ -10,6 +10,9 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { OwnerModule } from './owner/owner.module';
 import { ManagerModule } from './manager/manager.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { ExpensesModule } from './expenses/expenses.module';
+import { CacheModule } from './common/cache.module';
 
 @Module({
   imports: [
@@ -30,6 +33,7 @@ import { NotificationsModule } from './notifications/notifications.module';
         synchronize: configService.get('DB_SYNC', true),
       }),
     }),
+    CacheModule,
     AuthModule,
     UsersModule,
     InvitesModule,
@@ -39,6 +43,8 @@ import { NotificationsModule } from './notifications/notifications.module';
     OwnerModule,
     ManagerModule,
     NotificationsModule,
+    AnalyticsModule,
+    ExpensesModule,
   ],
 })
 export class AppModule {}

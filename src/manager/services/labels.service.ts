@@ -4,18 +4,23 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Like, In } from 'typeorm';
 import * as PDFDocument from 'pdfkit';
 import * as bwipjs from 'bwip-js';
 import { Product } from '../entities/product.entity';
 import { UserRole } from '../../roles/entities/user-role.entity';
+import { RoleType } from '../../auth/types/role.type';
 import { LabelTemplate } from '../entities/label-template.entity';
 import { GenerateLabelsDto } from '../dto/products/generate-labels.dto';
 import { CreateTemplateDto } from '../dto/products/create-template.dto';
 import {
   LabelTemplateDto,
   LabelType,
+  LabelSize,
 } from '../dto/products/label-template.dto';
+import { createCanvas } from 'canvas';
+import JsBarcode from 'jsbarcode';
+import QRCode from 'qrcode';
 
 @Injectable()
 export class LabelsService {
@@ -38,7 +43,7 @@ export class LabelsService {
     shopId: string
   ): Promise<void> {
     const hasAccess = await this.userRoleRepository.findOne({
-      where: { userId, shopId, role: 'manager', isActive: true },
+      where: { userId, shopId, type: RoleType.MANAGER, isActive: true },
     });
 
     if (!hasAccess) {
@@ -51,7 +56,7 @@ export class LabelsService {
     const priceTagTemplate: LabelTemplateDto = {
       name: 'Стандартный ценник',
       type: LabelType.PRICE_TAG,
-      size: 'small',
+      size: LabelSize.SMALL,
       template: {
         width: 58,
         height: 40,
@@ -74,7 +79,7 @@ export class LabelsService {
             type: 'barcode',
             x: 2,
             y: 25,
-            value: '{{barcode}}',
+            value: '{{barcodes[0]}}',
             style: { width: 54, height: 15 },
           },
         ],
@@ -137,14 +142,14 @@ export class LabelsService {
   }
 
   private async generateBarcode(
-    type: 'ean13' | 'code128' | 'qr',
+    type: 'ean13' | 'qr',
     value: string,
-    options: any
+    options?: any
   ): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       bwipjs.toBuffer(
         {
-          bcid: type,
+          bcid: type === 'ean13' ? 'ean13' : 'qrcode',
           text: value,
           scale: 3,
           height: 10,
@@ -163,7 +168,7 @@ export class LabelsService {
     return text
       .replace('{{name}}', product.name)
       .replace('{{price}}', product.price.toString())
-      .replace('{{barcode}}', product.barcode || '')
+      .replace('{{barcodes[0]}}', product.barcodes?.[0] || '')
       .replace('{{category}}', product.category?.name || '')
       .replace('{{description}}', product.description || '');
   }
@@ -174,15 +179,14 @@ export class LabelsService {
   ): Promise<Buffer> {
     return new Promise(async (resolve) => {
       const doc = new PDFDocument({
-        size: [template.template.width * 2.83, template.template.height * 2.83], // конвертация мм в пункты
+        size: [template.template.width * 2.83, template.template.height * 2.83],
         margin: 0,
       });
 
-      const chunks: Buffer[] = [];
-      doc.on('data', (chunk) => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      const buffers: any[] = [];
+      doc.on('data', (chunk) => buffers.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
 
-      // Отрисовка элементов шаблона
       for (const element of template.template.elements) {
         switch (element.type) {
           case 'text':
@@ -192,14 +196,15 @@ export class LabelsService {
               .text(
                 this.replaceVariables(element.value, product),
                 element.x * 2.83,
-                element.y * 2.83
+                element.y * 2.83,
+                { lineBreak: false }
               );
             break;
           case 'barcode':
-            if (product.barcode) {
+            if (product.barcodes?.[0]) {
               const barcodeBuffer = await this.generateBarcode(
                 'ean13',
-                product.barcode,
+                product.barcodes[0],
                 element.style
               );
               doc.image(barcodeBuffer, element.x * 2.83, element.y * 2.83);
@@ -227,64 +232,65 @@ export class LabelsService {
   ): Promise<Buffer> {
     await this.validateManagerAccess(userId, shopId);
 
-    const template = await this.findTemplate(
-      userId,
-      shopId,
-      generateLabelsDto.templateId
-    );
+    const template = await this.templateRepository.findOne({
+      where: { id: generateLabelsDto.templateId, shopId },
+    });
 
-    const products = await this.productRepository.findByIds(
-      generateLabelsDto.products.map((p) => p.productId),
-      {
-        where: { shopId, isActive: true },
-        relations: ['category'],
-      }
-    );
+    if (!template) {
+      throw new NotFoundException('Template not found');
+    }
+
+    const productIds = generateLabelsDto.products.map((p) => p.productId);
+    const products = await this.productRepository.find({
+      where: {
+        id: In(productIds),
+        shopId,
+        isActive: true,
+      },
+      relations: ['category'],
+    });
 
     if (products.length !== generateLabelsDto.products.length) {
       throw new BadRequestException('Some products not found');
     }
 
-    const doc = new PDFDocument({ size: 'A4', margin: 10 });
-    const chunks: Buffer[] = [];
-    doc.on('data', (chunk) => chunks.push(chunk));
-    doc.on('end', () => Buffer.concat(chunks));
+    return new Promise(async (resolve) => {
+      const doc = new PDFDocument({
+        size: [template.template.width * 2.83, template.template.height * 2.83],
+        margin: 0,
+      });
 
-    let x = 10;
-    let y = 10;
-    const pageWidth = 595.28; // A4 width in points
-    const pageHeight = 841.89; // A4 height in points
-    const labelWidth = template.template.width * 2.83;
-    const labelHeight = template.template.height * 2.83;
-    const labelsPerRow = Math.floor((pageWidth - 20) / labelWidth);
+      const buffers: any[] = [];
+      doc.on('data', (chunk) => buffers.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
 
-    for (let i = 0; i < products.length; i++) {
-      const product = products[i];
-      const quantity = generateLabelsDto.products[i].quantity;
+      let x = 10;
+      let y = 10;
 
-      for (let j = 0; j < quantity; j++) {
-        if (y + labelHeight > pageHeight - 10) {
-          doc.addPage();
-          x = 10;
-          y = 10;
-        }
+      for (const productData of generateLabelsDto.products) {
+        const product = products.find((p) => p.id === productData.productId);
+        if (!product) continue;
 
-        const labelBuffer = await this.generatePDF(product, template);
-        doc.image(labelBuffer, x, y, {
-          width: labelWidth,
-          height: labelHeight,
-        });
+        for (let i = 0; i < productData.quantity; i++) {
+          if (x + template.template.width * 2.83 > doc.page.width) {
+            x = 10;
+            y += template.template.height * 2.83 + 10;
+          }
 
-        x += labelWidth + 5;
-        if (x + labelWidth > pageWidth - 10) {
-          x = 10;
-          y += labelHeight + 5;
+          if (y + template.template.height * 2.83 > doc.page.height) {
+            doc.addPage();
+            x = 10;
+            y = 10;
+          }
+
+          const labelBuffer = await this.generatePDF(product, template);
+          doc.image(labelBuffer, x, y);
+          x += template.template.width * 2.83 + 10;
         }
       }
-    }
 
-    doc.end();
-    return Buffer.concat(chunks);
+      doc.end();
+    });
   }
 
   async validateBarcode(barcode: string): Promise<boolean> {
@@ -312,15 +318,12 @@ export class LabelsService {
   ): Promise<Product> {
     await this.validateManagerAccess(userId, shopId);
 
-    if (!(await this.validateBarcode(barcode))) {
-      throw new BadRequestException('Invalid barcode');
-    }
-
     const product = await this.productRepository.findOne({
-      where: [
-        { barcode, shopId, isActive: true },
-        { barcodes: () => `barcodes @> ARRAY['${barcode}']::text[]` },
-      ],
+      where: {
+        shopId,
+        isActive: true,
+        barcodes: Like(`%${barcode}%`),
+      },
       relations: ['category'],
     });
 

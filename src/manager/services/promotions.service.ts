@@ -9,7 +9,8 @@ import { Repository, In } from 'typeorm';
 import { Promotion, PromotionTarget } from '../entities/promotion.entity';
 import { Product } from '../entities/product.entity';
 import { Category } from '../entities/category.entity';
-import { UserRole, RoleType } from '../../roles/entities/user-role.entity';
+import { UserRole } from '../../roles/entities/user-role.entity';
+import { RoleType } from '../../auth/types/role.type';
 import { CreatePromotionDto } from '../dto/promotions/create-promotion.dto';
 
 @Injectable()
@@ -30,7 +31,7 @@ export class PromotionsService {
     shopId: string
   ): Promise<void> {
     const hasAccess = await this.userRoleRepository.findOne({
-      where: { userId, shopId, role: RoleType.MANAGER, isActive: true },
+      where: { userId, shopId, type: RoleType.MANAGER, isActive: true },
     });
 
     if (!hasAccess) {

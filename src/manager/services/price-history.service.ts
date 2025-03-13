@@ -7,7 +7,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PriceHistory } from '../entities/price-history.entity';
 import { Product } from '../entities/product.entity';
-import { UserRole, RoleType } from '../../roles/entities/user-role.entity';
+import { UserRole } from '../../roles/entities/user-role.entity';
+import { RoleType } from '../../auth/types/role.type';
 import { CreatePriceHistoryDto } from '../dto/price-history/create-price-history.dto';
 
 @Injectable()
@@ -25,11 +26,15 @@ export class PriceHistoryService {
     userId: string,
     shopId: string
   ): Promise<void> {
-    const hasAccess = await this.userRoleRepository.findOne({
-      where: { userId, shopId, role: RoleType.MANAGER, isActive: true },
+    const managerRole = await this.userRoleRepository.findOne({
+      where: {
+        userId,
+        type: RoleType.MANAGER,
+        isActive: true,
+      },
     });
 
-    if (!hasAccess) {
+    if (!managerRole) {
       throw new ForbiddenException('No access to this shop');
     }
   }

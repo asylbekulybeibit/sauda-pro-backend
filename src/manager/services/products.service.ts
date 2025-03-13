@@ -10,6 +10,7 @@ import { Category } from '../entities/category.entity';
 import { PriceHistory } from '../entities/price-history.entity';
 import { CreateProductDto } from '../dto/products/create-product.dto';
 import { UserRole } from '../../roles/entities/user-role.entity';
+import { RoleType } from '../../auth/types/role.type';
 
 @Injectable()
 export class ProductsService {
@@ -29,7 +30,7 @@ export class ProductsService {
       where: {
         userId,
         shopId,
-        role: 'manager',
+        type: RoleType.MANAGER,
         isActive: true,
       },
     });
@@ -80,7 +81,7 @@ export class ProductsService {
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
-        role: 'manager',
+        type: RoleType.MANAGER,
         isActive: true,
       },
     });

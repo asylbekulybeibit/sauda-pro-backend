@@ -16,7 +16,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { RoleType } from '../roles/entities/user-role.entity';
+import { RoleType } from '../auth/types/role.type';
 import { ReportsService } from './reports.service';
 import { CreateReportDto } from './dto/create-report.dto';
 import { Report, ReportType } from './entities/report.entity';

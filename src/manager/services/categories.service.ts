@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Category } from '../entities/category.entity';
 import { CreateCategoryDto } from '../dto/categories/create-category.dto';
 import { UserRole } from '../../roles/entities/user-role.entity';
+import { RoleType } from '../../auth/types/role.type';
 
 @Injectable()
 export class CategoriesService {
@@ -23,7 +24,7 @@ export class CategoriesService {
       where: {
         userId,
         shopId,
-        role: 'manager',
+        type: RoleType.MANAGER,
         isActive: true,
       },
     });
@@ -63,7 +64,7 @@ export class CategoriesService {
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
-        role: 'manager',
+        type: RoleType.MANAGER,
         isActive: true,
       },
     });
