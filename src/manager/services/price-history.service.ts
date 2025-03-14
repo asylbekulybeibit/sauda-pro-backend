@@ -127,9 +127,9 @@ export class PriceHistoryService {
       .getRawOne();
 
     return {
-      minPrice: parseFloat(stats.minPrice) || product.price,
-      maxPrice: parseFloat(stats.maxPrice) || product.price,
-      avgPrice: parseFloat(stats.avgPrice) || product.price,
+      minPrice: parseFloat(stats.minPrice) || product.sellingPrice,
+      maxPrice: parseFloat(stats.maxPrice) || product.sellingPrice,
+      avgPrice: parseFloat(stats.avgPrice) || product.sellingPrice,
       priceChangesCount: parseInt(stats.priceChangesCount) || 0,
     };
   }

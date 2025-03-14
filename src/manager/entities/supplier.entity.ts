@@ -2,11 +2,9 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  ManyToOne,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Shop } from '../../shops/entities/shop.entity';
 
 @Entity()
 export class Supplier {
@@ -16,41 +14,20 @@ export class Supplier {
   @Column()
   name: string;
 
-  @Column({ type: 'text', nullable: true })
-  description: string;
-
-  @Column({ nullable: true })
-  phone: string;
-
-  @Column({ nullable: true })
-  email: string;
-
-  @Column({ nullable: true })
-  address: string;
-
-  @Column({ type: 'jsonb', nullable: true })
-  contacts: {
-    name: string;
-    position: string;
-    phone: string;
-    email?: string;
-  }[];
-
-  @Column({ type: 'jsonb', nullable: true })
-  paymentInfo: {
-    type: string; // Тип оплаты (нал, безнал и т.д.)
-    bankDetails?: string;
-    terms?: string; // Условия оплаты
-  };
+  @Column()
+  shopId: string;
 
   @Column({ default: true })
   isActive: boolean;
 
-  @ManyToOne(() => Shop)
-  shop: Shop;
+  @Column({ nullable: true })
+  address?: string;
 
-  @Column()
-  shopId: string;
+  @Column({ nullable: true })
+  phone?: string;
+
+  @Column({ nullable: true })
+  email?: string;
 
   @CreateDateColumn()
   createdAt: Date;

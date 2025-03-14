@@ -15,6 +15,7 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 import { RoleType } from '../../auth/types/role.type';
 import { ProductsService } from '../services/products.service';
 import { CreateProductDto } from '../dto/products/create-product.dto';
+import { UpdateProductDto } from '../dto/products/update-product.dto';
 
 @Controller('manager/products')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -27,9 +28,9 @@ export class ProductsController {
     return this.productsService.create(createProductDto, req.user.id);
   }
 
-  @Get()
-  findAll(@Request() req) {
-    return this.productsService.findAll(req.user.id);
+  @Get('shop/:shopId')
+  findByShop(@Param('shopId') shopId: string, @Request() req) {
+    return this.productsService.findByShop(shopId, req.user.id);
   }
 
   @Get(':id')
@@ -40,7 +41,7 @@ export class ProductsController {
   @Patch(':id')
   update(
     @Param('id') id: string,
-    @Body() updateProductDto: Partial<CreateProductDto>,
+    @Body() updateProductDto: UpdateProductDto,
     @Request() req
   ) {
     return this.productsService.update(id, updateProductDto, req.user.id);

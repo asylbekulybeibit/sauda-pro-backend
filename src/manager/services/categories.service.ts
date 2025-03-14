@@ -60,6 +60,21 @@ export class CategoriesService {
     return this.categoryRepository.save(category);
   }
 
+  async findByShop(shopId: string, userId: string) {
+    await this.validateManagerAccess(userId, shopId);
+
+    return this.categoryRepository.find({
+      where: {
+        shopId,
+        isActive: true,
+      },
+      relations: ['parent', 'children'],
+      order: {
+        name: 'ASC',
+      },
+    });
+  }
+
   async findAll(userId: string) {
     const managerRole = await this.userRoleRepository.findOne({
       where: {

@@ -5,10 +5,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import {
   InventoryTransaction,
-  TransactionType,
+  TransactionType as EntityTransactionType,
 } from '../entities/inventory-transaction.entity';
 import { Product } from '../entities/product.entity';
 import { Shop } from '../../shops/entities/shop.entity';
@@ -16,9 +16,12 @@ import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
 import {
   CreateTransactionDto,
-  TransferMetadata,
+  TransactionMetadata,
+  TransactionType as DtoTransactionType,
 } from '../dto/inventory/create-transaction.dto';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { CreateInventoryDto } from '../dto/create-inventory.dto';
+import { Supplier } from '../entities/supplier.entity';
 
 @Injectable()
 export class InventoryService {
@@ -31,6 +34,8 @@ export class InventoryService {
     private readonly shopRepository: Repository<Shop>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
+    @InjectRepository(Supplier)
+    private readonly supplierRepository: Repository<Supplier>,
     private readonly notificationsService: NotificationsService
   ) {}
 
@@ -47,7 +52,7 @@ export class InventoryService {
     });
 
     if (!hasAccess) {
-      throw new BadRequestException(
+      throw new ForbiddenException(
         'User does not have manager access to this shop'
       );
     }
@@ -57,13 +62,13 @@ export class InventoryService {
     userId: string,
     createTransactionDto: CreateTransactionDto
   ): Promise<InventoryTransaction> {
-    const { shopId, productId, type, quantity, metadata } =
+    const { shopId, productId, type, quantity, price, metadata, comment } =
       createTransactionDto;
 
     await this.validateManagerAccess(userId, shopId);
 
     const product = await this.productRepository.findOne({
-      where: { id: productId },
+      where: { id: productId.toString() },
       relations: ['shop'],
     });
 
@@ -71,71 +76,99 @@ export class InventoryService {
       throw new NotFoundException('Product not found');
     }
 
-    // For sales, transfers, and write-offs, check if there's enough stock
+    // Проверяем достаточность остатков для уменьшающих операций
     if (
       [
-        TransactionType.SALE,
-        TransactionType.TRANSFER,
-        TransactionType.WRITE_OFF,
-      ].includes(type)
+        DtoTransactionType.SALE,
+        DtoTransactionType.WRITE_OFF,
+        DtoTransactionType.TRANSFER,
+      ].includes(type) &&
+      product.quantity < quantity
     ) {
-      if (product.quantity < quantity) {
-        throw new BadRequestException(
-          'Insufficient stock for this transaction'
-        );
-      }
+      throw new BadRequestException(
+        `Insufficient stock for ${type.toLowerCase()}. Available: ${
+          product.quantity
+        }, Requested: ${quantity}`
+      );
     }
 
-    // For transfers, validate target shop and create notifications
-    if (type === TransactionType.TRANSFER && metadata) {
-      const transferMeta = metadata as TransferMetadata;
+    // Для перемещений проверяем целевой магазин
+    if (type === DtoTransactionType.TRANSFER && metadata?.toShopId) {
       const targetShop = await this.shopRepository.findOne({
-        where: { id: transferMeta.targetShopId },
+        where: { id: metadata.toShopId },
       });
 
       if (!targetShop) {
         throw new NotFoundException('Target shop not found');
       }
 
-      // Create transfer initiated notification
+      // Создаем уведомления о перемещении
       await this.notificationsService.createTransferInitiatedNotification(
         shopId,
-        transferMeta.transferId,
+        metadata.invoiceNumber || 'N/A',
         product.name,
         quantity,
         targetShop.name
       );
-
-      // Create transfer notification for target shop
-      await this.notificationsService.createTransferCompletedNotification(
-        transferMeta.targetShopId,
-        transferMeta.transferId,
-        product.name,
-        quantity,
-        product.shop.name
-      );
     }
 
-    const transaction = await this.transactionRepository.save({
-      ...createTransactionDto,
-      userId,
+    // Для приходов проверяем поставщика
+    if (type === DtoTransactionType.PURCHASE && metadata?.supplierId) {
+      const supplier = await this.supplierRepository.findOne({
+        where: { id: metadata.supplierId },
+      });
+
+      if (!supplier) {
+        throw new NotFoundException('Supplier not found');
+      }
+    }
+
+    // Определяем изменение количества в зависимости от типа операции
+    let quantityChange = 0;
+    switch (type) {
+      case DtoTransactionType.PURCHASE:
+        quantityChange = quantity;
+        break;
+      case DtoTransactionType.SALE:
+      case DtoTransactionType.WRITE_OFF:
+      case DtoTransactionType.TRANSFER:
+        quantityChange = -quantity;
+        break;
+      case DtoTransactionType.ADJUSTMENT:
+        quantityChange = quantity - product.quantity;
+        break;
+    }
+
+    // Преобразуем тип транзакции из DTO в тип сущности
+    const entityType = EntityTransactionType[type];
+
+    // Создаем транзакцию
+    const transaction = this.transactionRepository.create({
+      shopId: shopId.toString(),
+      productId: productId.toString(),
+      type: entityType,
+      quantity,
+      price,
+      metadata,
+      note: comment,
+      createdById: userId,
     });
 
-    // Update product quantity based on transaction type
-    const isIncrease =
-      type === TransactionType.ADJUSTMENT && quantity > product.quantity;
-    const quantityChange = isIncrease ? quantity - product.quantity : -quantity;
+    const savedTransaction = await this.transactionRepository.save(transaction);
 
-    await this.productRepository.update(productId, {
+    // Обновляем количество товара
+    await this.productRepository.update(productId.toString(), {
       quantity: () => `quantity + ${quantityChange}`,
+      ...(price && type === DtoTransactionType.PURCHASE
+        ? { purchasePrice: price }
+        : {}),
     });
 
-    // Refresh product data
+    // Проверяем минимальные остатки после операции
     const updatedProduct = await this.productRepository.findOne({
-      where: { id: productId },
+      where: { id: productId.toString() },
     });
 
-    // Check for low stock after transaction
     if (updatedProduct.quantity <= updatedProduct.minQuantity) {
       await this.notificationsService.createLowStockNotification(
         shopId,
@@ -144,7 +177,7 @@ export class InventoryService {
       );
     }
 
-    return transaction;
+    return savedTransaction;
   }
 
   async getTransactions(
@@ -191,6 +224,68 @@ export class InventoryService {
       .createQueryBuilder('product')
       .where('product.shopId = :shopId', { shopId })
       .andWhere('product.quantity <= product.minQuantity')
+      .andWhere('product.isActive = true')
       .getMany();
+  }
+
+  async create(createInventoryDto: CreateInventoryDto, userId: string) {
+    const { shopId, date, comment, items } = createInventoryDto;
+
+    // Создаем транзакцию инвентаризации
+    const transaction = await this.transactionRepository.save({
+      type: EntityTransactionType.ADJUSTMENT,
+      shopId,
+      date,
+      note: comment,
+      createdById: userId,
+    });
+
+    // Обрабатываем каждый товар
+    for (const item of items) {
+      // Создаем транзакцию для каждого товара
+      await this.createTransaction(userId, {
+        shopId,
+        productId: item.productId,
+        type: DtoTransactionType.ADJUSTMENT,
+        quantity: item.actualQuantity,
+        comment: item.comment,
+        metadata: {
+          currentQuantity: item.currentQuantity,
+          difference: item.difference,
+        },
+      });
+    }
+
+    return transaction;
+  }
+
+  async findAll(shopId: string) {
+    return this.transactionRepository.find({
+      where: {
+        shopId,
+        type: EntityTransactionType.ADJUSTMENT,
+      },
+      relations: ['product'],
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+  }
+
+  async findOne(id: number, shopId: string) {
+    const transaction = await this.transactionRepository.findOne({
+      where: {
+        id: id.toString(),
+        shopId,
+        type: EntityTransactionType.ADJUSTMENT,
+      },
+      relations: ['product'],
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('Inventory check not found');
+    }
+
+    return transaction;
   }
 }

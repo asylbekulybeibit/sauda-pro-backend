@@ -167,7 +167,7 @@ export class LabelsService {
   private replaceVariables(text: string, product: Product): string {
     return text
       .replace('{{name}}', product.name)
-      .replace('{{price}}', product.price.toString())
+      .replace('{{price}}', product.sellingPrice.toString())
       .replace('{{barcodes[0]}}', product.barcodes?.[0] || '')
       .replace('{{category}}', product.category?.name || '')
       .replace('{{description}}', product.description || '');

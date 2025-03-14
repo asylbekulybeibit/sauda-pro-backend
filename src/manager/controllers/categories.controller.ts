@@ -27,6 +27,11 @@ export class CategoriesController {
     return this.categoriesService.create(createCategoryDto, req.user.id);
   }
 
+  @Get('shop/:shopId')
+  findByShop(@Param('shopId') shopId: string, @Request() req) {
+    return this.categoriesService.findByShop(shopId, req.user.id);
+  }
+
   @Get()
   findAll(@Request() req) {
     return this.categoriesService.findAll(req.user.id);

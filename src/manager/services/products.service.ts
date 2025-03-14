@@ -7,8 +7,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from '../entities/product.entity';
 import { Category } from '../entities/category.entity';
-import { PriceHistory } from '../entities/price-history.entity';
+import { PriceHistory, PriceType } from '../entities/price-history.entity';
 import { CreateProductDto } from '../dto/products/create-product.dto';
+import { UpdateProductDto } from '../dto/products/update-product.dto';
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
 
@@ -65,37 +66,41 @@ export class ProductsService {
     const product = this.productRepository.create(createProductDto);
     const savedProduct = await this.productRepository.save(product);
 
-    // Create initial price history record
-    await this.priceHistoryRepository.save({
-      oldPrice: 0,
-      newPrice: createProductDto.price,
-      reason: 'Initial price',
-      productId: savedProduct.id,
-      changedById: userId,
-    });
+    // Create initial price history records for both purchase and selling prices
+    await Promise.all([
+      this.priceHistoryRepository.save({
+        oldPrice: 0,
+        newPrice: createProductDto.purchasePrice,
+        reason: 'Initial purchase price',
+        productId: savedProduct.id,
+        changedById: userId,
+        priceType: PriceType.PURCHASE,
+      }),
+      this.priceHistoryRepository.save({
+        oldPrice: 0,
+        newPrice: createProductDto.sellingPrice,
+        reason: 'Initial selling price',
+        productId: savedProduct.id,
+        changedById: userId,
+        priceType: PriceType.SELLING,
+      }),
+    ]);
 
     return savedProduct;
   }
 
-  async findAll(userId: string) {
-    const managerRole = await this.userRoleRepository.findOne({
-      where: {
-        userId,
-        type: RoleType.MANAGER,
-        isActive: true,
-      },
-    });
-
-    if (!managerRole) {
-      throw new ForbiddenException('У вас нет прав менеджера');
-    }
+  async findByShop(shopId: string, userId: string) {
+    await this.validateManagerAccess(userId, shopId);
 
     return this.productRepository.find({
       where: {
-        shopId: managerRole.shopId,
+        shopId,
         isActive: true,
       },
       relations: ['category'],
+      order: {
+        name: 'ASC',
+      },
     });
   }
 
@@ -106,7 +111,7 @@ export class ProductsService {
     });
 
     if (!product) {
-      throw new NotFoundException('Продукт не найден');
+      throw new NotFoundException('Товар не найден');
     }
 
     await this.validateManagerAccess(userId, product.shopId);
@@ -114,15 +119,11 @@ export class ProductsService {
     return product;
   }
 
-  async update(
-    id: string,
-    updateProductDto: Partial<CreateProductDto>,
-    userId: string
-  ) {
+  async update(id: string, updateProductDto: UpdateProductDto, userId: string) {
     const product = await this.findOne(id, userId);
 
     if (updateProductDto.shopId && updateProductDto.shopId !== product.shopId) {
-      throw new ForbiddenException('Нельзя изменить магазин продукта');
+      throw new ForbiddenException('Нельзя изменить магазин товара');
     }
 
     if (
@@ -145,17 +146,32 @@ export class ProductsService {
       }
     }
 
-    // If price is being updated, create a price history record
+    // Track price changes
     if (
-      updateProductDto.price !== undefined &&
-      updateProductDto.price !== product.price
+      updateProductDto.purchasePrice !== undefined &&
+      updateProductDto.purchasePrice !== product.purchasePrice
     ) {
       await this.priceHistoryRepository.save({
-        oldPrice: product.price,
-        newPrice: updateProductDto.price,
-        reason: 'Price update',
+        oldPrice: product.purchasePrice,
+        newPrice: updateProductDto.purchasePrice,
+        reason: 'Purchase price update',
         productId: product.id,
         changedById: userId,
+        priceType: PriceType.PURCHASE,
+      });
+    }
+
+    if (
+      updateProductDto.sellingPrice !== undefined &&
+      updateProductDto.sellingPrice !== product.sellingPrice
+    ) {
+      await this.priceHistoryRepository.save({
+        oldPrice: product.sellingPrice,
+        newPrice: updateProductDto.sellingPrice,
+        reason: 'Selling price update',
+        productId: product.id,
+        changedById: userId,
+        priceType: PriceType.SELLING,
       });
     }
 

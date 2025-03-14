@@ -69,7 +69,7 @@ export class AnalyticsService {
       0
     );
     const totalValue = products.reduce(
-      (sum, product) => sum + product.quantity * product.price,
+      (sum, product) => sum + product.quantity * product.sellingPrice,
       0
     );
 
@@ -259,7 +259,7 @@ export class AnalyticsService {
       };
 
       stats.quantity += product.quantity;
-      stats.value += product.quantity * product.price;
+      stats.value += product.quantity * product.sellingPrice;
       stockByCategory.set(category, stats);
     });
 
@@ -419,7 +419,7 @@ export class AnalyticsService {
         };
 
         const revenue = item.quantity * item.price;
-        const cost = item.quantity * product.cost;
+        const cost = item.quantity * product.purchasePrice;
 
         stats.revenue += revenue;
         stats.profit += revenue - cost;

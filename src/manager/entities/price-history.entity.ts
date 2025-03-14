@@ -9,6 +9,11 @@ import {
 import { Product } from './product.entity';
 import { User } from '../../users/entities/user.entity';
 
+export enum PriceType {
+  PURCHASE = 'purchase',
+  SELLING = 'selling',
+}
+
 @Entity()
 export class PriceHistory {
   @PrimaryGeneratedColumn('uuid')
@@ -22,6 +27,13 @@ export class PriceHistory {
 
   @Column({ type: 'text', nullable: true })
   reason: string;
+
+  @Column({
+    type: 'enum',
+    enum: PriceType,
+    default: PriceType.SELLING,
+  })
+  priceType: PriceType;
 
   @ManyToOne(() => Product)
   product: Product;

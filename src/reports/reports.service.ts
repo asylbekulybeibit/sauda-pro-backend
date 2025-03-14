@@ -185,15 +185,18 @@ export class ReportsService {
         totalProducts: products.length,
         lowStockProducts: lowStockProducts.length,
         outOfStockProducts: outOfStockProducts.length,
-        totalValue: products.reduce((sum, p) => sum + p.quantity * p.price, 0),
+        totalValue: products.reduce(
+          (sum, p) => sum + p.quantity * p.sellingPrice,
+          0
+        ),
       },
       details: products.map((p) => ({
         name: p.name,
         category: p.category.name,
         quantity: p.quantity,
         minQuantity: p.minQuantity,
-        price: p.price,
-        value: p.quantity * p.price,
+        price: p.sellingPrice,
+        value: p.quantity * p.sellingPrice,
         status:
           p.quantity === 0
             ? 'Out of Stock'
