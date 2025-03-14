@@ -2,6 +2,7 @@ import {
   Injectable,
   ForbiddenException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -9,6 +10,7 @@ import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
 import { Invite, InviteStatus } from '../../invites/entities/invite.entity';
 import { CreateStaffInviteDto } from '../dto/staff/create-staff-invite.dto';
+import { InviteStatsDto } from '../dto/staff/invite-stats.dto';
 
 @Injectable()
 export class StaffService {
@@ -98,12 +100,15 @@ export class StaffService {
       .innerJoin('role.user', 'user')
       .where('user.phone = :phone', { phone: createStaffInviteDto.phone })
       .andWhere('role.shopId = :shopId', { shopId })
+      .andWhere('role.type = :roleType', {
+        roleType: createStaffInviteDto.role,
+      })
       .andWhere('role.isActive = :isActive', { isActive: true })
       .getOne();
 
     if (existingRole) {
       throw new ForbiddenException(
-        'Пользователь с этим номером телефона уже является сотрудником'
+        'Этот номер телефона уже зарегистрирован как кассир в вашем магазине'
       );
     }
 
@@ -122,7 +127,7 @@ export class StaffService {
 
     return this.inviteRepository.find({
       where: { shopId },
-      relations: ['invitedUser'],
+      relations: ['invitedUser', 'createdBy'],
       order: { createdAt: 'DESC' },
     });
   }
@@ -151,5 +156,143 @@ export class StaffService {
     staffRole.deactivatedAt = new Date();
 
     return this.userRoleRepository.save(staffRole);
+  }
+
+  async getInviteStats(
+    userId: string,
+    shopId: string
+  ): Promise<InviteStatsDto> {
+    await this.validateManagerAccess(userId, shopId);
+
+    const invites = await this.inviteRepository.find({
+      where: { shopId },
+      relations: ['invitedUser'],
+    });
+
+    const stats: InviteStatsDto = {
+      total: invites.length,
+      byStatus: {
+        [InviteStatus.PENDING]: 0,
+        [InviteStatus.ACCEPTED]: 0,
+        [InviteStatus.REJECTED]: 0,
+        [InviteStatus.CANCELLED]: 0,
+      },
+      byRole: {
+        [RoleType.CASHIER]: 0,
+        [RoleType.MANAGER]: 0,
+        [RoleType.OWNER]: 0,
+        [RoleType.SUPERADMIN]: 0,
+      },
+      activeInvites: 0,
+      acceptedInvites: 0,
+      rejectedInvites: 0,
+      cancelledInvites: 0,
+      averageAcceptanceTime: null,
+    };
+
+    let totalAcceptanceTime = 0;
+    let acceptedCount = 0;
+
+    invites.forEach((invite) => {
+      stats.byStatus[invite.status]++;
+      stats.byRole[invite.role]++;
+
+      switch (invite.status) {
+        case InviteStatus.PENDING:
+          stats.activeInvites++;
+          break;
+        case InviteStatus.ACCEPTED:
+          stats.acceptedInvites++;
+          if (invite.statusChangedAt) {
+            const acceptanceTime =
+              invite.statusChangedAt.getTime() - invite.createdAt.getTime();
+            totalAcceptanceTime += acceptanceTime;
+            acceptedCount++;
+          }
+          break;
+        case InviteStatus.REJECTED:
+          stats.rejectedInvites++;
+          break;
+        case InviteStatus.CANCELLED:
+          stats.cancelledInvites++;
+          break;
+      }
+    });
+
+    if (acceptedCount > 0) {
+      stats.averageAcceptanceTime = totalAcceptanceTime / acceptedCount;
+    }
+
+    return stats;
+  }
+
+  async cancelInvite(
+    inviteId: string,
+    userId: string,
+    shopId: string
+  ): Promise<Invite> {
+    await this.validateManagerAccess(userId, shopId);
+
+    const invite = await this.inviteRepository.findOne({
+      where: { id: inviteId, shopId },
+    });
+
+    if (!invite) {
+      throw new NotFoundException('Приглашение не найдено');
+    }
+
+    if (invite.status !== InviteStatus.PENDING) {
+      throw new BadRequestException(
+        'Можно отменить только активные приглашения'
+      );
+    }
+
+    invite.status = InviteStatus.CANCELLED;
+    invite.statusChangedAt = new Date();
+
+    return this.inviteRepository.save(invite);
+  }
+
+  async resendInvite(
+    inviteId: string,
+    userId: string,
+    shopId: string
+  ): Promise<Invite> {
+    await this.validateManagerAccess(userId, shopId);
+
+    const invite = await this.inviteRepository.findOne({
+      where: { id: inviteId, shopId },
+    });
+
+    if (!invite) {
+      throw new NotFoundException('Приглашение не найдено');
+    }
+
+    if (invite.status !== InviteStatus.PENDING) {
+      throw new BadRequestException(
+        'Можно повторно отправить только активные приглашения'
+      );
+    }
+
+    // Обновляем время создания и сбрасываем OTP
+    invite.createdAt = new Date();
+    invite.otp = null;
+    invite.otpExpiresAt = null;
+
+    const savedInvite = await this.inviteRepository.save(invite);
+
+    // TODO: Добавить отправку уведомления через NotificationsService
+
+    return savedInvite;
+  }
+
+  async getInviteHistory(userId: string, shopId: string): Promise<Invite[]> {
+    await this.validateManagerAccess(userId, shopId);
+
+    return this.inviteRepository.find({
+      where: { shopId },
+      relations: ['invitedUser', 'createdBy'],
+      order: { createdAt: 'DESC' },
+    });
   }
 }
