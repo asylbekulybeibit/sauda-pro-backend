@@ -19,6 +19,7 @@ export enum TransactionType {
   ADJUSTMENT = 'ADJUSTMENT', // Корректировка (инвентаризация)
   WRITE_OFF = 'WRITE_OFF', // Списание
   TRANSFER = 'TRANSFER', // Перемещение между магазинами
+  RETURN = 'RETURN', // Возврат товара
 }
 
 // Метаданные для разных типов транзакций
@@ -61,8 +62,8 @@ export class CreateTransactionDto {
   @IsEnum(TransactionType)
   type: TransactionType;
 
-  @IsNumber()
-  productId: number;
+  @IsUUID()
+  productId: string;
 
   @IsNumber()
   @Min(0)
@@ -89,8 +90,8 @@ export class CreateTransactionDto {
 
 // DTO для приходов товара (оставляем для обратной совместимости)
 export class PurchaseItemDto {
-  @IsNumber()
-  productId: number;
+  @IsUUID()
+  productId: string;
 
   @IsNumber()
   @Min(0)

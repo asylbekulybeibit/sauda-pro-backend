@@ -11,11 +11,12 @@ import { Shop } from '../../shops/entities/shop.entity';
 import { User } from '../../users/entities/user.entity';
 
 export enum TransactionType {
-  SALE = 'SALE',
-  PURCHASE = 'PURCHASE',
-  TRANSFER = 'TRANSFER',
-  WRITE_OFF = 'WRITE_OFF',
-  ADJUSTMENT = 'ADJUSTMENT',
+  PURCHASE = 'PURCHASE', // Приход товара
+  SALE = 'SALE', // Продажа
+  ADJUSTMENT = 'ADJUSTMENT', // Корректировка (инвентаризация)
+  WRITE_OFF = 'WRITE_OFF', // Списание
+  TRANSFER = 'TRANSFER', // Перемещение между магазинами
+  RETURN = 'RETURN', // Возврат товара
 }
 
 @Entity()

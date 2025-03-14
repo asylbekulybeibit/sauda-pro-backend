@@ -68,7 +68,7 @@ export class InventoryService {
     await this.validateManagerAccess(userId, shopId);
 
     const product = await this.productRepository.findOne({
-      where: { id: productId.toString() },
+      where: { id: productId },
       relations: ['shop'],
     });
 
@@ -144,8 +144,8 @@ export class InventoryService {
 
     // Создаем транзакцию
     const transaction = this.transactionRepository.create({
-      shopId: shopId.toString(),
-      productId: productId.toString(),
+      shopId: shopId,
+      productId: productId,
       type: entityType,
       quantity,
       price,
@@ -157,7 +157,7 @@ export class InventoryService {
     const savedTransaction = await this.transactionRepository.save(transaction);
 
     // Обновляем количество товара
-    await this.productRepository.update(productId.toString(), {
+    await this.productRepository.update(productId, {
       quantity: () => `quantity + ${quantityChange}`,
       ...(price && type === DtoTransactionType.PURCHASE
         ? { purchasePrice: price }
@@ -166,7 +166,7 @@ export class InventoryService {
 
     // Проверяем минимальные остатки после операции
     const updatedProduct = await this.productRepository.findOne({
-      where: { id: productId.toString() },
+      where: { id: productId },
     });
 
     if (updatedProduct.quantity <= updatedProduct.minQuantity) {
@@ -287,5 +287,41 @@ export class InventoryService {
     }
 
     return transaction;
+  }
+
+  async getSales(
+    userId: string,
+    shopId: string
+  ): Promise<InventoryTransaction[]> {
+    await this.validateManagerAccess(userId, shopId);
+
+    return this.transactionRepository.find({
+      where: {
+        shopId,
+        type: EntityTransactionType.SALE,
+      },
+      relations: ['product', 'createdBy'],
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+  }
+
+  async getReturns(
+    userId: string,
+    shopId: string
+  ): Promise<InventoryTransaction[]> {
+    await this.validateManagerAccess(userId, shopId);
+
+    return this.transactionRepository.find({
+      where: {
+        shopId,
+        type: EntityTransactionType.RETURN,
+      },
+      relations: ['product', 'createdBy'],
+      order: {
+        createdAt: 'DESC',
+      },
+    });
   }
 }

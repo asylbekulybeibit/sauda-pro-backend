@@ -18,6 +18,8 @@ import { PriceHistoryController } from './controllers/price-history.controller';
 import { PriceHistoryService } from './services/price-history.service';
 import { LabelsController } from './controllers/labels.controller';
 import { LabelsService } from './services/labels.service';
+import { TransfersController } from './controllers/transfers.controller';
+import { TransfersService } from './services/transfers.service';
 import { Product } from './entities/product.entity';
 import { Category } from './entities/category.entity';
 import { InventoryTransaction } from './entities/inventory-transaction.entity';
@@ -29,6 +31,8 @@ import { Shop } from '../shops/entities/shop.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
 import { Invite } from '../invites/entities/invite.entity';
 import { LabelTemplate } from './entities/label-template.entity';
+import { Transfer } from './entities/transfer.entity';
+import { TransferItem } from './entities/transfer-item.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ReportsModule } from '../reports/reports.module';
 
@@ -46,6 +50,8 @@ import { ReportsModule } from '../reports/reports.module';
       CashierStats,
       Supplier,
       LabelTemplate,
+      Transfer,
+      TransferItem,
     ]),
     NotificationsModule,
     ReportsModule,
@@ -60,6 +66,7 @@ import { ReportsModule } from '../reports/reports.module';
     PromotionsController,
     PriceHistoryController,
     LabelsController,
+    TransfersController,
   ],
   providers: [
     ManagerService,
@@ -71,6 +78,7 @@ import { ReportsModule } from '../reports/reports.module';
     PromotionsService,
     PriceHistoryService,
     LabelsService,
+    TransfersService,
   ],
   exports: [ManagerService, ProductsService, InventoryService],
 })

@@ -6,6 +6,7 @@ import {
   Param,
   UseGuards,
   Request,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -19,6 +20,7 @@ import {
 import { RoleType } from '../../auth/types/role.type';
 import { CreateInventoryDto } from '../dto/create-inventory.dto';
 import { GetUser } from '../../auth/decorators/get-user.decorator';
+import { InventoryTransaction } from '../entities/inventory-transaction.entity';
 
 @Controller('manager/inventory')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -122,5 +124,21 @@ export class InventoryController {
   @Get(':id/shop/:shopId')
   findOne(@Param('id') id: string, @Param('shopId') shopId: string) {
     return this.inventoryService.findOne(+id, shopId);
+  }
+
+  @Get('sales/:shopId')
+  async getSales(
+    @Request() req,
+    @Param('shopId', ParseUUIDPipe) shopId: string
+  ): Promise<InventoryTransaction[]> {
+    return this.inventoryService.getSales(req.user.id, shopId);
+  }
+
+  @Get('returns/:shopId')
+  async getReturns(
+    @Request() req,
+    @Param('shopId', ParseUUIDPipe) shopId: string
+  ): Promise<InventoryTransaction[]> {
+    return this.inventoryService.getReturns(req.user.id, shopId);
   }
 }

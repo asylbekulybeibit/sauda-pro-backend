@@ -5,12 +5,13 @@ import {
   IsArray,
   ValidateNested,
   IsOptional,
+  IsUUID,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class InventoryItemDto {
-  @IsNumber()
-  productId: number;
+  @IsUUID()
+  productId: string;
 
   @IsNumber()
   currentQuantity: number;
