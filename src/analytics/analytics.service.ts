@@ -59,32 +59,43 @@ export class AnalyticsService {
 
   @Cached('inventory', 10 * 60 * 1000) // кэш на 10 минут
   async getInventoryAnalytics(shopId: string) {
-    const products = await this.productRepository.find({
-      where: { shop: { id: shopId } },
-      relations: ['category'],
-    });
+    try {
+      const products = await this.productRepository.find({
+        where: { shop: { id: shopId } },
+        relations: ['category'],
+      });
 
-    const totalItems = products.reduce(
-      (sum, product) => sum + product.quantity,
-      0
-    );
-    const totalValue = products.reduce(
-      (sum, product) => sum + product.quantity * product.sellingPrice,
-      0
-    );
+      const totalItems = products.reduce(
+        (sum, product) => sum + product.quantity,
+        0
+      );
+      const totalValue = products.reduce(
+        (sum, product) => sum + product.quantity * product.sellingPrice,
+        0
+      );
 
-    const lowStockProducts = products.filter(
-      (product) => product.quantity <= product.minQuantity
-    );
+      const lowStockProducts = products
+        .filter((product) => product.quantity <= product.minQuantity)
+        .map((product) => ({
+          id: product.id,
+          name: product.name,
+          quantity: product.quantity,
+          minQuantity: product.minQuantity,
+          price: product.sellingPrice,
+        }));
 
-    const stockByCategory = this.groupProductsByCategory(products);
+      const stockByCategory = this.groupProductsByCategory(products);
 
-    return {
-      totalItems,
-      totalValue,
-      lowStockProducts,
-      stockByCategory,
-    };
+      return {
+        totalItems,
+        totalValue,
+        lowStockProducts,
+        stockByCategory,
+      };
+    } catch (error) {
+      console.error('Error in getInventoryAnalytics:', error);
+      throw error;
+    }
   }
 
   @Cached('staff', 5 * 60 * 1000) // кэш на 5 минут
@@ -252,7 +263,7 @@ export class AnalyticsService {
     >();
 
     products.forEach((product) => {
-      const category = product.category.name;
+      const category = product.category?.name || 'Без категории';
       const stats = stockByCategory.get(category) || {
         quantity: 0,
         value: 0,

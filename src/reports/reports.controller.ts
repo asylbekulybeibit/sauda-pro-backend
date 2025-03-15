@@ -21,13 +21,13 @@ import { ReportsService } from './reports.service';
 import { CreateReportDto } from './dto/create-report.dto';
 import { Report, ReportType } from './entities/report.entity';
 
-@Controller('reports')
+@Controller('manager/reports')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   // Endpoints для менеджера
-  @Post('manager')
+  @Post()
   @Roles(RoleType.MANAGER)
   async createManagerReport(
     @CurrentUser('id') userId: string,
@@ -51,13 +51,21 @@ export class ReportsController {
     return this.reportsService.create(userId, createReportDto);
   }
 
-  @Get('manager/shop/:shopId')
+  @Get('shop/:shopId')
   @Roles(RoleType.MANAGER)
   async getManagerReports(
     @CurrentUser('id') userId: string,
     @Param('shopId', ParseUUIDPipe) shopId: string
   ): Promise<Report[]> {
-    return this.reportsService.findAll(userId, shopId);
+    console.log('Getting reports for shop:', shopId, 'userId:', userId);
+    try {
+      const reports = await this.reportsService.findAll(userId, shopId);
+      console.log('Found reports:', reports?.length || 0);
+      return reports;
+    } catch (error) {
+      console.error('Error getting reports:', error);
+      throw error;
+    }
   }
 
   // Endpoints для владельца

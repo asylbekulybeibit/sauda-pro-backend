@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, UseGuards, Request, Param } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -14,5 +14,10 @@ export class ManagerController {
   @Get('dashboard')
   async getDashboard(@Request() req) {
     return this.managerService.getDashboard(req.user.id);
+  }
+
+  @Get('shops/:id')
+  async getShop(@Param('id') id: string, @Request() req) {
+    return this.managerService.getShop(id, req.user.id);
   }
 }

@@ -141,4 +141,28 @@ export class InventoryController {
   ): Promise<InventoryTransaction[]> {
     return this.inventoryService.getReturns(req.user.id, shopId);
   }
+
+  @Get('write-offs/:shopId')
+  async getWriteOffs(
+    @Request() req,
+    @Param('shopId', ParseUUIDPipe) shopId: string
+  ): Promise<InventoryTransaction[]> {
+    console.log(
+      'Write-offs endpoint called with shopId:',
+      shopId,
+      'user:',
+      req.user
+    );
+    try {
+      const result = await this.inventoryService.getWriteOffs(
+        req.user.id,
+        shopId
+      );
+      console.log('Write-offs endpoint response:', result);
+      return result;
+    } catch (error) {
+      console.error('Error in getWriteOffs:', error);
+      throw error;
+    }
+  }
 }

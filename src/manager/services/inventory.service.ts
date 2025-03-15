@@ -324,4 +324,28 @@ export class InventoryService {
       },
     });
   }
+
+  async getWriteOffs(
+    userId: string,
+    shopId: string
+  ): Promise<InventoryTransaction[]> {
+    console.log('Getting write-offs for shop:', shopId, 'user:', userId);
+
+    await this.validateManagerAccess(userId, shopId);
+    console.log('Manager access validated');
+
+    const writeOffs = await this.transactionRepository.find({
+      where: {
+        shopId,
+        type: EntityTransactionType.WRITE_OFF,
+      },
+      relations: ['product', 'createdBy'],
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+
+    console.log('Found write-offs:', writeOffs);
+    return writeOffs;
+  }
 }

@@ -93,7 +93,12 @@ export class ReportsService {
 
   private async validateAccess(userId: string, shopId: string): Promise<void> {
     const userRole = await this.userRoleRepository.findOne({
-      where: { userId, shopId },
+      where: {
+        userId,
+        shopId,
+        type: RoleType.MANAGER,
+        isActive: true,
+      },
     });
 
     if (!userRole) {

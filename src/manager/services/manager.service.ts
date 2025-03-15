@@ -1,4 +1,8 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Shop } from '../../shops/entities/shop.entity';
@@ -13,6 +17,37 @@ export class ManagerService {
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>
   ) {}
+
+  private async validateManagerAccess(
+    userId: string,
+    shopId: string
+  ): Promise<void> {
+    const managerRole = await this.userRoleRepository.findOne({
+      where: {
+        userId,
+        type: RoleType.MANAGER,
+        isActive: true,
+      },
+    });
+
+    if (!managerRole) {
+      throw new ForbiddenException('У вас нет прав менеджера');
+    }
+  }
+
+  async getShop(shopId: string, userId: string): Promise<Shop> {
+    await this.validateManagerAccess(userId, shopId);
+
+    const shop = await this.shopRepository.findOne({
+      where: { id: shopId },
+    });
+
+    if (!shop) {
+      throw new NotFoundException('Магазин не найден');
+    }
+
+    return shop;
+  }
 
   async getDashboard(userId: string) {
     // Получаем магазин, где пользователь является менеджером
