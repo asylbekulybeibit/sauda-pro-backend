@@ -20,6 +20,8 @@ import { LabelsController } from './controllers/labels.controller';
 import { LabelsService } from './services/labels.service';
 import { TransfersController } from './controllers/transfers.controller';
 import { TransfersService } from './services/transfers.service';
+import { CashRegistersController } from './controllers/cash-registers.controller';
+import { CashRegistersService } from './services/cash-registers.service';
 import { Product } from './entities/product.entity';
 import { Category } from './entities/category.entity';
 import { InventoryTransaction } from './entities/inventory-transaction.entity';
@@ -27,6 +29,8 @@ import { PriceHistory } from './entities/price-history.entity';
 import { Promotion } from './entities/promotion.entity';
 import { CashierStats } from './entities/cashier-stats.entity';
 import { Supplier } from './entities/supplier.entity';
+import { CashRegister } from './entities/cash-register.entity';
+import { RegisterPaymentMethod } from './entities/register-payment-method.entity';
 import { Shop } from '../shops/entities/shop.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
 import { Invite } from '../invites/entities/invite.entity';
@@ -52,6 +56,8 @@ import { ReportsModule } from '../reports/reports.module';
       LabelTemplate,
       Transfer,
       TransferItem,
+      CashRegister,
+      RegisterPaymentMethod,
     ]),
     NotificationsModule,
     ReportsModule,
@@ -67,6 +73,7 @@ import { ReportsModule } from '../reports/reports.module';
     PriceHistoryController,
     LabelsController,
     TransfersController,
+    CashRegistersController,
   ],
   providers: [
     ManagerService,
@@ -79,6 +86,7 @@ import { ReportsModule } from '../reports/reports.module';
     PriceHistoryService,
     LabelsService,
     TransfersService,
+    CashRegistersService,
   ],
   exports: [ManagerService, ProductsService, InventoryService],
 })

@@ -9,6 +9,7 @@ import {
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { Product } from '../../manager/entities/product.entity';
 import { InventoryTransaction } from '../../manager/entities/inventory-transaction.entity';
+import { CashRegister } from '../../manager/entities/cash-register.entity';
 
 export enum ShopType {
   SHOP = 'shop',
@@ -57,4 +58,7 @@ export class Shop {
 
   @OneToMany(() => InventoryTransaction, (transaction) => transaction.shop)
   transactions: InventoryTransaction[];
+
+  @OneToMany(() => CashRegister, (register) => register.shop)
+  cashRegisters: CashRegister[];
 }
