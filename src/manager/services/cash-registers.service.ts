@@ -9,7 +9,11 @@ import {
   CashRegister,
   CashRegisterStatus,
 } from '../entities/cash-register.entity';
-import { RegisterPaymentMethod } from '../entities/register-payment-method.entity';
+import {
+  RegisterPaymentMethod,
+  PaymentMethodSource,
+  PaymentMethodStatus,
+} from '../entities/register-payment-method.entity';
 import { CreateCashRegisterDto } from '../dto/cash-registers/create-cash-register.dto';
 import { PaymentMethodDto } from '../dto/payment-methods/payment-method.dto';
 
@@ -56,6 +60,7 @@ export class CashRegistersService {
         code: method.code,
         description: method.description,
         isActive: method.isActive ?? true,
+        status: method.status ?? PaymentMethodStatus.ACTIVE,
       })
     );
 
@@ -114,24 +119,72 @@ export class CashRegistersService {
   ): Promise<CashRegister> {
     const register = await this.findOne(id, shopId);
 
-    // Remove existing payment methods
-    await this.paymentMethodRepository.delete({ cashRegisterId: id });
-
-    // Create new payment methods
-    const newPaymentMethods = paymentMethods.map((method) => {
-      const paymentMethod = new RegisterPaymentMethod();
-      paymentMethod.cashRegisterId = id;
-      paymentMethod.source = method.source;
-      paymentMethod.systemType = method.systemType;
-      paymentMethod.name = method.name;
-      paymentMethod.code = method.code;
-      paymentMethod.description = method.description;
-      paymentMethod.isActive = method.isActive;
-      return paymentMethod;
+    // Получаем все существующие методы оплаты
+    const existingMethods = await this.paymentMethodRepository.find({
+      where: { cashRegisterId: id },
     });
 
-    await this.paymentMethodRepository.save(newPaymentMethods);
+    // Создаем Map существующих методов для быстрого поиска
+    const existingMethodsMap = new Map(
+      existingMethods.map((method) => [this.getMethodKey(method), method])
+    );
+
+    // Подготавливаем новые методы и обновляем существующие
+    const methodsToSave = paymentMethods.map((method) => {
+      const key = this.getMethodKey(method);
+      const existingMethod = existingMethodsMap.get(key);
+
+      if (existingMethod) {
+        // Обновляем существующий метод
+        existingMethod.isActive = method.isActive;
+        existingMethod.status = method.status;
+        existingMethodsMap.delete(key); // Удаляем из мапы, чтобы отследить неиспользуемые методы
+        return existingMethod;
+      } else {
+        // Создаем новый метод
+        const paymentMethod = new RegisterPaymentMethod();
+        paymentMethod.cashRegisterId = id;
+        paymentMethod.source = method.source;
+        paymentMethod.systemType = method.systemType;
+        paymentMethod.name = method.name;
+        paymentMethod.code = method.code;
+        paymentMethod.description = method.description;
+        paymentMethod.isActive = method.isActive;
+        paymentMethod.status = method.status;
+        return paymentMethod;
+      }
+    });
+
+    // Все оставшиеся в мапе методы помечаем как неактивные
+    const methodsToDeactivate = Array.from(existingMethodsMap.values()).map(
+      (method) => {
+        method.isActive = false;
+        method.status = PaymentMethodStatus.INACTIVE;
+        return method;
+      }
+    );
+
+    // Сохраняем все изменения
+    await this.paymentMethodRepository.save([
+      ...methodsToSave,
+      ...methodsToDeactivate,
+    ]);
 
     return this.findOne(id, shopId);
+  }
+
+  // Вспомогательный метод для создания уникального ключа метода оплаты
+  private getMethodKey(method: {
+    source: string;
+    systemType?: string;
+    code?: string;
+  }): string {
+    if (method.source === PaymentMethodSource.SYSTEM && method.systemType) {
+      return `${method.source}_${method.systemType}`;
+    }
+    if (method.source === PaymentMethodSource.CUSTOM && method.code) {
+      return `${method.source}_${method.code}`;
+    }
+    throw new BadRequestException('Invalid payment method data');
   }
 }

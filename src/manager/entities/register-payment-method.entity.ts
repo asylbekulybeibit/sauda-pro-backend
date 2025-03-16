@@ -13,6 +13,11 @@ export enum PaymentMethodSource {
   CUSTOM = 'custom',
 }
 
+export enum PaymentMethodStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+}
+
 @Entity('register_payment_methods')
 export class RegisterPaymentMethod {
   @PrimaryGeneratedColumn('uuid')
@@ -50,6 +55,13 @@ export class RegisterPaymentMethod {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({
+    type: 'enum',
+    enum: PaymentMethodStatus,
+    default: PaymentMethodStatus.ACTIVE,
+  })
+  status: PaymentMethodStatus;
 
   @CreateDateColumn()
   createdAt: Date;
