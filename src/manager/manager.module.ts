@@ -39,6 +39,9 @@ import { Transfer } from './entities/transfer.entity';
 import { TransferItem } from './entities/transfer-item.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ReportsModule } from '../reports/reports.module';
+import { SupplierProduct } from './entities/supplier-product.entity';
+import { SupplierProductsService } from './services/supplier-products.service';
+import { SupplierProductsController } from './controllers/supplier-products.controller';
 
 @Module({
   imports: [
@@ -58,6 +61,7 @@ import { ReportsModule } from '../reports/reports.module';
       TransferItem,
       CashRegister,
       RegisterPaymentMethod,
+      SupplierProduct,
     ]),
     NotificationsModule,
     ReportsModule,
@@ -74,6 +78,7 @@ import { ReportsModule } from '../reports/reports.module';
     LabelsController,
     TransfersController,
     CashRegistersController,
+    SupplierProductsController,
   ],
   providers: [
     ManagerService,
@@ -87,6 +92,7 @@ import { ReportsModule } from '../reports/reports.module';
     LabelsService,
     TransfersService,
     CashRegistersService,
+    SupplierProductsService,
   ],
   exports: [ManagerService, ProductsService, InventoryService],
 })

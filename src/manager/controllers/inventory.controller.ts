@@ -165,4 +165,28 @@ export class InventoryController {
       throw error;
     }
   }
+
+  @Get('purchases/:shopId')
+  async getPurchases(
+    @Request() req,
+    @Param('shopId', ParseUUIDPipe) shopId: string
+  ): Promise<any[]> {
+    console.log(
+      'Purchases endpoint called with shopId:',
+      shopId,
+      'user:',
+      req.user
+    );
+    try {
+      const result = await this.inventoryService.getPurchases(
+        req.user.id,
+        shopId
+      );
+      console.log('Purchases endpoint response length:', result.length);
+      return result;
+    } catch (error) {
+      console.error('Error in getPurchases:', error);
+      throw error;
+    }
+  }
 }

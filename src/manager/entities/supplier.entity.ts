@@ -21,6 +21,9 @@ export class Supplier {
   isActive: boolean;
 
   @Column({ nullable: true })
+  contactPerson?: string;
+
+  @Column({ nullable: true })
   address?: string;
 
   @Column({ nullable: true })

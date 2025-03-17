@@ -42,6 +42,10 @@ export class CreateSupplierDto {
 
   @IsOptional()
   @IsString()
+  contactPerson?: string;
+
+  @IsOptional()
+  @IsString()
   description?: string;
 
   @IsOptional()

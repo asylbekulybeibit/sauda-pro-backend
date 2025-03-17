@@ -22,6 +22,7 @@ import {
 import { NotificationsService } from '../../notifications/notifications.service';
 import { CreateInventoryDto } from '../dto/create-inventory.dto';
 import { Supplier } from '../entities/supplier.entity';
+import { In } from 'typeorm';
 
 @Injectable()
 export class InventoryService {
@@ -347,5 +348,97 @@ export class InventoryService {
 
     console.log('Found write-offs:', writeOffs);
     return writeOffs;
+  }
+
+  async getPurchases(userId: string, shopId: string): Promise<any[]> {
+    console.log('Getting purchases for shop:', shopId, 'user:', userId);
+
+    await this.validateManagerAccess(userId, shopId);
+    console.log('Manager access validated');
+
+    const purchases = await this.transactionRepository.find({
+      where: {
+        shopId,
+        type: EntityTransactionType.PURCHASE,
+      },
+      relations: ['product', 'createdBy'],
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+
+    console.log('Raw purchases from database:', JSON.stringify(purchases));
+
+    // Получаем все уникальные ID поставщиков из транзакций
+    const supplierIds = new Set<string>();
+    purchases.forEach((purchase) => {
+      const metadata = purchase.metadata || {};
+      if (metadata.supplierId) {
+        supplierIds.add(metadata.supplierId);
+      }
+    });
+
+    // Загружаем информацию о поставщиках
+    const suppliers = await this.supplierRepository.find({
+      where: {
+        id: In(Array.from(supplierIds)),
+        shopId,
+      },
+    });
+
+    // Создаем Map для быстрого доступа к поставщикам по ID
+    const suppliersMap = new Map();
+    suppliers.forEach((supplier) => {
+      suppliersMap.set(supplier.id, supplier);
+    });
+
+    console.log('Loaded suppliers:', JSON.stringify(suppliers));
+
+    // Группируем приходы по metadata.invoiceNumber и metadata.supplierId
+    const purchaseGroups = new Map();
+
+    purchases.forEach((purchase) => {
+      const metadata = purchase.metadata || {};
+      const invoiceNumber = metadata.invoiceNumber || 'unknown';
+      const supplierId = metadata.supplierId || 'unknown';
+      const key = `${invoiceNumber}-${supplierId}`;
+
+      if (!purchaseGroups.has(key)) {
+        // Получаем информацию о поставщике из Map или используем значение по умолчанию
+        const supplier = suppliersMap.get(supplierId) || {
+          name: 'Неизвестный поставщик',
+        };
+
+        purchaseGroups.set(key, {
+          id: purchase.id,
+          date: purchase.createdAt,
+          invoiceNumber,
+          supplierId,
+          supplier: {
+            name: supplier.name,
+            address: supplier.address,
+            phone: supplier.phone,
+          },
+          items: [],
+          totalAmount: 0,
+          status: 'completed',
+        });
+      }
+
+      const group = purchaseGroups.get(key);
+      group.items.push({
+        productId: purchase.productId,
+        product: purchase.product,
+        quantity: purchase.quantity,
+        price: purchase.price,
+        total: purchase.quantity * purchase.price,
+      });
+
+      group.totalAmount += purchase.quantity * purchase.price;
+    });
+
+    const result = Array.from(purchaseGroups.values());
+    console.log('Grouped purchases:', JSON.stringify(result));
+    return result;
   }
 }
