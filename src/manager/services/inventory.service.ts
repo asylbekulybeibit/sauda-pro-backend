@@ -160,7 +160,9 @@ export class InventoryService {
     // Обновляем количество товара
     await this.productRepository.update(productId, {
       quantity: () => `quantity + ${quantityChange}`,
-      ...(price && type === DtoTransactionType.PURCHASE
+      ...(price &&
+      type === DtoTransactionType.PURCHASE &&
+      metadata?.updatePurchasePrices
         ? { purchasePrice: price }
         : {}),
     });

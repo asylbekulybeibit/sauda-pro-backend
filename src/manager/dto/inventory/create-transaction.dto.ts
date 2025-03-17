@@ -52,6 +52,14 @@ export class TransactionMetadata {
   @IsNumber()
   @IsOptional()
   difference?: number; // Для инвентаризации
+
+  @IsBoolean()
+  @IsOptional()
+  updatePrices?: boolean; // Для обновления цен продажи
+
+  @IsBoolean()
+  @IsOptional()
+  updatePurchasePrices?: boolean; // Для обновления закупочных цен
 }
 
 // Базовый DTO для всех транзакций
@@ -150,6 +158,10 @@ export class CreatePurchaseDto {
   @IsBoolean()
   @IsOptional()
   updatePrices?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  updatePurchasePrices?: boolean;
 
   @IsBoolean()
   @IsOptional()

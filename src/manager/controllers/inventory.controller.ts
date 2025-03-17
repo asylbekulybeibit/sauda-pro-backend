@@ -63,6 +63,8 @@ export class InventoryController {
         invoiceNumber: createPurchaseDto.invoiceNumber,
         serialNumber: item.serialNumber,
         expiryDate: item.expiryDate,
+        updatePrices: createPurchaseDto.updatePrices,
+        updatePurchasePrices: createPurchaseDto.updatePurchasePrices,
       },
       comment: createPurchaseDto.comment,
     }));
