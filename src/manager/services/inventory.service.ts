@@ -362,6 +362,7 @@ export class InventoryService {
       where: {
         shopId,
         type: EntityTransactionType.PURCHASE,
+        isActive: true,
       },
       relations: ['product', 'createdBy'],
       order: {
@@ -434,6 +435,11 @@ export class InventoryService {
         quantity: purchase.quantity,
         price: purchase.price,
         total: purchase.quantity * purchase.price,
+        serialNumber: metadata.serialNumber || null,
+        expiryDate: metadata.expiryDate
+          ? new Date(metadata.expiryDate).toISOString()
+          : null,
+        comment: purchase.note || null,
       });
 
       group.totalAmount += purchase.quantity * purchase.price;
@@ -442,5 +448,72 @@ export class InventoryService {
     const result = Array.from(purchaseGroups.values());
     console.log('Grouped purchases:', JSON.stringify(result));
     return result;
+  }
+
+  /**
+   * Мягкое удаление прихода (установка isActive = false)
+   * @param userId ID пользователя, выполняющего операцию
+   * @param purchaseId ID прихода
+   * @param shopId ID магазина
+   */
+  async deletePurchase(
+    userId: string,
+    purchaseId: string,
+    shopId: string
+  ): Promise<void> {
+    console.log(`Deleting purchase ${purchaseId} for shop ${shopId}`);
+
+    // Проверяем права доступа
+    await this.validateManagerAccess(userId, shopId);
+
+    // Находим все транзакции, связанные с этим приходом
+    // Для этого нам нужно найти первую транзакцию, чтобы получить metadata.invoiceNumber и metadata.supplierId
+    const mainTransaction = await this.transactionRepository.findOne({
+      where: { id: purchaseId, shopId, isActive: true },
+    });
+
+    if (!mainTransaction) {
+      throw new NotFoundException('Purchase not found');
+    }
+
+    const metadata = mainTransaction.metadata || {};
+    const invoiceNumber = metadata.invoiceNumber;
+    const supplierId = metadata.supplierId;
+
+    if (!invoiceNumber || !supplierId) {
+      throw new BadRequestException('Invalid purchase data');
+    }
+
+    // Находим все транзакции с тем же invoiceNumber и supplierId
+    const transactions = await this.transactionRepository.find({
+      where: {
+        shopId,
+        type: EntityTransactionType.PURCHASE,
+        isActive: true,
+        metadata: {
+          invoiceNumber,
+          supplierId,
+        },
+      },
+    });
+
+    if (transactions.length === 0) {
+      throw new NotFoundException('Purchase transactions not found');
+    }
+
+    // Обновляем все найденные транзакции, устанавливая isActive = false
+    for (const transaction of transactions) {
+      transaction.isActive = false;
+      await this.transactionRepository.save(transaction);
+
+      // Обновляем количество товара (вычитаем)
+      await this.productRepository.update(transaction.productId, {
+        quantity: () => `quantity - ${transaction.quantity}`,
+      });
+    }
+
+    console.log(
+      `Successfully deleted purchase ${purchaseId} with ${transactions.length} transactions`
+    );
   }
 }

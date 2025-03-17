@@ -7,6 +7,7 @@ import {
   UseGuards,
   Request,
   ParseUUIDPipe,
+  Delete,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -21,12 +22,18 @@ import { RoleType } from '../../auth/types/role.type';
 import { CreateInventoryDto } from '../dto/create-inventory.dto';
 import { GetUser } from '../../auth/decorators/get-user.decorator';
 import { InventoryTransaction } from '../entities/inventory-transaction.entity';
+import { PurchasesService } from '../services/purchases.service';
+import { PurchaseWithItems } from '../interfaces/purchase-with-items.interface';
+import { Purchase } from '../entities/purchase.entity';
 
 @Controller('manager/inventory')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(RoleType.MANAGER)
 export class InventoryController {
-  constructor(private readonly inventoryService: InventoryService) {}
+  constructor(
+    private readonly inventoryService: InventoryService,
+    private readonly purchasesService: PurchasesService
+  ) {}
 
   /**
    * Создание транзакции инвентаризации
@@ -45,36 +52,18 @@ export class InventoryController {
   }
 
   /**
-   * Создание прихода товара
+   * Создание прихода товаров
    * @param createPurchaseDto данные прихода
    * @param req запрос с данными пользователя
    */
   @Post('purchases')
-  createPurchase(@Body() createPurchaseDto: CreatePurchaseDto, @Request() req) {
-    // Преобразуем приход в несколько транзакций
-    const transactions = createPurchaseDto.items.map((item) => ({
-      shopId: createPurchaseDto.shopId,
-      type: TransactionType.PURCHASE,
-      productId: item.productId,
-      quantity: item.quantity,
-      price: item.price,
-      metadata: {
-        supplierId: createPurchaseDto.supplierId,
-        invoiceNumber: createPurchaseDto.invoiceNumber,
-        serialNumber: item.serialNumber,
-        expiryDate: item.expiryDate,
-        updatePrices: createPurchaseDto.updatePrices,
-        updatePurchasePrices: createPurchaseDto.updatePurchasePrices,
-      },
-      comment: createPurchaseDto.comment,
-    }));
-
-    // Создаем транзакции последовательно
-    return Promise.all(
-      transactions.map((transaction) =>
-        this.inventoryService.createTransaction(req.user.id, transaction)
-      )
-    );
+  async createPurchase(
+    @Body() createPurchaseDto: CreatePurchaseDto,
+    @Request() req
+  ): Promise<PurchaseWithItems> {
+    console.log('Redirecting to new purchases service');
+    // Перенаправляем запрос на новый сервис
+    return this.purchasesService.createPurchase(req.user.id, createPurchaseDto);
   }
 
   /**
@@ -170,9 +159,9 @@ export class InventoryController {
 
   @Get('purchases/:shopId')
   async getPurchases(
-    @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string
-  ): Promise<any[]> {
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Request() req
+  ): Promise<PurchaseWithItems[]> {
     console.log(
       'Purchases endpoint called with shopId:',
       shopId,
@@ -180,14 +169,40 @@ export class InventoryController {
       req.user
     );
     try {
-      const result = await this.inventoryService.getPurchases(
-        req.user.id,
-        shopId
-      );
+      // Перенаправляем запрос на новый сервис
+      const result = await this.purchasesService.findAll(req.user.id, shopId);
       console.log('Purchases endpoint response length:', result.length);
       return result;
     } catch (error) {
       console.error('Error in getPurchases:', error);
+      throw error;
+    }
+  }
+
+  @Delete('purchases/:shopId/:purchaseId')
+  async deletePurchase(
+    @Request() req,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Param('purchaseId', ParseUUIDPipe) purchaseId: string
+  ): Promise<{ success: boolean }> {
+    console.log(
+      'Delete purchase endpoint called with shopId:',
+      shopId,
+      'purchaseId:',
+      purchaseId,
+      'user:',
+      req.user
+    );
+    try {
+      // Перенаправляем запрос на новый сервис
+      await this.purchasesService.deletePurchase(
+        req.user.id,
+        purchaseId,
+        shopId
+      );
+      return { success: true };
+    } catch (error) {
+      console.error('Error in deletePurchase:', error);
       throw error;
     }
   }

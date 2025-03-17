@@ -22,6 +22,8 @@ import { TransfersController } from './controllers/transfers.controller';
 import { TransfersService } from './services/transfers.service';
 import { CashRegistersController } from './controllers/cash-registers.controller';
 import { CashRegistersService } from './services/cash-registers.service';
+import { PurchasesController } from './controllers/purchases.controller';
+import { PurchasesService } from './services/purchases.service';
 import { Product } from './entities/product.entity';
 import { Category } from './entities/category.entity';
 import { InventoryTransaction } from './entities/inventory-transaction.entity';
@@ -37,6 +39,7 @@ import { Invite } from '../invites/entities/invite.entity';
 import { LabelTemplate } from './entities/label-template.entity';
 import { Transfer } from './entities/transfer.entity';
 import { TransferItem } from './entities/transfer-item.entity';
+import { Purchase } from './entities/purchase.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ReportsModule } from '../reports/reports.module';
 import { SupplierProduct } from './entities/supplier-product.entity';
@@ -62,6 +65,7 @@ import { SupplierProductsController } from './controllers/supplier-products.cont
       CashRegister,
       RegisterPaymentMethod,
       SupplierProduct,
+      Purchase,
     ]),
     NotificationsModule,
     ReportsModule,
@@ -79,6 +83,7 @@ import { SupplierProductsController } from './controllers/supplier-products.cont
     TransfersController,
     CashRegistersController,
     SupplierProductsController,
+    PurchasesController,
   ],
   providers: [
     ManagerService,
@@ -93,7 +98,13 @@ import { SupplierProductsController } from './controllers/supplier-products.cont
     TransfersService,
     CashRegistersService,
     SupplierProductsService,
+    PurchasesService,
   ],
-  exports: [ManagerService, ProductsService, InventoryService],
+  exports: [
+    ManagerService,
+    ProductsService,
+    InventoryService,
+    PurchasesService,
+  ],
 })
 export class ManagerModule {}

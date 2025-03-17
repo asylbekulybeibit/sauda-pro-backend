@@ -130,6 +130,10 @@ export class PurchaseItemDto {
   @IsNumber()
   @IsOptional()
   partialQuantity?: number;
+
+  @IsString()
+  @IsOptional()
+  comment?: string;
 }
 
 export class CreatePurchaseDto {

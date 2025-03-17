@@ -9,6 +9,7 @@ import {
 import { Product } from './product.entity';
 import { Shop } from '../../shops/entities/shop.entity';
 import { User } from '../../users/entities/user.entity';
+import { Purchase } from './purchase.entity';
 
 export enum TransactionType {
   PURCHASE = 'PURCHASE', // Приход товара
@@ -42,6 +43,9 @@ export class InventoryTransaction {
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, any>;
 
+  @Column({ default: true })
+  isActive: boolean;
+
   @ManyToOne(() => Product)
   product: Product;
 
@@ -59,6 +63,14 @@ export class InventoryTransaction {
 
   @Column()
   createdById: string;
+
+  @ManyToOne(() => Purchase, (purchase) => purchase.transactions, {
+    nullable: true,
+  })
+  purchase: Purchase;
+
+  @Column({ nullable: true })
+  purchaseId: string;
 
   @CreateDateColumn()
   createdAt: Date;
