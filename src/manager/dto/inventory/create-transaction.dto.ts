@@ -90,6 +90,10 @@ export class CreateTransactionDto {
   @IsOptional()
   comment?: string;
 
+  @IsString()
+  @IsOptional()
+  note?: string;
+
   @IsOptional()
   @ValidateNested()
   @Type(() => TransactionMetadata)

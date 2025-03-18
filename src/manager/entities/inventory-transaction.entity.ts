@@ -40,6 +40,12 @@ export class InventoryTransaction {
   @Column({ type: 'text', nullable: true })
   note: string;
 
+  @Column({ type: 'text', nullable: true })
+  comment: string;
+
+  @Column({ type: 'text', nullable: true })
+  description: string;
+
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, any>;
 

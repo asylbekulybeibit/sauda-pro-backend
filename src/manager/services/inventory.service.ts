@@ -63,8 +63,17 @@ export class InventoryService {
     userId: string,
     createTransactionDto: CreateTransactionDto
   ): Promise<InventoryTransaction> {
-    const { shopId, productId, type, quantity, price, metadata, comment } =
-      createTransactionDto;
+    const {
+      shopId,
+      productId,
+      type,
+      quantity,
+      price,
+      metadata,
+      comment,
+      note,
+      description,
+    } = createTransactionDto;
 
     await this.validateManagerAccess(userId, shopId);
 
@@ -137,6 +146,29 @@ export class InventoryService {
         break;
       case DtoTransactionType.ADJUSTMENT:
         quantityChange = quantity - product.quantity;
+        console.log(
+          `Inventory ADJUSTMENT for product ${product.name} (ID: ${productId})`
+        );
+        console.log(
+          `Current quantity=${product.quantity}, New quantity=${quantity}, Change=${quantityChange}`
+        );
+
+        // Если есть metadata с дополнительной информацией, логируем её
+        if (metadata?.currentQuantity !== undefined) {
+          console.log(
+            `Reported current quantity from frontend: ${metadata.currentQuantity}`
+          );
+          console.log(
+            `Actual difference in DB: ${quantity - product.quantity}`
+          );
+
+          // Если есть разница между значениями, логируем предупреждение
+          if (Number(metadata.currentQuantity) !== product.quantity) {
+            console.log(
+              `WARNING: Frontend and database quantities differ! Frontend: ${metadata.currentQuantity}, DB: ${product.quantity}`
+            );
+          }
+        }
         break;
     }
 
@@ -151,7 +183,9 @@ export class InventoryService {
       quantity,
       price,
       metadata,
-      note: comment,
+      note: note || comment,
+      comment,
+      description,
       createdById: userId,
     });
 
@@ -189,11 +223,70 @@ export class InventoryService {
   ): Promise<InventoryTransaction[]> {
     await this.validateManagerAccess(userId, shopId);
 
-    return this.transactionRepository.find({
-      where: { shopId },
-      order: { createdAt: 'DESC' },
-      relations: ['product'],
-    });
+    const startTime = Date.now();
+    console.log(
+      `[${startTime}] Fetching transactions for shop: ${shopId}, user: ${userId}`
+    );
+
+    try {
+      const transactions = await this.transactionRepository.find({
+        where: { shopId, isActive: true },
+        order: { createdAt: 'DESC' },
+        relations: ['product', 'createdBy'],
+      });
+
+      const endTime = Date.now();
+      console.log(
+        `[${endTime}] Found ${transactions.length} transactions in ${
+          endTime - startTime
+        }ms`
+      );
+
+      // Логируем детали по транзакциям типа ADJUSTMENT (инвентаризация)
+      const adjustments = transactions.filter(
+        (tr) => tr.type === EntityTransactionType.ADJUSTMENT
+      );
+      console.log(
+        `Found ${transactions.length} total transactions, ${adjustments.length} ADJUSTMENT transactions`
+      );
+
+      if (adjustments.length > 0) {
+        console.log('Most recent adjustment transactions:');
+        adjustments.slice(0, 5).forEach((adj, index) => {
+          console.log(
+            `[${index + 1}] ADJUSTMENT: productId=${adj.productId}, product=${
+              adj.product?.name || 'unknown'
+            }, quantity=${adj.quantity}, created=${adj.createdAt}`
+          );
+        });
+      } else {
+        console.log('No ADJUSTMENT transactions found for this shop');
+      }
+
+      // Проверка наличия продуктов в транзакциях
+      const transactionsWithoutProduct = transactions.filter(
+        (tr) => !tr.product
+      );
+      if (transactionsWithoutProduct.length > 0) {
+        console.warn(
+          `WARNING: ${transactionsWithoutProduct.length} transactions have no associated product information`
+        );
+
+        // Логируем первые 3 для отладки
+        transactionsWithoutProduct.slice(0, 3).forEach((tr, index) => {
+          console.warn(
+            `Transaction with missing product [${index + 1}]: id=${
+              tr.id
+            }, productId=${tr.productId}, type=${tr.type}`
+          );
+        });
+      }
+
+      return transactions;
+    } catch (error) {
+      console.error(`Error fetching transactions for shop ${shopId}:`, error);
+      throw error;
+    }
   }
 
   async getProductTransactions(
