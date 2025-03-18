@@ -197,7 +197,7 @@ export class ReportsService {
       },
       details: products.map((p) => ({
         name: p.name,
-        category: p.category.name,
+        category: p.category?.name || 'Без категории',
         quantity: p.quantity,
         minQuantity: p.minQuantity,
         price: p.sellingPrice,
@@ -341,16 +341,16 @@ export class ReportsService {
 
     categories.forEach((category) => {
       categoryStats[category.id] = {
-        name: category.name,
-        productCount: category.products.length,
+        name: category.name || 'Без названия',
+        productCount: category.products?.length || 0,
         totalSales: 0,
         totalQuantity: 0,
       };
     });
 
     transactions.forEach((transaction) => {
-      const categoryId = transaction.product.categoryId;
-      if (categoryStats[categoryId]) {
+      const categoryId = transaction.product?.categoryId;
+      if (categoryId && categoryStats[categoryId]) {
         categoryStats[categoryId].totalSales +=
           transaction.quantity * transaction.price;
         categoryStats[categoryId].totalQuantity += transaction.quantity;
@@ -476,7 +476,7 @@ export class ReportsService {
   private aggregateByCategory(products: Product[]) {
     const aggregated = {};
     products.forEach((p) => {
-      const key = p.category.name;
+      const key = p.category?.name || 'Без категории';
       if (!aggregated[key]) {
         aggregated[key] = 0;
       }

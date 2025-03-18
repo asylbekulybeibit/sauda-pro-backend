@@ -207,7 +207,7 @@ export class AnalyticsService {
 
     orders.forEach((order) => {
       order.items.forEach((item) => {
-        const category = item.product.category.name;
+        const category = item.product.category?.name || 'Без категории';
         salesByCategory.set(
           category,
           (salesByCategory.get(category) || 0) + item.quantity * item.price
