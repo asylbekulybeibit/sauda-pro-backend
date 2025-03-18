@@ -29,6 +29,40 @@ export class PromotionsController {
     @Request() req,
     @Body() createPromotionDto: CreatePromotionDto
   ): Promise<Promotion> {
+    console.log(
+      'PromotionsController.create called with data:',
+      JSON.stringify(createPromotionDto, null, 2)
+    );
+    return this.promotionsService.create(req.user.id, createPromotionDto);
+  }
+
+  @Post('create-with-discount')
+  createWithDiscount(@Request() req, @Body() data: any): Promise<Promotion> {
+    console.log(
+      'PromotionsController.createWithDiscount called with data:',
+      JSON.stringify(data, null, 2)
+    );
+
+    // Преобразуем данные в правильный формат CreatePromotionDto
+    const createPromotionDto: CreatePromotionDto = {
+      name: data.name,
+      description: data.description,
+      type: data.type,
+      target: data.target,
+      value: Number(data.value),
+      discount: Number(data.discount || data.value), // Используем discount или value
+      startDate: new Date(data.startDate),
+      endDate: new Date(data.endDate),
+      shopId: data.shopId,
+      productIds: data.productIds,
+      categoryIds: data.categoryIds,
+    };
+
+    console.log(
+      'Transformed DTO:',
+      JSON.stringify(createPromotionDto, null, 2)
+    );
+
     return this.promotionsService.create(req.user.id, createPromotionDto);
   }
 
@@ -56,6 +90,10 @@ export class PromotionsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updatePromotionDto: Partial<CreatePromotionDto>
   ): Promise<Promotion> {
+    console.log(
+      'PromotionsController.update called with data:',
+      JSON.stringify(updatePromotionDto, null, 2)
+    );
     return this.promotionsService.update(
       req.user.id,
       shopId,

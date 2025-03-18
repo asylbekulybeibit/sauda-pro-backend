@@ -6,7 +6,11 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
-import { Promotion, PromotionTarget } from '../entities/promotion.entity';
+import {
+  Promotion,
+  PromotionTarget,
+  PromotionType,
+} from '../entities/promotion.entity';
 import { Product } from '../entities/product.entity';
 import { Category } from '../entities/category.entity';
 import { UserRole } from '../../roles/entities/user-role.entity';
@@ -85,8 +89,22 @@ export class PromotionsService {
       }
     }
 
+    // Устанавливаем значение discount, если оно не было предоставлено
+    let dtoWithDiscount = { ...createPromotionDto };
+
+    // Если discount не указан, устанавливаем его на основе типа скидки
+    if (dtoWithDiscount.discount === undefined) {
+      // Для процентных скидок discount = value, для остальных = 0
+      dtoWithDiscount.discount =
+        dtoWithDiscount.type === PromotionType.PERCENTAGE
+          ? dtoWithDiscount.value
+          : 0;
+    }
+
+    console.log('Creating promotion with discount:', dtoWithDiscount.discount);
+
     const promotion = this.promotionsRepository.create({
-      ...createPromotionDto,
+      ...dtoWithDiscount,
       createdById: userId,
       isActive: true,
     });
@@ -176,7 +194,31 @@ export class PromotionsService {
       }
     }
 
-    Object.assign(promotion, updatePromotionDto);
+    // Подготавливаем данные для обновления
+    const updateData = { ...updatePromotionDto };
+
+    // Если тип изменился или установлено новое значение, но discount не передан
+    if (
+      (updateData.type !== undefined || updateData.value !== undefined) &&
+      updateData.discount === undefined
+    ) {
+      // Определяем тип скидки (используем новый или существующий)
+      const promotionType = updateData.type || promotion.type;
+      // Определяем значение (используем новое или существующее)
+      const value =
+        updateData.value !== undefined ? updateData.value : promotion.value;
+
+      // Устанавливаем discount в зависимости от типа скидки
+      updateData.discount =
+        promotionType === PromotionType.PERCENTAGE ? value : 0;
+
+      console.log(
+        'Updating promotion with calculated discount:',
+        updateData.discount
+      );
+    }
+
+    Object.assign(promotion, updateData);
     return this.promotionsRepository.save(promotion);
   }
 

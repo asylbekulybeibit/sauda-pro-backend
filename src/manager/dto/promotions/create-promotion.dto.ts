@@ -33,6 +33,11 @@ export class CreatePromotionDto {
   @Min(0)
   value: number;
 
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  discount?: number;
+
   @IsOptional()
   @IsNumber()
   @Min(0)
