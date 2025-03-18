@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   Res,
+  Patch,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -54,6 +55,15 @@ export class LabelsController {
     @Param('id') id: string
   ): Promise<void> {
     return this.labelsService.deleteTemplate(userId, shopId, id);
+  }
+
+  @Patch('templates/:id')
+  async updateTemplate(
+    @GetUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() updateTemplateDto: Partial<LabelTemplate>
+  ): Promise<LabelTemplate> {
+    return this.labelsService.updateTemplate(userId, id, updateTemplateDto);
   }
 
   @Post('generate')
@@ -108,5 +118,10 @@ export class LabelsController {
     @Query('barcode') barcode: string
   ) {
     return this.labelsService.findProductByBarcode(userId, shopId, barcode);
+  }
+
+  @Get('default-templates')
+  async getDefaultTemplates() {
+    return this.labelsService.getTemplates();
   }
 }
