@@ -53,12 +53,15 @@ export class PromotionsService {
       throw new BadRequestException('Start date cannot be after end date');
     }
 
+    let products = [];
+    let categories = [];
+
     // Validate products if target is PRODUCT
     if (
       createPromotionDto.target === PromotionTarget.PRODUCT &&
       createPromotionDto.productIds?.length
     ) {
-      const products = await this.productsRepository.find({
+      products = await this.productsRepository.find({
         where: {
           id: In(createPromotionDto.productIds),
           shopId: createPromotionDto.shopId,
@@ -76,7 +79,7 @@ export class PromotionsService {
       createPromotionDto.target === PromotionTarget.CATEGORY &&
       createPromotionDto.categoryIds?.length
     ) {
-      const categories = await this.categoriesRepository.find({
+      categories = await this.categoriesRepository.find({
         where: {
           id: In(createPromotionDto.categoryIds),
           shopId: createPromotionDto.shopId,
@@ -102,11 +105,21 @@ export class PromotionsService {
     }
 
     console.log('Creating promotion with discount:', dtoWithDiscount.discount);
+    console.log(
+      'Products to add:',
+      products.map((p) => p.id)
+    );
+    console.log(
+      'Categories to add:',
+      categories.map((c) => c.id)
+    );
 
     const promotion = this.promotionsRepository.create({
       ...dtoWithDiscount,
       createdById: userId,
       isActive: true,
+      products: products,
+      categories: categories,
     });
 
     return this.promotionsRepository.save(promotion);
@@ -116,7 +129,7 @@ export class PromotionsService {
     await this.validateManagerAccess(userId, shopId);
 
     return this.promotionsRepository.find({
-      where: { shopId },
+      where: { shopId, isActive: true },
       relations: ['products', 'categories'],
       order: { createdAt: 'DESC' },
     });
@@ -130,7 +143,7 @@ export class PromotionsService {
     await this.validateManagerAccess(userId, shopId);
 
     const promotion = await this.promotionsRepository.findOne({
-      where: { id, shopId },
+      where: { id, shopId, isActive: true },
       relations: ['products', 'categories'],
     });
 
@@ -158,12 +171,15 @@ export class PromotionsService {
       }
     }
 
+    let products = [];
+    let categories = [];
+
     // Validate products if target is PRODUCT and productIds provided
     if (
       updatePromotionDto.target === PromotionTarget.PRODUCT &&
       updatePromotionDto.productIds?.length
     ) {
-      const products = await this.productsRepository.find({
+      products = await this.productsRepository.find({
         where: {
           id: In(updatePromotionDto.productIds),
           shopId,
@@ -174,6 +190,17 @@ export class PromotionsService {
       if (products.length !== updatePromotionDto.productIds.length) {
         throw new BadRequestException('Some products not found or inactive');
       }
+
+      // Устанавливаем товары для обновленной акции
+      promotion.products = products;
+    } else if (updatePromotionDto.target === PromotionTarget.PRODUCT) {
+      // Если указан тип PRODUCT, но товары не переданы, используем существующие
+      if (promotion.target !== PromotionTarget.PRODUCT) {
+        // Если меняется тип с CATEGORY на PRODUCT, а товары не переданы
+        throw new BadRequestException(
+          'Products are required for PRODUCT target'
+        );
+      }
     }
 
     // Validate categories if target is CATEGORY and categoryIds provided
@@ -181,7 +208,7 @@ export class PromotionsService {
       updatePromotionDto.target === PromotionTarget.CATEGORY &&
       updatePromotionDto.categoryIds?.length
     ) {
-      const categories = await this.categoriesRepository.find({
+      categories = await this.categoriesRepository.find({
         where: {
           id: In(updatePromotionDto.categoryIds),
           shopId,
@@ -191,6 +218,29 @@ export class PromotionsService {
 
       if (categories.length !== updatePromotionDto.categoryIds.length) {
         throw new BadRequestException('Some categories not found or inactive');
+      }
+
+      // Устанавливаем категории для обновленной акции
+      promotion.categories = categories;
+    } else if (updatePromotionDto.target === PromotionTarget.CATEGORY) {
+      // Если указан тип CATEGORY, но категории не переданы, используем существующие
+      if (promotion.target !== PromotionTarget.CATEGORY) {
+        // Если меняется тип с PRODUCT на CATEGORY, а категории не переданы
+        throw new BadRequestException(
+          'Categories are required for CATEGORY target'
+        );
+      }
+    }
+
+    // Если меняется тип, очищаем ненужные связи
+    if (updatePromotionDto.target) {
+      if (updatePromotionDto.target === PromotionTarget.PRODUCT) {
+        promotion.categories = [];
+      } else if (updatePromotionDto.target === PromotionTarget.CATEGORY) {
+        promotion.products = [];
+      } else if (updatePromotionDto.target === PromotionTarget.CART) {
+        promotion.products = [];
+        promotion.categories = [];
       }
     }
 
@@ -217,6 +267,15 @@ export class PromotionsService {
         updateData.discount
       );
     }
+
+    console.log(
+      'Products in promotion after update:',
+      promotion.products?.map((p) => p.id) || []
+    );
+    console.log(
+      'Categories in promotion after update:',
+      promotion.categories?.map((c) => c.id) || []
+    );
 
     Object.assign(promotion, updateData);
     return this.promotionsRepository.save(promotion);

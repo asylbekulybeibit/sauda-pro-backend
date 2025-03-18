@@ -54,14 +54,16 @@ export class PromotionsController {
       startDate: new Date(data.startDate),
       endDate: new Date(data.endDate),
       shopId: data.shopId,
-      productIds: data.productIds,
-      categoryIds: data.categoryIds,
+      productIds: Array.isArray(data.productIds) ? data.productIds : [],
+      categoryIds: Array.isArray(data.categoryIds) ? data.categoryIds : [],
     };
 
     console.log(
       'Transformed DTO:',
       JSON.stringify(createPromotionDto, null, 2)
     );
+    console.log('ProductIds:', createPromotionDto.productIds);
+    console.log('CategoryIds:', createPromotionDto.categoryIds);
 
     return this.promotionsService.create(req.user.id, createPromotionDto);
   }
