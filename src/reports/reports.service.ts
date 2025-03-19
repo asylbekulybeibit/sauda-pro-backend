@@ -219,10 +219,10 @@ export class ReportsService {
         value: p.quantity * p.sellingPrice,
         status:
           p.quantity === 0
-            ? 'Out of Stock'
+            ? 'OUT OF STOCK'
             : p.quantity <= p.minQuantity
-            ? 'Low Stock'
-            : 'In Stock',
+            ? 'LOW STOCK'
+            : 'IN STOCK',
       })),
       charts: {
         stockByCategory: this.aggregateByCategory(products),
