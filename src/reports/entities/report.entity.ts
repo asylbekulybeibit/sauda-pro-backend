@@ -118,4 +118,7 @@ export class Report {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @Column({ default: true })
+  isActive: boolean;
 }

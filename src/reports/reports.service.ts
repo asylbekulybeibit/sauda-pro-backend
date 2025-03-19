@@ -72,7 +72,7 @@ export class ReportsService {
   async findAll(userId: string, shopId: string): Promise<Report[]> {
     await this.validateAccess(userId, shopId);
     return this.reportRepository.find({
-      where: { shopId },
+      where: { shopId, isActive: true },
       order: { createdAt: 'DESC' },
     });
   }
@@ -81,7 +81,7 @@ export class ReportsService {
     await this.validateAccess(userId, shopId);
 
     const report = await this.reportRepository.findOne({
-      where: { id, shopId },
+      where: { id, shopId, isActive: true },
     });
 
     if (!report) {
@@ -89,6 +89,21 @@ export class ReportsService {
     }
 
     return report;
+  }
+
+  async delete(userId: string, shopId: string, id: string): Promise<void> {
+    await this.validateAccess(userId, shopId);
+
+    const report = await this.reportRepository.findOne({
+      where: { id, shopId, isActive: true },
+    });
+
+    if (!report) {
+      throw new NotFoundException('Report not found');
+    }
+
+    report.isActive = false;
+    await this.reportRepository.save(report);
   }
 
   private async validateAccess(userId: string, shopId: string): Promise<void> {
@@ -181,7 +196,7 @@ export class ReportsService {
     });
 
     const lowStockProducts = products.filter(
-      (p) => p.quantity <= p.minQuantity
+      (p) => p.quantity > 0 && p.quantity <= p.minQuantity
     );
     const outOfStockProducts = products.filter((p) => p.quantity === 0);
 

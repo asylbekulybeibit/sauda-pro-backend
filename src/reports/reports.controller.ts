@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
   ForbiddenException,
   NotFoundException,
+  Delete,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -40,6 +41,7 @@ export class ReportsController {
       ReportType.STAFF,
       ReportType.CATEGORIES,
       ReportType.PROMOTIONS,
+      ReportType.FINANCIAL,
     ];
 
     if (!allowedTypes.includes(createReportDto.type)) {
@@ -121,7 +123,16 @@ export class ReportsController {
       throw new NotFoundException('Report file not found');
     }
 
-    // TODO: Implement file download
     res.download(report.fileUrl);
+  }
+
+  @Delete(':id')
+  @Roles(RoleType.MANAGER, RoleType.OWNER)
+  async deleteReport(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('shopId', ParseUUIDPipe) shopId: string
+  ): Promise<void> {
+    return this.reportsService.delete(userId, shopId, id);
   }
 }
