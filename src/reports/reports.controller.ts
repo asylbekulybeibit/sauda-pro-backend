@@ -20,7 +20,8 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RoleType } from '../auth/types/role.type';
 import { ReportsService } from './reports.service';
 import { CreateReportDto } from './dto/create-report.dto';
-import { Report, ReportType } from './entities/report.entity';
+import { Report, ReportType, ReportFormat } from './entities/report.entity';
+import * as path from 'path';
 
 @Controller('manager/reports')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -123,7 +124,27 @@ export class ReportsController {
       throw new NotFoundException('Report file not found');
     }
 
-    res.download(report.fileUrl);
+    // Определяем MIME-тип в зависимости от формата отчета
+    let contentType = 'application/octet-stream'; // По умолчанию
+    if (report.format === ReportFormat.PDF) {
+      contentType = 'application/pdf';
+    } else if (report.format === ReportFormat.EXCEL) {
+      contentType =
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    }
+
+    // Формируем имя файла с расширением
+    const fileName = path.basename(report.fileUrl);
+    const safeFileName = encodeURIComponent(fileName);
+
+    // Устанавливаем заголовки для корректного скачивания файла
+    res.set({
+      'Content-Type': contentType,
+      'Content-Disposition': `attachment; filename="${safeFileName}"`,
+    });
+
+    // Передаем файл для скачивания
+    res.sendFile(path.resolve(report.fileUrl));
   }
 
   @Delete(':id')

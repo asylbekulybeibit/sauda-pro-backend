@@ -37,7 +37,6 @@ export enum ReportPeriod {
 export enum ReportFormat {
   PDF = 'pdf',
   EXCEL = 'excel',
-  CSV = 'csv',
 }
 
 @Entity()
