@@ -96,6 +96,39 @@ export class PriceHistoryService {
       .getMany();
   }
 
+  async findByShopAndDateRange(
+    userId: string,
+    shopId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<PriceHistory[]> {
+    await this.validateManagerAccess(userId, shopId);
+
+    // Проверяем формат дат
+    const parsedStartDate = new Date(startDate);
+    const parsedEndDate = new Date(endDate);
+
+    if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
+      throw new Error('Invalid date format');
+    }
+
+    return this.priceHistoryRepository
+      .createQueryBuilder('priceHistory')
+      .innerJoin('priceHistory.product', 'product')
+      .where('product.shopId = :shopId', { shopId })
+      .andWhere('product.isActive = :isActive', { isActive: true })
+      .andWhere('priceHistory.createdAt >= :startDate', {
+        startDate: parsedStartDate,
+      })
+      .andWhere('priceHistory.createdAt <= :endDate', {
+        endDate: parsedEndDate,
+      })
+      .leftJoinAndSelect('priceHistory.changedBy', 'changedBy')
+      .leftJoinAndSelect('priceHistory.product', 'productDetails')
+      .orderBy('priceHistory.createdAt', 'DESC')
+      .getMany();
+  }
+
   async getProductPriceStats(
     userId: string,
     productId: string

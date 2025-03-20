@@ -40,6 +40,7 @@ import { LabelTemplate } from './entities/label-template.entity';
 import { Transfer } from './entities/transfer.entity';
 import { TransferItem } from './entities/transfer-item.entity';
 import { Purchase } from './entities/purchase.entity';
+import { PurchaseItem } from './entities/purchase-item.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ReportsModule } from '../reports/reports.module';
 import { SupplierProduct } from './entities/supplier-product.entity';
@@ -66,6 +67,7 @@ import { SupplierProductsController } from './controllers/supplier-products.cont
       RegisterPaymentMethod,
       SupplierProduct,
       Purchase,
+      PurchaseItem,
     ]),
     NotificationsModule,
     ReportsModule,

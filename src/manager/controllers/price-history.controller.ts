@@ -7,6 +7,7 @@ import {
   UseGuards,
   Request,
   ParseUUIDPipe,
+  Query,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -44,6 +45,21 @@ export class PriceHistoryController {
     @Param('shopId', ParseUUIDPipe) shopId: string
   ): Promise<PriceHistory[]> {
     return this.priceHistoryService.findByShop(req.user.id, shopId);
+  }
+
+  @Get('report/:shopId')
+  getReport(
+    @Request() req,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string
+  ): Promise<PriceHistory[]> {
+    return this.priceHistoryService.findByShopAndDateRange(
+      req.user.id,
+      shopId,
+      startDate,
+      endDate
+    );
   }
 
   @Get('product/:productId/stats')

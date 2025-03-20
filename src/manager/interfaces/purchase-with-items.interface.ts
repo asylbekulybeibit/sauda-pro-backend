@@ -1,17 +1,14 @@
 import { Purchase } from '../entities/purchase.entity';
+import { PurchaseItem } from '../entities/purchase-item.entity';
 
-export interface PurchaseWithItems extends Purchase {
-  items: Array<{
-    productId: string;
-    product: {
-      name: string;
-      sku: string;
-    };
-    quantity: number;
-    price: number;
-    total: number;
-    serialNumber?: any;
-    expiryDate?: any;
-    comment?: string;
-  }>;
+export interface PurchaseWithItems extends Omit<Purchase, 'items'> {
+  items: Array<
+    Partial<PurchaseItem> & {
+      product: {
+        name: string;
+        sku: string;
+      };
+      total: number;
+    }
+  >;
 }

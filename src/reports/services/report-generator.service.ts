@@ -141,9 +141,10 @@ export class ReportGeneratorService {
     // Создаем новый лист
     const worksheet = workbook.addWorksheet(reportName);
 
-    // Функция для форматирования валюты
+    // Функция для форматирования валюты в Excel
     const formatCurrency = (value) => {
       if (typeof value === 'number') {
+        // Использовать ru-KZ локаль для тенге
         return `${value.toLocaleString('ru-KZ')} ₸`;
       }
       return value;
@@ -168,7 +169,22 @@ export class ReportGeneratorService {
         key.toLowerCase().includes('total') ||
         key.toLowerCase().includes('revenue') ||
         key.toLowerCase().includes('profit') ||
-        key.toLowerCase().includes('amount')
+        key.toLowerCase().includes('amount') ||
+        key.toLowerCase().includes('margin') ||
+        key.toLowerCase().includes('payment') ||
+        key.toLowerCase().includes('fee') ||
+        key.toLowerCase().includes('charge') ||
+        key.toLowerCase().includes('expense') ||
+        key.toLowerCase().includes('income') ||
+        key.toLowerCase().includes('salary') ||
+        key.toLowerCase().includes('wage') ||
+        key.toLowerCase().includes('bonus') ||
+        key.toLowerCase().includes('discount') ||
+        key.toLowerCase().includes('tax') ||
+        key.toLowerCase().includes('vat') ||
+        key.toLowerCase().includes('currency') ||
+        key.toLowerCase().includes('tenge') ||
+        key.toLowerCase().includes('₸')
       );
     };
 
@@ -201,9 +217,9 @@ export class ReportGeneratorService {
 
     // Маппинг статусов на русский
     const statusMap: Record<string, string> = {
-      'OUT OF STOCK': 'Нет в наличии',
-      'LOW STOCK': 'Мало на складе',
-      'IN STOCK': 'В наличии',
+      OUT_OF_STOCK: 'Нет в наличии',
+      LOW_STOCK: 'Мало на складе',
+      IN_STOCK: 'В наличии',
     };
 
     // Устанавливаем заголовок отчета
@@ -243,7 +259,7 @@ export class ReportGeneratorService {
 
       // Форматируем значение в зависимости от типа
       let displayValue: any = value;
-      if (this.isCurrencyKey(key)) {
+      if (isCurrencyKey(key)) {
         displayValue = formatCurrency(value);
       } else if (this.isDateKey(key)) {
         displayValue = formatDate(value);
@@ -459,9 +475,10 @@ export class ReportGeneratorService {
     // Ширина страницы (учитывая отступы)
     const pageWidth = doc.page.width - 80; // Отступы 40 слева и справа
 
-    // Функция для форматирования валюты
+    // Функция для форматирования валюты в PDF
     const formatCurrency = (value) => {
       if (typeof value === 'number') {
+        // Использовать ru-KZ локаль для тенге
         return `${value.toLocaleString('ru-KZ')} ₸`;
       }
       return value;
@@ -496,9 +513,9 @@ export class ReportGeneratorService {
 
     // Маппинг статусов на русский
     const statusMap: Record<string, string> = {
-      'OUT OF STOCK': 'Нет в наличии',
-      'LOW STOCK': 'Мало на складе',
-      'IN STOCK': 'В наличии',
+      OUT_OF_STOCK: 'Нет в наличии',
+      LOW_STOCK: 'Мало на складе',
+      IN_STOCK: 'В наличии',
     };
 
     // Маппинг заголовков на русский язык
@@ -775,22 +792,25 @@ export class ReportGeneratorService {
           let value = detail[header];
 
           // Форматируем значение в зависимости от типа
+          let cellValue = '';
           if (
             this.isCurrencyKey(header) &&
             (typeof value === 'number' || !isNaN(Number(value)))
           ) {
-            value = formatCurrency(value);
+            cellValue = formatCurrency(value);
           } else if (this.isDateKey(header) && value) {
-            value = formatDate(value);
+            cellValue = formatDate(value);
           } else if (header === 'status' && typeof value === 'string') {
-            value = statusMap[value] || value;
+            cellValue = statusMap[value] || value;
           }
 
           doc
             .font('DejaVuSans')
             .fontSize(9) // Уменьшаем размер шрифта для содержимого
             .text(
-              value !== null && value !== undefined ? String(value) : '-',
+              cellValue !== null && cellValue !== undefined
+                ? String(cellValue)
+                : '-',
               xPos + 3, // Меньший отступ
               yPos + 7,
               {
