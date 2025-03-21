@@ -9,7 +9,9 @@ import {
   Min,
   IsBoolean,
   IsUUID,
+  IsEnum,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { PurchaseStatus } from '../../entities/purchase.entity';
 
 // DTO для создания нового прихода
@@ -23,6 +25,14 @@ export class PurchaseItemDto {
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Transform(({ value }) => {
+    // Принудительное преобразование к числу
+    if (typeof value === 'string') {
+      const numValue = Number(value.replace(/[^0-9.-]+/g, ''));
+      return isNaN(numValue) ? 0 : numValue;
+    }
+    return typeof value === 'number' && !isNaN(value) ? value : 0;
+  })
   price: number;
 
   @IsString()
@@ -53,10 +63,18 @@ export class UpdatePurchaseItemDto {
   @IsOptional()
   quantity?: number;
 
+  @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  @IsOptional()
-  price?: number | null;
+  @Transform(({ value }) => {
+    // Принудительное преобразование к числу
+    if (typeof value === 'string') {
+      const numValue = Number(value.replace(/[^0-9.-]+/g, ''));
+      return isNaN(numValue) ? 0 : numValue;
+    }
+    return typeof value === 'number' && !isNaN(value) ? value : 0;
+  })
+  price?: number;
 
   @IsString()
   @IsOptional()
@@ -115,14 +133,6 @@ export class CreatePurchaseDto {
   @IsBoolean()
   @IsOptional()
   createLabels?: boolean;
-
-  @IsString()
-  @IsOptional()
-  status?: PurchaseStatus;
-
-  @IsUUID()
-  @IsOptional()
-  id?: string;
 }
 
 // DTO для редактирования черновика
@@ -166,7 +176,7 @@ export class UpdatePurchaseDto {
   @IsOptional()
   createLabels?: boolean;
 
-  @IsString()
+  @IsEnum(PurchaseStatus)
   @IsOptional()
   status?: PurchaseStatus;
 }

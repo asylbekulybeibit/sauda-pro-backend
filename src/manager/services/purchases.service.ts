@@ -21,7 +21,6 @@ import {
 } from '../dto/purchases/create-purchase.dto';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { PurchaseWithItems } from '../interfaces/purchase-with-items.interface';
-import { PurchaseItem } from '../entities/purchase-item.entity';
 
 @Injectable()
 export class PurchasesService {
@@ -36,8 +35,6 @@ export class PurchasesService {
     private supplierRepository: Repository<Supplier>,
     @InjectRepository(UserRole)
     private userRoleRepository: Repository<UserRole>,
-    @InjectRepository(PurchaseItem)
-    private purchaseItemRepository: Repository<PurchaseItem>,
     private readonly notificationsService: NotificationsService
   ) {}
 
@@ -52,174 +49,6 @@ export class PurchasesService {
     if (!hasAccess) {
       throw new ForbiddenException('No access to this shop');
     }
-  }
-
-  async createPurchase(
-    userId: string,
-    createPurchaseDto: CreatePurchaseDto
-  ): Promise<PurchaseWithItems> {
-    console.log('Creating purchase with data:', createPurchaseDto);
-    await this.validateManagerAccess(userId, createPurchaseDto.shopId);
-
-    // Проверяем существование поставщика
-    const supplier = await this.supplierRepository.findOne({
-      where: { id: createPurchaseDto.supplierId, isActive: true },
-    });
-
-    if (!supplier) {
-      throw new NotFoundException('Supplier not found');
-    }
-
-    let purchase: Purchase;
-
-    // Если это черновик и у нас есть id, пытаемся найти существующий черновик
-    if (
-      createPurchaseDto.status === PurchaseStatus.DRAFT &&
-      createPurchaseDto.id
-    ) {
-      const existingDraft = await this.purchaseRepository.findOne({
-        where: {
-          id: createPurchaseDto.id,
-          shopId: createPurchaseDto.shopId,
-          status: PurchaseStatus.DRAFT,
-          isActive: true,
-        },
-      });
-
-      if (existingDraft) {
-        // Обновляем существующий черновик
-        purchase = existingDraft;
-        purchase.supplierId = createPurchaseDto.supplierId;
-        purchase.invoiceNumber = createPurchaseDto.invoiceNumber;
-        purchase.date = createPurchaseDto.date;
-        purchase.comment = createPurchaseDto.comment;
-      } else {
-        // Создаем новый черновик
-        purchase = new Purchase();
-        purchase.shopId = createPurchaseDto.shopId;
-        purchase.supplierId = createPurchaseDto.supplierId;
-        purchase.invoiceNumber = createPurchaseDto.invoiceNumber;
-        purchase.date = createPurchaseDto.date;
-        purchase.comment = createPurchaseDto.comment;
-        purchase.createdById = userId;
-        purchase.status = PurchaseStatus.DRAFT;
-      }
-    } else {
-      // Создаем новую запись для завершенного прихода
-      purchase = new Purchase();
-      purchase.shopId = createPurchaseDto.shopId;
-      purchase.supplierId = createPurchaseDto.supplierId;
-      purchase.invoiceNumber = createPurchaseDto.invoiceNumber;
-      purchase.date = createPurchaseDto.date;
-      purchase.comment = createPurchaseDto.comment;
-      purchase.createdById = userId;
-      purchase.status = createPurchaseDto.status || PurchaseStatus.COMPLETED;
-    }
-
-    // Вычисляем общую сумму и общее количество товаров
-    let totalAmount = 0;
-    let totalItems = 0;
-    for (const item of createPurchaseDto.items) {
-      totalAmount += item.price * item.quantity;
-      totalItems += item.quantity;
-    }
-    purchase.totalAmount = totalAmount;
-    purchase.totalItems = totalItems;
-
-    // Сохраняем приход
-    const savedPurchase = await this.purchaseRepository.save(purchase);
-    console.log('Saved purchase:', savedPurchase);
-
-    // For drafts, save or update items in purchase_items table
-    if (savedPurchase.status === PurchaseStatus.DRAFT) {
-      console.log('Saving/updating items for draft purchase');
-
-      // Если это существующий черновик, получаем текущие items
-      if (createPurchaseDto.id) {
-        const currentItems = await this.purchaseItemRepository.find({
-          where: { purchaseId: savedPurchase.id },
-        });
-
-        // Создаем Map для быстрого поиска по productId
-        const currentItemsMap = new Map(
-          currentItems.map((item) => [item.productId, item])
-        );
-
-        // Создаем Set с productId из новых данных для быстрой проверки
-        const updatedProductIds = new Set(
-          createPurchaseDto.items.map((item) => item.productId)
-        );
-
-        // Удаляем items которых больше нет в списке
-        const itemsToDelete = currentItems.filter(
-          (item) => !updatedProductIds.has(item.productId)
-        );
-        if (itemsToDelete.length > 0) {
-          await this.purchaseItemRepository.remove(itemsToDelete);
-        }
-
-        // Обновляем существующие и создаем новые items
-        for (const item of createPurchaseDto.items) {
-          const existingItem = currentItemsMap.get(item.productId);
-
-          if (existingItem) {
-            // Обновляем существующий item
-            existingItem.quantity = item.quantity;
-            existingItem.price = item.price;
-            existingItem.serialNumber = item.serialNumber;
-            existingItem.expiryDate = item.expiryDate;
-            existingItem.comment = item.comment;
-            await this.purchaseItemRepository.save(existingItem);
-          } else {
-            // Создаем новый item
-            const purchaseItem = new PurchaseItem();
-            purchaseItem.purchaseId = savedPurchase.id;
-            purchaseItem.productId = item.productId;
-            purchaseItem.quantity = item.quantity;
-            purchaseItem.price = item.price;
-            purchaseItem.serialNumber = item.serialNumber;
-            purchaseItem.expiryDate = item.expiryDate;
-            purchaseItem.comment = item.comment;
-            await this.purchaseItemRepository.save(purchaseItem);
-          }
-        }
-      } else {
-        // Для нового черновика просто создаем items
-        for (const item of createPurchaseDto.items) {
-          const purchaseItem = new PurchaseItem();
-          purchaseItem.purchaseId = savedPurchase.id;
-          purchaseItem.productId = item.productId;
-          purchaseItem.quantity = item.quantity;
-          purchaseItem.price = item.price;
-          purchaseItem.serialNumber = item.serialNumber;
-          purchaseItem.expiryDate = item.expiryDate;
-          purchaseItem.comment = item.comment;
-          await this.purchaseItemRepository.save(purchaseItem);
-        }
-      }
-    }
-    // For completed purchases, create inventory transactions
-    else {
-      console.log('Creating inventory transactions for COMPLETED purchase');
-      for (const item of createPurchaseDto.items) {
-        await this.createPurchaseTransaction(
-          userId,
-          savedPurchase,
-          item,
-          createPurchaseDto
-        );
-      }
-
-      // Обновляем цены товаров, если нужно
-      if (
-        createPurchaseDto.updatePrices ||
-        createPurchaseDto.updatePurchasePrices
-      ) {
-        await this.updateProductPrices(createPurchaseDto);
-      }
-    }
-
-    return this.findOne(savedPurchase.id, createPurchaseDto.shopId);
   }
 
   private async createPurchaseTransaction(
@@ -239,13 +68,27 @@ export class PurchasesService {
       );
     }
 
+    // Строгое преобразование цены в число
+    let price = 0;
+
+    // После transform() в DTO, item.price всегда должно быть числом
+    if (typeof item.price === 'number' && !isNaN(item.price)) {
+      price = item.price;
+    }
+
+    console.log(
+      `Создаем транзакцию для товара ${
+        product.name
+      } с ценой ${price}, исходный тип: ${typeof item.price}`
+    );
+
     // Создаем транзакцию
     const transaction = new InventoryTransaction();
     transaction.shopId = purchase.shopId;
     transaction.productId = item.productId;
     transaction.type = TransactionType.PURCHASE;
     transaction.quantity = item.quantity;
-    transaction.price = item.price;
+    transaction.price = price; // Используем обработанную цену
     transaction.note = item.comment;
     transaction.createdById = userId;
     transaction.purchaseId = purchase.id;
@@ -254,9 +97,109 @@ export class PurchasesService {
       invoiceNumber: purchase.invoiceNumber,
       serialNumber: item.serialNumber,
       expiryDate: item.expiryDate,
+      price: price, // Дублируем обработанную цену в метаданных
     };
 
-    return this.transactionRepository.save(transaction);
+    console.log(`Транзакция с ценой ${transaction.price} готова к сохранению`);
+
+    // Сохраняем и получаем сохраненную транзакцию
+    const savedTransaction = await this.transactionRepository.save(transaction);
+    console.log(`Транзакция сохранена: ${JSON.stringify(savedTransaction)}`);
+
+    // Проверяем, правильно ли сохранилась цена
+    if (savedTransaction.price !== price) {
+      console.warn(
+        `Предупреждение: сохраненная цена ${savedTransaction.price} отличается от исходной ${price}`
+      );
+
+      // Попытка обновить цену, если она не сохранилась правильно
+      await this.transactionRepository.update(savedTransaction.id, { price });
+    }
+
+    return savedTransaction;
+  }
+
+  async createPurchase(
+    userId: string,
+    createPurchaseDto: CreatePurchaseDto
+  ): Promise<PurchaseWithItems> {
+    console.log(
+      'Creating purchase with data:',
+      JSON.stringify(createPurchaseDto, null, 2)
+    );
+    await this.validateManagerAccess(userId, createPurchaseDto.shopId);
+
+    // Проверяем существование поставщика
+    const supplier = await this.supplierRepository.findOne({
+      where: { id: createPurchaseDto.supplierId, isActive: true },
+    });
+
+    if (!supplier) {
+      throw new NotFoundException('Supplier not found');
+    }
+
+    // Создаем новую запись для покупки
+    const purchase = new Purchase();
+    purchase.shopId = createPurchaseDto.shopId;
+    purchase.supplierId = createPurchaseDto.supplierId;
+    purchase.invoiceNumber = createPurchaseDto.invoiceNumber;
+    purchase.date = createPurchaseDto.date;
+    purchase.comment = createPurchaseDto.comment;
+    purchase.createdById = userId;
+    purchase.status = PurchaseStatus.COMPLETED; // Все новые приходы имеют статус COMPLETED
+
+    // Вычисляем общую сумму и общее количество товаров
+    let totalAmount = 0;
+    let totalItems = 0;
+    for (const item of createPurchaseDto.items) {
+      // После transform() в DTO, item.price всегда должно быть числом
+      let itemPrice = 0;
+
+      if (typeof item.price === 'number' && !isNaN(item.price)) {
+        itemPrice = item.price;
+      }
+
+      console.log(
+        `Товар ${item.productId}: цена = ${itemPrice} (исходная: ${
+          item.price
+        }, тип: ${typeof item.price}), количество = ${item.quantity}`
+      );
+
+      // Используем преобразованную цену для расчетов
+      totalAmount += itemPrice * item.quantity;
+      totalItems += item.quantity;
+    }
+    purchase.totalAmount = totalAmount;
+    purchase.totalItems = totalItems;
+
+    console.log(
+      `Calculated totalAmount: ${totalAmount}, totalItems: ${totalItems}`
+    );
+
+    // Сохраняем покупку
+    const savedPurchase = await this.purchaseRepository.save(purchase);
+    console.log('Saved purchase:', savedPurchase);
+
+    // Создаем транзакции в инвентаре для всех товаров
+    for (const item of createPurchaseDto.items) {
+      await this.createPurchaseTransaction(
+        userId,
+        savedPurchase,
+        item,
+        createPurchaseDto
+      );
+    }
+
+    // Обновляем цены товаров, если нужно
+    if (
+      createPurchaseDto.updatePrices ||
+      createPurchaseDto.updatePurchasePrices
+    ) {
+      await this.updateProductPrices(createPurchaseDto);
+    }
+
+    // Перезагружаем покупку с обновленными данными
+    return this.findOne(savedPurchase.id, createPurchaseDto.shopId);
   }
 
   private async updateProductPrices(
@@ -268,9 +211,22 @@ export class PurchasesService {
       });
 
       if (product) {
+        // Получаем числовое представление цены
+        let itemPrice = 0;
+
+        // После transform() в DTO, item.price всегда должно быть числом
+        if (typeof item.price === 'number' && !isNaN(item.price)) {
+          itemPrice = item.price;
+        }
+
+        console.log(
+          `Обновление цен для товара ${product.name}: закупочная цена = ${itemPrice}`
+        );
+
         // Обновляем закупочную цену, если нужно
         if (createPurchaseDto.updatePurchasePrices) {
-          product.purchasePrice = item.price;
+          product.purchasePrice = itemPrice;
+          console.log(`Обновлена закупочная цена: ${product.purchasePrice}`);
         }
 
         // Обновляем цену продажи, если нужно
@@ -278,7 +234,8 @@ export class PurchasesService {
           // Здесь можно добавить логику расчета цены продажи на основе закупочной
           // Например, добавить наценку
           const markup = 1.3; // 30% наценка
-          product.sellingPrice = item.price * markup;
+          product.sellingPrice = itemPrice * markup;
+          console.log(`Обновлена цена продажи: ${product.sellingPrice}`);
         }
 
         await this.productRepository.save(product);
@@ -297,65 +254,96 @@ export class PurchasesService {
         'transactions',
         'transactions.product',
         'createdBy',
-        'items',
-        'items.product',
       ],
       order: { date: 'DESC' },
     });
 
     // Transform data for frontend
     return purchases.map((purchase) => {
-      let items;
-      if (purchase.status === PurchaseStatus.DRAFT) {
-        // For drafts, use items from purchase_items table
-        items =
-          purchase.items?.map((item) => ({
-            productId: item.productId,
-            product: {
-              name: item.product.name,
-              sku: item.product.sku,
-            },
-            quantity: item.quantity,
-            price: item.price,
-            total: item.quantity * item.price,
-            serialNumber: item.serialNumber,
-            expiryDate: item.expiryDate,
-            comment: item.comment,
-          })) || [];
+      // Проверка и логирование транзакций
+      if (purchase.transactions.length > 0) {
+        console.log(
+          `Покупка ${purchase.id} содержит ${purchase.transactions.length} транзакций`
+        );
+        purchase.transactions.forEach((t, i) => {
+          console.log(
+            `Транзакция ${i + 1}: id=${t.id}, цена=${t.price}, количество=${
+              t.quantity
+            }, метаданные=${JSON.stringify(t.metadata)}`
+          );
+
+          // Проверяем наличие цены в транзакции
+          if (t.price === null || t.price === undefined) {
+            // Попытка восстановить цену из метаданных
+            if (t.metadata && t.metadata.price) {
+              console.log(
+                `Восстанавливаем цену из метаданных: ${t.metadata.price}`
+              );
+              t.price = t.metadata.price;
+            } else {
+              console.warn(`Транзакция без цены: ${t.id}`);
+            }
+          }
+        });
       } else {
-        // For completed purchases, use transactions
-        items =
-          purchase.transactions?.map((transaction) => ({
+        console.warn(`Покупка ${purchase.id} не содержит транзакций`);
+      }
+
+      // Все покупки имеют статус COMPLETED и используют транзакции
+      const items =
+        purchase.transactions?.map((transaction) => {
+          const price =
+            typeof transaction.price === 'number'
+              ? transaction.price
+              : transaction.metadata?.price || 0;
+
+          return {
             productId: transaction.productId,
             product: {
               name: transaction.product.name,
               sku: transaction.product.sku,
             },
             quantity: transaction.quantity,
-            price: transaction.price,
-            total: transaction.quantity * transaction.price,
+            price: price, // Используем цену из транзакции или метаданных
+            total: transaction.quantity * price, // Правильный расчет суммы
             serialNumber: transaction.metadata?.serialNumber,
             expiryDate: transaction.metadata?.expiryDate,
             comment: transaction.note,
-          })) || [];
-      }
+          };
+        }) || [];
 
-      return {
+      // Пересчитываем общую сумму и количество на основе актуальных данных
+      const totalAmount = items.reduce(
+        (sum, item) => sum + (item.total || 0),
+        0
+      );
+      const totalItems = items.reduce(
+        (sum, item) => sum + (item.quantity || 0),
+        0
+      );
+
+      const createdByInfo = purchase.createdBy
+        ? {
+            id: purchase.createdBy.id,
+            name:
+              purchase.createdBy.firstName && purchase.createdBy.lastName
+                ? `${purchase.createdBy.firstName} ${purchase.createdBy.lastName}`
+                : purchase.createdBy.phone,
+            firstName: purchase.createdBy.firstName,
+            lastName: purchase.createdBy.lastName,
+            email: purchase.createdBy.email,
+          }
+        : undefined;
+
+      const result: PurchaseWithItems = {
         ...purchase,
+        totalAmount: totalAmount, // Обновляем общую сумму
+        totalItems: totalItems, // Обновляем общее количество
         items,
-        createdBy: purchase.createdBy
-          ? {
-              id: purchase.createdBy.id,
-              name:
-                purchase.createdBy.firstName && purchase.createdBy.lastName
-                  ? `${purchase.createdBy.firstName} ${purchase.createdBy.lastName}`
-                  : purchase.createdBy.phone,
-              firstName: purchase.createdBy.firstName,
-              lastName: purchase.createdBy.lastName,
-              email: purchase.createdBy.email,
-            }
-          : undefined,
-      } as PurchaseWithItems;
+        createdBy: purchase.createdBy,
+      };
+
+      return result;
     });
   }
 
@@ -374,76 +362,73 @@ export class PurchasesService {
       throw new NotFoundException('Purchase not found');
     }
 
-    // For drafts, we need to get items from purchase_items table
-    if (purchase.status === PurchaseStatus.DRAFT) {
-      const purchaseItems = await this.purchaseItemRepository.find({
-        where: { purchaseId: id },
-        relations: ['product'],
+    // Проверка и логирование транзакций
+    if (purchase.transactions.length > 0) {
+      console.log(
+        `Покупка ${purchase.id} содержит ${purchase.transactions.length} транзакций`
+      );
+      purchase.transactions.forEach((t, i) => {
+        console.log(
+          `Транзакция ${i + 1}: id=${t.id}, цена=${t.price}, количество=${
+            t.quantity
+          }, метаданные=${JSON.stringify(t.metadata)}`
+        );
+
+        // Проверяем наличие цены в транзакции
+        if (t.price === null || t.price === undefined) {
+          // Попытка восстановить цену из метаданных
+          if (t.metadata && t.metadata.price) {
+            console.log(
+              `Восстанавливаем цену из метаданных: ${t.metadata.price}`
+            );
+            t.price = t.metadata.price;
+          } else {
+            console.warn(`Транзакция без цены: ${t.id}`);
+          }
+        }
       });
-
-      const items = purchaseItems.map((item) => ({
-        productId: item.productId,
-        product: {
-          name: item.product.name,
-          sku: item.product.sku,
-        },
-        quantity: item.quantity,
-        price: item.price,
-        total: item.quantity * item.price,
-        serialNumber: item.serialNumber,
-        expiryDate: item.expiryDate,
-        comment: item.comment,
-      }));
-
-      return {
-        ...purchase,
-        items,
-        createdBy: purchase.createdBy
-          ? {
-              id: purchase.createdBy.id,
-              name:
-                purchase.createdBy.firstName && purchase.createdBy.lastName
-                  ? `${purchase.createdBy.firstName} ${purchase.createdBy.lastName}`
-                  : purchase.createdBy.phone,
-              firstName: purchase.createdBy.firstName,
-              lastName: purchase.createdBy.lastName,
-              email: purchase.createdBy.email,
-            }
-          : undefined,
-      } as PurchaseWithItems;
+    } else {
+      console.warn(`Покупка ${purchase.id} не содержит транзакций`);
     }
 
-    // For completed purchases, use transactions as before
-    const items = purchase.transactions.map((transaction) => ({
-      productId: transaction.productId,
-      product: {
-        name: transaction.product.name,
-        sku: transaction.product.sku,
-      },
-      quantity: transaction.quantity,
-      price: transaction.price,
-      total: transaction.quantity * transaction.price,
-      serialNumber: transaction.metadata?.serialNumber,
-      expiryDate: transaction.metadata?.expiryDate,
-      comment: transaction.note,
-    }));
+    // Все покупки имеют статус COMPLETED и используют транзакции
+    const items = purchase.transactions.map((transaction) => {
+      const price =
+        typeof transaction.price === 'number'
+          ? transaction.price
+          : transaction.metadata?.price || 0;
 
-    return {
+      return {
+        productId: transaction.productId,
+        product: {
+          name: transaction.product.name,
+          sku: transaction.product.sku,
+        },
+        quantity: transaction.quantity,
+        price: price, // Используем цену из транзакции или метаданных
+        total: transaction.quantity * price, // Правильный расчет суммы
+        serialNumber: transaction.metadata?.serialNumber,
+        expiryDate: transaction.metadata?.expiryDate,
+        comment: transaction.note,
+      };
+    });
+
+    // Пересчитываем общую сумму и количество на основе актуальных данных
+    const totalAmount = items.reduce((sum, item) => sum + (item.total || 0), 0);
+    const totalItems = items.reduce(
+      (sum, item) => sum + (item.quantity || 0),
+      0
+    );
+
+    const result: PurchaseWithItems = {
       ...purchase,
+      totalAmount: totalAmount, // Обновляем общую сумму
+      totalItems: totalItems, // Обновляем общее количество
       items,
-      createdBy: purchase.createdBy
-        ? {
-            id: purchase.createdBy.id,
-            name:
-              purchase.createdBy.firstName && purchase.createdBy.lastName
-                ? `${purchase.createdBy.firstName} ${purchase.createdBy.lastName}`
-                : purchase.createdBy.phone,
-            firstName: purchase.createdBy.firstName,
-            lastName: purchase.createdBy.lastName,
-            email: purchase.createdBy.email,
-          }
-        : undefined,
-    } as PurchaseWithItems;
+      createdBy: purchase.createdBy,
+    };
+
+    return result;
   }
 
   async deletePurchase(
@@ -464,209 +449,5 @@ export class PurchasesService {
     // Soft delete
     purchase.isActive = false;
     await this.purchaseRepository.save(purchase);
-  }
-
-  // Добавляем новый метод для обновления статуса прихода
-  async updatePurchaseStatus(
-    userId: string,
-    id: string,
-    shopId: string,
-    status: PurchaseStatus
-  ): Promise<PurchaseWithItems> {
-    await this.validateManagerAccess(userId, shopId);
-
-    // Находим существующий черновик
-    const purchase = await this.purchaseRepository.findOne({
-      where: { id, shopId, isActive: true },
-      relations: ['items', 'items.product'],
-    });
-
-    if (!purchase) {
-      throw new NotFoundException('Purchase not found');
-    }
-
-    // Проверяем, меняется ли статус с DRAFT на COMPLETED
-    const isCompletingDraft =
-      purchase.status === PurchaseStatus.DRAFT &&
-      status === PurchaseStatus.COMPLETED;
-
-    if (isCompletingDraft) {
-      console.log('Completing draft purchase, creating inventory transactions');
-
-      // Get items from purchase_items table
-      const purchaseItems = await this.purchaseItemRepository.find({
-        where: { purchaseId: id },
-        relations: ['product'],
-      });
-
-      // Обновляем totalAmount и totalItems
-      let totalAmount = 0;
-      let totalItems = 0;
-      for (const item of purchaseItems) {
-        totalAmount += item.price * item.quantity;
-        totalItems += item.quantity;
-      }
-      purchase.totalAmount = totalAmount;
-      purchase.totalItems = totalItems;
-
-      // Create transactions for each item
-      for (const item of purchaseItems) {
-        const purchaseItemDto = {
-          productId: item.productId,
-          quantity: item.quantity,
-          price: item.price,
-          serialNumber: item.serialNumber,
-          expiryDate: item.expiryDate,
-          comment: item.comment,
-        };
-
-        await this.createPurchaseTransaction(
-          userId,
-          purchase,
-          purchaseItemDto,
-          {
-            shopId,
-            supplierId: purchase.supplierId,
-            invoiceNumber: purchase.invoiceNumber,
-            date: purchase.date,
-            items: [purchaseItemDto],
-          } as CreatePurchaseDto
-        );
-      }
-
-      // Не удаляем purchase_items, они останутся для истории
-    }
-
-    // Обновляем статус существующей записи
-    purchase.status = status;
-    await this.purchaseRepository.save(purchase);
-
-    return this.findOne(id, shopId);
-  }
-
-  async updateDraft(
-    userId: string,
-    id: string,
-    updatePurchaseDto: UpdatePurchaseDto
-  ): Promise<PurchaseWithItems> {
-    console.log('Updating draft purchase:', { id, updatePurchaseDto });
-    await this.validateManagerAccess(userId, updatePurchaseDto.shopId);
-
-    // Находим существующий черновик
-    const existingPurchase = await this.purchaseRepository.findOne({
-      where: { id, isActive: true },
-      relations: ['items'],
-    });
-
-    if (!existingPurchase) {
-      throw new NotFoundException('Purchase draft not found');
-    }
-
-    if (existingPurchase.status !== PurchaseStatus.DRAFT) {
-      throw new ForbiddenException('Only draft purchases can be updated');
-    }
-
-    // Обновляем только те поля, которые предоставлены
-    if (updatePurchaseDto.supplierId) {
-      existingPurchase.supplierId = updatePurchaseDto.supplierId;
-    }
-    if (updatePurchaseDto.invoiceNumber) {
-      existingPurchase.invoiceNumber = updatePurchaseDto.invoiceNumber;
-    }
-    if (updatePurchaseDto.date) {
-      existingPurchase.date = updatePurchaseDto.date;
-    }
-    if (updatePurchaseDto.comment !== undefined) {
-      existingPurchase.comment = updatePurchaseDto.comment;
-    }
-
-    // Обновляем items только если они предоставлены
-    if (updatePurchaseDto.items) {
-      // Получаем текущие items
-      const currentItems = await this.purchaseItemRepository.find({
-        where: { purchaseId: id },
-      });
-
-      // Создаем Map для быстрого поиска по productId
-      const currentItemsMap = new Map(
-        currentItems.map((item) => [item.productId, item])
-      );
-
-      // Создаем Set с productId из новых данных для быстрой проверки
-      const updatedProductIds = new Set(
-        updatePurchaseDto.items.map((item) => item.productId)
-      );
-
-      // Удаляем items которых больше нет в списке
-      const itemsToDelete = currentItems.filter(
-        (item) => !updatedProductIds.has(item.productId)
-      );
-      if (itemsToDelete.length > 0) {
-        await this.purchaseItemRepository.remove(itemsToDelete);
-      }
-
-      // Обновляем существующие и создаем новые items
-      for (const item of updatePurchaseDto.items) {
-        const existingItem = currentItemsMap.get(item.productId);
-
-        if (existingItem) {
-          // Обновляем только предоставленные поля
-          if (item.quantity !== undefined) {
-            existingItem.quantity = item.quantity;
-          }
-          if (item.price !== undefined) {
-            existingItem.price = item.price;
-          }
-          if (item.serialNumber !== undefined) {
-            existingItem.serialNumber = item.serialNumber;
-          }
-          if (item.expiryDate !== undefined) {
-            existingItem.expiryDate = item.expiryDate;
-          }
-          if (item.comment !== undefined) {
-            existingItem.comment = item.comment;
-          }
-          await this.purchaseItemRepository.save(existingItem);
-        } else {
-          // Создаем новый item только с предоставленными полями
-          const purchaseItem = new PurchaseItem();
-          purchaseItem.purchaseId = existingPurchase.id;
-          purchaseItem.productId = item.productId;
-          purchaseItem.quantity = item.quantity || 0;
-          purchaseItem.price = item.price || 0;
-          if (item.serialNumber !== undefined) {
-            purchaseItem.serialNumber = item.serialNumber;
-          }
-          if (item.expiryDate !== undefined) {
-            purchaseItem.expiryDate = item.expiryDate;
-          }
-          if (item.comment !== undefined) {
-            purchaseItem.comment = item.comment;
-          }
-          await this.purchaseItemRepository.save(purchaseItem);
-        }
-      }
-
-      // Пересчитываем общую сумму и количество товаров
-      const updatedItems = await this.purchaseItemRepository.find({
-        where: { purchaseId: id },
-      });
-      let totalAmount = 0;
-      let totalItems = 0;
-      for (const item of updatedItems) {
-        totalAmount += item.price * item.quantity;
-        totalItems += item.quantity;
-      }
-      existingPurchase.totalAmount = totalAmount;
-      existingPurchase.totalItems = totalItems;
-    }
-
-    // Сохраняем обновленный приход
-    const savedPurchase = await this.purchaseRepository.save(existingPurchase);
-
-    return this.findOne(
-      savedPurchase.id,
-      updatePurchaseDto.shopId || existingPurchase.shopId
-    );
   }
 }

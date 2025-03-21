@@ -11,7 +11,6 @@ import { Shop } from '../../shops/entities/shop.entity';
 import { User } from '../../users/entities/user.entity';
 import { Supplier } from './supplier.entity';
 import { InventoryTransaction } from './inventory-transaction.entity';
-import { PurchaseItem } from './purchase-item.entity';
 
 export enum PurchaseStatus {
   DRAFT = 'draft',
@@ -66,9 +65,6 @@ export class Purchase {
 
   @OneToMany(() => InventoryTransaction, (transaction) => transaction.purchase)
   transactions: InventoryTransaction[];
-
-  @OneToMany(() => PurchaseItem, (item) => item.purchase)
-  items: PurchaseItem[];
 
   @Column({ default: true })
   isActive: boolean;
