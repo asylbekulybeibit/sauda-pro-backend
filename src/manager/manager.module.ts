@@ -45,6 +45,8 @@ import { ReportsModule } from '../reports/reports.module';
 import { SupplierProduct } from './entities/supplier-product.entity';
 import { SupplierProductsService } from './services/supplier-products.service';
 import { SupplierProductsController } from './controllers/supplier-products.controller';
+import { BulkOperationsController } from './controllers/bulk-operations.controller';
+import { BulkOperationsService } from './services/bulk-operations.service';
 
 @Module({
   imports: [
@@ -84,6 +86,7 @@ import { SupplierProductsController } from './controllers/supplier-products.cont
     CashRegistersController,
     SupplierProductsController,
     PurchasesController,
+    BulkOperationsController,
   ],
   providers: [
     ManagerService,
@@ -99,6 +102,7 @@ import { SupplierProductsController } from './controllers/supplier-products.cont
     CashRegistersService,
     SupplierProductsService,
     PurchasesService,
+    BulkOperationsService,
   ],
   exports: [
     ManagerService,
