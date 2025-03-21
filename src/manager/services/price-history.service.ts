@@ -29,6 +29,7 @@ export class PriceHistoryService {
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
+        shopId,
         type: RoleType.MANAGER,
         isActive: true,
       },
@@ -75,17 +76,22 @@ export class PriceHistoryService {
 
     await this.validateManagerAccess(userId, product.shopId);
 
-    return this.priceHistoryRepository.find({
-      where: { productId },
-      relations: ['changedBy'],
-      order: { createdAt: 'DESC' },
-    });
+    return this.priceHistoryRepository
+      .createQueryBuilder('priceHistory')
+      .where('priceHistory.productId = :productId', { productId })
+      .leftJoinAndSelect('priceHistory.changedBy', 'changedBy')
+      .leftJoinAndSelect('priceHistory.product', 'product')
+      .orderBy('priceHistory.createdAt', 'DESC')
+      .getMany();
   }
 
   async findByShop(userId: string, shopId: string): Promise<PriceHistory[]> {
-    await this.validateManagerAccess(userId, shopId);
+    console.log('[PriceHistoryService] findByShop started:', {
+      userId,
+      shopId,
+    });
 
-    return this.priceHistoryRepository
+    const result = await this.priceHistoryRepository
       .createQueryBuilder('priceHistory')
       .innerJoin('priceHistory.product', 'product')
       .where('product.shopId = :shopId', { shopId })
@@ -94,39 +100,77 @@ export class PriceHistoryService {
       .leftJoinAndSelect('priceHistory.product', 'productDetails')
       .orderBy('priceHistory.createdAt', 'DESC')
       .getMany();
+
+    console.log('[PriceHistoryService] findByShop result:', {
+      recordsFound: result.length,
+      firstRecord: result[0],
+      lastRecord: result[result.length - 1],
+    });
+
+    return result;
   }
 
   async findByShopAndDateRange(
     userId: string,
     shopId: string,
-    startDate: string,
-    endDate: string
+    startDate?: string,
+    endDate?: string
   ): Promise<PriceHistory[]> {
-    await this.validateManagerAccess(userId, shopId);
+    console.log('[PriceHistoryService] findByShopAndDateRange started:', {
+      userId,
+      shopId,
+      startDate,
+      endDate,
+    });
 
-    // Проверяем формат дат
-    const parsedStartDate = new Date(startDate);
-    const parsedEndDate = new Date(endDate);
-
-    if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
-      throw new Error('Invalid date format');
-    }
-
-    return this.priceHistoryRepository
+    const query = this.priceHistoryRepository
       .createQueryBuilder('priceHistory')
       .innerJoin('priceHistory.product', 'product')
       .where('product.shopId = :shopId', { shopId })
-      .andWhere('product.isActive = :isActive', { isActive: true })
-      .andWhere('priceHistory.createdAt >= :startDate', {
-        startDate: parsedStartDate,
-      })
-      .andWhere('priceHistory.createdAt <= :endDate', {
-        endDate: parsedEndDate,
-      })
+      .andWhere('product.isActive = :isActive', { isActive: true });
+
+    // Добавляем фильтры по датам только если они указаны
+    if (startDate && endDate) {
+      const parsedStartDate = new Date(startDate);
+      const parsedEndDate = new Date(endDate);
+
+      console.log('[PriceHistoryService] Parsed dates:', {
+        parsedStartDate,
+        parsedEndDate,
+      });
+
+      if (isNaN(parsedStartDate.getTime()) || isNaN(parsedEndDate.getTime())) {
+        console.error('[PriceHistoryService] Invalid date format');
+        throw new Error('Invalid date format');
+      }
+
+      query
+        .andWhere('priceHistory.createdAt >= :startDate', {
+          startDate: parsedStartDate,
+        })
+        .andWhere('priceHistory.createdAt <= :endDate', {
+          endDate: parsedEndDate,
+        });
+    }
+
+    // Логируем SQL запрос для отладки
+    const sqlQuery = query
       .leftJoinAndSelect('priceHistory.changedBy', 'changedBy')
       .leftJoinAndSelect('priceHistory.product', 'productDetails')
       .orderBy('priceHistory.createdAt', 'DESC')
-      .getMany();
+      .getSql();
+
+    console.log('[PriceHistoryService] Generated SQL query:', sqlQuery);
+
+    const result = await query.getMany();
+
+    console.log('[PriceHistoryService] findByShopAndDateRange result:', {
+      recordsFound: result.length,
+      firstRecord: result[0],
+      lastRecord: result[result.length - 1],
+    });
+
+    return result;
   }
 
   async getProductPriceStats(

@@ -44,6 +44,10 @@ export class PriceHistoryController {
     @Request() req,
     @Param('shopId', ParseUUIDPipe) shopId: string
   ): Promise<PriceHistory[]> {
+    console.log('[PriceHistoryController] findByShop called with params:', {
+      userId: req.user.id,
+      shopId,
+    });
     return this.priceHistoryService.findByShop(req.user.id, shopId);
   }
 
@@ -51,9 +55,15 @@ export class PriceHistoryController {
   getReport(
     @Request() req,
     @Param('shopId', ParseUUIDPipe) shopId: string,
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string
   ): Promise<PriceHistory[]> {
+    console.log('[PriceHistoryController] getReport called with params:', {
+      userId: req.user.id,
+      shopId,
+      startDate,
+      endDate,
+    });
     return this.priceHistoryService.findByShopAndDateRange(
       req.user.id,
       shopId,

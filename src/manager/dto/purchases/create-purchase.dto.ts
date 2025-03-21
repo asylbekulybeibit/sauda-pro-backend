@@ -137,6 +137,19 @@ export class CreatePurchaseDto {
   @IsBoolean()
   @IsOptional()
   checkDuplicates?: boolean;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  markup?: number;
+
+  @IsString()
+  @IsOptional()
+  markupType?: 'percentage' | 'fixed';
+
+  @IsString()
+  @IsOptional()
+  createdById?: string;
 }
 
 // DTO для редактирования черновика
@@ -183,6 +196,15 @@ export class UpdatePurchaseDto {
   @IsBoolean()
   @IsOptional()
   checkDuplicates?: boolean;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  markup?: number;
+
+  @IsString()
+  @IsOptional()
+  markupType?: 'percentage' | 'fixed';
 
   @IsEnum(PurchaseStatus)
   @IsOptional()
