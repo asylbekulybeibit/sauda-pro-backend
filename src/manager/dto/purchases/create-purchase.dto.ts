@@ -133,6 +133,10 @@ export class CreatePurchaseDto {
   @IsBoolean()
   @IsOptional()
   createLabels?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  checkDuplicates?: boolean;
 }
 
 // DTO для редактирования черновика
@@ -175,6 +179,10 @@ export class UpdatePurchaseDto {
   @IsBoolean()
   @IsOptional()
   createLabels?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  checkDuplicates?: boolean;
 
   @IsEnum(PurchaseStatus)
   @IsOptional()

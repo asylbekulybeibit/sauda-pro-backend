@@ -21,6 +21,8 @@ import {
 } from '../dto/purchases/create-purchase.dto';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { PurchaseWithItems } from '../interfaces/purchase-with-items.interface';
+import { LabelsService } from '../services/labels.service';
+import { LabelTemplate } from '../entities/label-template.entity';
 
 @Injectable()
 export class PurchasesService {
@@ -35,7 +37,10 @@ export class PurchasesService {
     private supplierRepository: Repository<Supplier>,
     @InjectRepository(UserRole)
     private userRoleRepository: Repository<UserRole>,
-    private readonly notificationsService: NotificationsService
+    @InjectRepository(LabelTemplate)
+    private labelTemplateRepository: Repository<LabelTemplate>,
+    private readonly notificationsService: NotificationsService,
+    private readonly labelsService: LabelsService
   ) {}
 
   private async validateManagerAccess(
@@ -138,6 +143,11 @@ export class PurchasesService {
       throw new NotFoundException('Supplier not found');
     }
 
+    // Если включена проверка на дубликаты, проверяем дубликаты товаров
+    if (createPurchaseDto.checkDuplicates) {
+      await this.checkForDuplicates(createPurchaseDto);
+    }
+
     // Создаем новую запись для покупки
     const purchase = new Purchase();
     purchase.shopId = createPurchaseDto.shopId;
@@ -198,6 +208,16 @@ export class PurchasesService {
       await this.updateProductPrices(createPurchaseDto);
     }
 
+    // Создаем этикетки, если нужно
+    if (createPurchaseDto.createLabels) {
+      try {
+        await this.generateLabelsForPurchase(userId, createPurchaseDto);
+      } catch (error) {
+        console.error('Ошибка при создании этикеток:', error);
+        // Не прерываем основную операцию в случае ошибки создания этикеток
+      }
+    }
+
     // Перезагружаем покупку с обновленными данными
     return this.findOne(savedPurchase.id, createPurchaseDto.shopId);
   }
@@ -205,12 +225,44 @@ export class PurchasesService {
   private async updateProductPrices(
     createPurchaseDto: CreatePurchaseDto
   ): Promise<void> {
+    console.log(`[updateProductPrices] Начинаем обновление цен товаров`);
+    console.log(
+      `[updateProductPrices] Параметр updatePrices: ${createPurchaseDto.updatePrices}`
+    );
+    console.log(
+      `[updateProductPrices] Параметр updatePurchasePrices: ${createPurchaseDto.updatePurchasePrices}`
+    );
+    console.log(
+      `[updateProductPrices] Всего товаров для обработки: ${createPurchaseDto.items.length}`
+    );
+
+    let updatedCount = 0;
+    let skippedCount = 0;
+
     for (const item of createPurchaseDto.items) {
+      console.log(
+        `[updateProductPrices] Обработка товара с ID ${item.productId}`
+      );
+
       const product = await this.productRepository.findOne({
-        where: { id: item.productId, isActive: true },
+        where: {
+          id: item.productId,
+          shopId: createPurchaseDto.shopId,
+          isActive: true,
+        },
       });
 
       if (product) {
+        console.log(
+          `[updateProductPrices] Товар найден: ${product.name} (ID: ${product.id})`
+        );
+        console.log(
+          `[updateProductPrices] Текущая закупочная цена: ${product.purchasePrice}`
+        );
+        console.log(
+          `[updateProductPrices] Текущая цена продажи: ${product.sellingPrice}`
+        );
+
         // Получаем числовое представление цены
         let itemPrice = 0;
 
@@ -220,27 +272,77 @@ export class PurchasesService {
         }
 
         console.log(
-          `Обновление цен для товара ${product.name}: закупочная цена = ${itemPrice}`
+          `[updateProductPrices] Цена из прихода для товара ${
+            product.name
+          }: ${itemPrice} (тип: ${typeof item.price})`
         );
+
+        let priceUpdated = false;
 
         // Обновляем закупочную цену, если нужно
         if (createPurchaseDto.updatePurchasePrices) {
+          console.log(
+            `[updateProductPrices] Обновляем закупочную цену для товара ${product.name}`
+          );
+          console.log(
+            `[updateProductPrices] Старая закупочная цена: ${product.purchasePrice}`
+          );
           product.purchasePrice = itemPrice;
-          console.log(`Обновлена закупочная цена: ${product.purchasePrice}`);
+          console.log(
+            `[updateProductPrices] Новая закупочная цена: ${product.purchasePrice}`
+          );
+          priceUpdated = true;
+        } else {
+          console.log(
+            `[updateProductPrices] Пропускаем обновление закупочной цены (флаг выключен)`
+          );
         }
 
         // Обновляем цену продажи, если нужно
         if (createPurchaseDto.updatePrices) {
+          console.log(
+            `[updateProductPrices] Обновляем цену продажи для товара ${product.name}`
+          );
+          console.log(
+            `[updateProductPrices] Старая цена продажи: ${product.sellingPrice}`
+          );
           // Здесь можно добавить логику расчета цены продажи на основе закупочной
           // Например, добавить наценку
           const markup = 1.3; // 30% наценка
           product.sellingPrice = itemPrice * markup;
-          console.log(`Обновлена цена продажи: ${product.sellingPrice}`);
+          console.log(
+            `[updateProductPrices] Новая цена продажи: ${product.sellingPrice} (закупочная ${itemPrice} * наценка ${markup})`
+          );
+          priceUpdated = true;
+        } else {
+          console.log(
+            `[updateProductPrices] Пропускаем обновление цены продажи (флаг выключен)`
+          );
         }
 
-        await this.productRepository.save(product);
+        if (priceUpdated) {
+          console.log(
+            `[updateProductPrices] Сохраняем обновленные цены для товара ${product.name}`
+          );
+          await this.productRepository.save(product);
+          updatedCount++;
+        } else {
+          console.log(
+            `[updateProductPrices] Нет изменений цен для товара ${product.name}`
+          );
+          skippedCount++;
+        }
+      } else {
+        console.log(
+          `[updateProductPrices] Товар с ID ${item.productId} не найден в магазине ${createPurchaseDto.shopId}`
+        );
+        skippedCount++;
       }
     }
+
+    console.log(
+      `[updateProductPrices] Обновление цен завершено. Обновлено товаров: ${updatedCount}, пропущено: ${skippedCount}`
+    );
   }
 
   async findAll(userId: string, shopId: string): Promise<PurchaseWithItems[]> {
@@ -449,5 +551,144 @@ export class PurchasesService {
     // Soft delete
     purchase.isActive = false;
     await this.purchaseRepository.save(purchase);
+  }
+
+  // Метод для генерации этикеток для покупки
+  private async generateLabelsForPurchase(
+    userId: string,
+    createPurchaseDto: CreatePurchaseDto
+  ): Promise<void> {
+    // Находим первый доступный шаблон этикетки для магазина
+    const defaultTemplate = await this.labelTemplateRepository.findOne({
+      where: {
+        shopId: createPurchaseDto.shopId,
+        isActive: true,
+      },
+    });
+
+    if (!defaultTemplate) {
+      console.warn(
+        'Шаблон этикетки не найден для магазина',
+        createPurchaseDto.shopId
+      );
+      return;
+    }
+
+    // Формируем запрос на создание этикеток
+    const labelsRequest = {
+      shopId: createPurchaseDto.shopId,
+      templateId: defaultTemplate.id,
+      products: createPurchaseDto.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+      })),
+    };
+
+    // Создаем этикетки
+    await this.labelsService.generateBatchLabels(
+      userId,
+      createPurchaseDto.shopId,
+      labelsRequest
+    );
+
+    console.log('Этикетки успешно созданы для покупки');
+  }
+
+  // Метод для проверки дубликатов товаров
+  private async checkForDuplicates(
+    createPurchaseDto: CreatePurchaseDto
+  ): Promise<void> {
+    console.log(`[checkForDuplicates] Начало проверки дубликатов товаров`);
+    console.log(
+      `[checkForDuplicates] Всего товаров в запросе: ${createPurchaseDto.items.length}`
+    );
+
+    // Создаем Map для отслеживания дубликатов
+    const duplicateCheck = new Map<string, PurchaseItemDto[]>();
+
+    // Заполняем Map, группируя элементы по productId
+    for (const item of createPurchaseDto.items) {
+      if (!duplicateCheck.has(item.productId)) {
+        duplicateCheck.set(item.productId, []);
+      }
+      duplicateCheck.get(item.productId)?.push(item);
+    }
+
+    // Находим товары с дубликатами
+    const duplicates: Array<{ productId: string; count: number }> = [];
+    duplicateCheck.forEach((items, productId) => {
+      if (items.length > 1) {
+        duplicates.push({ productId, count: items.length });
+        console.log(
+          `[checkForDuplicates] Товар ${productId} дублируется ${items.length} раз`
+        );
+      }
+    });
+
+    // Если есть дубликаты, объединяем их (суммируем количество)
+    if (duplicates.length > 0) {
+      console.log(
+        `[checkForDuplicates] Обнаружены дубликаты товаров: ${JSON.stringify(
+          duplicates
+        )}`
+      );
+      console.log(
+        `[checkForDuplicates] Всего обнаружено ${duplicates.length} видов товаров с дубликатами`
+      );
+
+      // Собираем уникальные элементы с объединенным количеством
+      const uniqueItems: PurchaseItemDto[] = [];
+      duplicateCheck.forEach((items, productId) => {
+        if (items.length === 1) {
+          // Если только один элемент, добавляем его как есть
+          uniqueItems.push(items[0]);
+        } else {
+          // Если несколько элементов, объединяем их
+          let totalQuantity = 0;
+          let lastPrice = 0;
+          let lastComment = '';
+          let lastSerialNumber = '';
+          let lastExpiryDate: Date | undefined;
+
+          // Проходим по всем дубликатам, суммируя количество и беря последние значения для других полей
+          for (const item of items) {
+            totalQuantity += item.quantity;
+            if (item.price !== undefined) lastPrice = item.price;
+            if (item.comment) lastComment = item.comment;
+            if (item.serialNumber) lastSerialNumber = item.serialNumber;
+            if (item.expiryDate) lastExpiryDate = item.expiryDate;
+
+            console.log(
+              `[checkForDuplicates] Дубликат товара ${productId}: количество ${item.quantity}, цена ${item.price}`
+            );
+          }
+
+          // Создаем объединенный элемент
+          const consolidatedItem: PurchaseItemDto = {
+            productId,
+            quantity: totalQuantity,
+            price: lastPrice,
+            serialNumber: lastSerialNumber,
+            expiryDate: lastExpiryDate,
+            comment: lastComment
+              ? `${lastComment} (объединены дубликаты)`
+              : '(объединены дубликаты)',
+          };
+
+          uniqueItems.push(consolidatedItem);
+          console.log(
+            `[checkForDuplicates] Объединен товар ${productId}: итоговое количество ${totalQuantity}, цена ${lastPrice}`
+          );
+        }
+      });
+
+      // Заменяем список товаров в DTO на уникальные
+      createPurchaseDto.items = uniqueItems;
+      console.log(
+        `[checkForDuplicates] После объединения дубликатов: ${uniqueItems.length} уникальных товаров вместо ${createPurchaseDto.items.length} исходных`
+      );
+    } else {
+      console.log(`[checkForDuplicates] Дубликаты товаров не обнаружены`);
+    }
   }
 }
