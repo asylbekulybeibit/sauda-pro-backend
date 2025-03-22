@@ -48,6 +48,14 @@ import { SupplierProductsController } from './controllers/supplier-products.cont
 import { BulkOperationsController } from './controllers/bulk-operations.controller';
 import { BulkOperationsService } from './services/bulk-operations.service';
 
+// Новые импорты для сервисных сущностей
+import { ServiceType } from './entities/service-type.entity';
+import { Staff } from './entities/staff.entity';
+import { Client } from './entities/client.entity';
+import { Vehicle } from './entities/vehicle.entity';
+import { Service } from './entities/service.entity';
+import { ServiceStaff } from './entities/service-staff.entity';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -68,6 +76,13 @@ import { BulkOperationsService } from './services/bulk-operations.service';
       RegisterPaymentMethod,
       SupplierProduct,
       Purchase,
+      // Добавляем новые сущности для сферы услуг
+      ServiceType,
+      Staff,
+      Client,
+      Vehicle,
+      Service,
+      ServiceStaff,
     ]),
     NotificationsModule,
     ReportsModule,
