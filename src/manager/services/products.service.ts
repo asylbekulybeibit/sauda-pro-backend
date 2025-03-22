@@ -72,6 +72,31 @@ export class ProductsService {
       );
     }
 
+    // Generate SKU if not provided
+    if (!createProductDto.sku) {
+      // Generate SKU from first 3 letters of product name + random number
+      const namePrefix = createProductDto.name.substring(0, 3).toUpperCase();
+      const randomNum = Math.floor(Math.random() * 10000);
+      const timestamp = Date.now().toString().substring(8, 13); // Use part of timestamp for uniqueness
+      createProductDto.sku = `${namePrefix}${randomNum}${timestamp}`;
+      console.log('Generated SKU for product:', createProductDto.sku);
+    } else {
+      // Check if SKU is unique within the shop
+      const existingProduct = await this.productRepository.findOne({
+        where: {
+          sku: createProductDto.sku,
+          shopId: createProductDto.shopId,
+          isActive: true,
+        },
+      });
+
+      if (existingProduct) {
+        throw new ForbiddenException(
+          `Товар с артикулом ${createProductDto.sku} уже существует в этом магазине`
+        );
+      }
+    }
+
     // Create a copy of the DTO without the barcode field to avoid TypeORM saving both properties
     const { barcode, ...productData } = createProductDto;
     console.log(
