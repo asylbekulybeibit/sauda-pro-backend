@@ -1,7 +1,11 @@
-import { Controller, Get, Param, Res } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { BulkOperationsService } from '../services/bulk-operations.service';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import {
+  BulkProductOperationDto,
+  BulkOperationResultDto,
+} from '../dto/bulk-operations/bulk-operations.dto';
 
 @ApiTags('Bulk Operations')
 @Controller('bulk-operations')
@@ -27,5 +31,20 @@ export class BulkOperationsController {
     );
 
     res.send(template);
+  }
+
+  @Post(':shopId/products')
+  @ApiOperation({ summary: 'Upload products in bulk' })
+  @ApiResponse({
+    status: 200,
+    description: 'Products processed successfully',
+    type: BulkOperationResultDto,
+  })
+  @ApiBody({ type: BulkProductOperationDto })
+  async uploadProducts(
+    @Param('shopId') shopId: string,
+    @Body() data: BulkProductOperationDto
+  ): Promise<BulkOperationResultDto> {
+    return this.bulkOperationsService.processProductUpload(shopId, data);
   }
 }
