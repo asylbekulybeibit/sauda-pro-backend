@@ -5,6 +5,7 @@ import {
   IsUUID,
   Min,
   IsBoolean,
+  IsArray,
 } from 'class-validator';
 
 export class CreateProductDto {
@@ -22,6 +23,10 @@ export class CreateProductDto {
   @IsString()
   @IsOptional()
   barcode?: string;
+
+  @IsArray()
+  @IsOptional()
+  barcodes?: string[];
 
   @IsNumber()
   @Min(0)

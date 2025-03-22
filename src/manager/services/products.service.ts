@@ -63,7 +63,23 @@ export class ProductsService {
       }
     }
 
-    const product = this.productRepository.create(createProductDto);
+    // Handle barcode conversion
+    if (!createProductDto.barcodes && createProductDto.barcode) {
+      createProductDto.barcodes = [createProductDto.barcode];
+      console.log(
+        'Converting single barcode to array:',
+        createProductDto.barcodes
+      );
+    }
+
+    // Create a copy of the DTO without the barcode field to avoid TypeORM saving both properties
+    const { barcode, ...productData } = createProductDto;
+    console.log(
+      'Creating product with data:',
+      JSON.stringify(productData, null, 2)
+    );
+
+    const product = this.productRepository.create(productData);
     const savedProduct = await this.productRepository.save(product);
 
     // Create initial price history records for both purchase and selling prices
@@ -145,6 +161,27 @@ export class ProductsService {
         throw new ForbiddenException('Категория принадлежит другому магазину');
       }
     }
+
+    // Handle barcode conversion
+    if (updateProductDto.barcode !== undefined) {
+      if (!updateProductDto.barcodes) {
+        updateProductDto.barcodes = updateProductDto.barcode
+          ? [updateProductDto.barcode]
+          : [];
+      }
+      console.log(
+        'Update: converting barcode to barcodes array:',
+        updateProductDto.barcodes
+      );
+
+      // Remove the barcode field from the update data
+      delete updateProductDto.barcode;
+    }
+
+    console.log(
+      'Updating product with data:',
+      JSON.stringify(updateProductDto, null, 2)
+    );
 
     // Track price changes
     if (
