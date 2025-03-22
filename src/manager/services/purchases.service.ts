@@ -65,16 +65,32 @@ export class PurchasesService {
     item: PurchaseItemDto,
     createPurchaseDto: CreatePurchaseDto
   ): Promise<InventoryTransaction> {
+    console.log(
+      `[createPurchaseTransaction] Creating transaction for product ${item.productId} in purchase ${purchase.id}`
+    );
+
+    // Проверяем связь с поставщиком
+    console.log(
+      `[createPurchaseTransaction] Purchase supplierId: ${purchase.supplierId}`
+    );
+
     // Проверяем существование товара
     const product = await this.productRepository.findOne({
       where: { id: item.productId, shopId: purchase.shopId, isActive: true },
     });
 
     if (!product) {
+      console.error(
+        `[createPurchaseTransaction] ERROR: Product with ID ${item.productId} not found`
+      );
       throw new NotFoundException(
         `Product with ID ${item.productId} not found`
       );
     }
+
+    console.log(
+      `[createPurchaseTransaction] Product found: ${product.name} (ID: ${product.id})`
+    );
 
     // Строгое преобразование цены в число
     let price = 0;
@@ -85,7 +101,7 @@ export class PurchasesService {
     }
 
     console.log(
-      `Создаем транзакцию для товара ${
+      `[createPurchaseTransaction] Создаем транзакцию для товара ${
         product.name
       } с ценой ${price}, исходный тип: ${typeof item.price}`
     );
@@ -100,31 +116,55 @@ export class PurchasesService {
     transaction.note = item.comment;
     transaction.createdById = userId;
     transaction.purchaseId = purchase.id;
-    transaction.metadata = {
-      supplierId: purchase.supplierId,
-      invoiceNumber: purchase.invoiceNumber,
-      serialNumber: item.serialNumber,
+
+    // Проверяем, не является ли supplierId null или undefined перед добавлением в метаданные
+    const metadata: any = {
+      invoiceNumber: purchase.invoiceNumber || '',
+      serialNumber: item.serialNumber || '',
       expiryDate: item.expiryDate,
       price: price, // Дублируем обработанную цену в метаданных
     };
 
-    console.log(`Транзакция с ценой ${transaction.price} готова к сохранению`);
-
-    // Сохраняем и получаем сохраненную транзакцию
-    const savedTransaction = await this.transactionRepository.save(transaction);
-    console.log(`Транзакция сохранена: ${JSON.stringify(savedTransaction)}`);
-
-    // Проверяем, правильно ли сохранилась цена
-    if (savedTransaction.price !== price) {
-      console.warn(
-        `Предупреждение: сохраненная цена ${savedTransaction.price} отличается от исходной ${price}`
-      );
-
-      // Попытка обновить цену, если она не сохранилась правильно
-      await this.transactionRepository.update(savedTransaction.id, { price });
+    // Добавляем supplierId только если он существует
+    if (purchase.supplierId) {
+      metadata.supplierId = purchase.supplierId;
     }
 
-    return savedTransaction;
+    transaction.metadata = metadata;
+
+    console.log(`[createPurchaseTransaction] Транзакция подготовлена:`, {
+      productId: transaction.productId,
+      quantity: transaction.quantity,
+      price: transaction.price,
+      supplierId: metadata.supplierId,
+    });
+
+    // Сохраняем и получаем сохраненную транзакцию
+    try {
+      const savedTransaction =
+        await this.transactionRepository.save(transaction);
+      console.log(
+        `[createPurchaseTransaction] Транзакция успешно сохранена с ID: ${savedTransaction.id}`
+      );
+
+      // Проверяем, правильно ли сохранилась цена
+      if (savedTransaction.price !== price) {
+        console.warn(
+          `[createPurchaseTransaction] Предупреждение: сохраненная цена ${savedTransaction.price} отличается от исходной ${price}`
+        );
+
+        // Попытка обновить цену, если она не сохранилась правильно
+        await this.transactionRepository.update(savedTransaction.id, { price });
+      }
+
+      return savedTransaction;
+    } catch (error) {
+      console.error(
+        `[createPurchaseTransaction] ERROR saving transaction:`,
+        error
+      );
+      throw error;
+    }
   }
 
   async createPurchase(
@@ -132,21 +172,44 @@ export class PurchasesService {
     createPurchaseDto: CreatePurchaseDto
   ): Promise<PurchaseWithItems> {
     console.log(
-      'Creating purchase with data:',
+      '[PurchasesService] Creating purchase with data:',
       JSON.stringify(createPurchaseDto, null, 2)
     );
+
+    // Явно логируем наличие поставщика и номера накладной
+    console.log('[PurchasesService] supplierId:', createPurchaseDto.supplierId);
+    console.log(
+      '[PurchasesService] invoiceNumber:',
+      createPurchaseDto.invoiceNumber
+    );
+
     await this.validateManagerAccess(userId, createPurchaseDto.shopId);
 
     // Устанавливаем createdById, чтобы использовать его при сохранении истории цен
     createPurchaseDto.createdById = userId;
 
-    // Проверяем существование поставщика
-    const supplier = await this.supplierRepository.findOne({
-      where: { id: createPurchaseDto.supplierId, isActive: true },
-    });
+    // Проверяем существование поставщика только если указан ID
+    if (createPurchaseDto.supplierId) {
+      console.log(
+        '[PurchasesService] Checking supplier existence for ID:',
+        createPurchaseDto.supplierId
+      );
 
-    if (!supplier) {
-      throw new NotFoundException('Supplier not found');
+      const supplier = await this.supplierRepository.findOne({
+        where: { id: createPurchaseDto.supplierId, isActive: true },
+      });
+
+      if (!supplier) {
+        console.log(
+          '[PurchasesService] ERROR: Supplier not found with ID:',
+          createPurchaseDto.supplierId
+        );
+        throw new NotFoundException('Supplier not found');
+      } else {
+        console.log('[PurchasesService] Supplier found:', supplier.name);
+      }
+    } else {
+      console.log('[PurchasesService] Creating purchase without supplier');
     }
 
     // Если включена проверка на дубликаты, проверяем дубликаты товаров
@@ -157,12 +220,20 @@ export class PurchasesService {
     // Создаем новую запись для покупки
     const purchase = new Purchase();
     purchase.shopId = createPurchaseDto.shopId;
-    purchase.supplierId = createPurchaseDto.supplierId;
-    purchase.invoiceNumber = createPurchaseDto.invoiceNumber;
+    purchase.supplierId = createPurchaseDto.supplierId || null;
+    purchase.invoiceNumber = createPurchaseDto.invoiceNumber || '';
     purchase.date = createPurchaseDto.date;
     purchase.comment = createPurchaseDto.comment;
     purchase.createdById = userId;
     purchase.status = PurchaseStatus.COMPLETED; // Все новые приходы имеют статус COMPLETED
+
+    console.log('[PurchasesService] Purchase entity created:', {
+      shopId: purchase.shopId,
+      supplierId: purchase.supplierId,
+      invoiceNumber: purchase.invoiceNumber,
+      date: purchase.date,
+      status: purchase.status,
+    });
 
     // Вычисляем общую сумму и общее количество товаров
     let totalAmount = 0;
@@ -193,17 +264,47 @@ export class PurchasesService {
     );
 
     // Сохраняем покупку
-    const savedPurchase = await this.purchaseRepository.save(purchase);
-    console.log('Saved purchase:', savedPurchase);
+    console.log('[PurchasesService] Saving purchase to database...');
+    let savedPurchase;
+    try {
+      savedPurchase = await this.purchaseRepository.save(purchase);
+      console.log(
+        '[PurchasesService] Purchase saved successfully:',
+        savedPurchase
+      );
+    } catch (error) {
+      console.error('[PurchasesService] ERROR saving purchase:', error);
+      // Проверяем тип ошибки и логируем полезную информацию
+      if (error.code === '23502') {
+        // PostgreSQL not-null constraint violation
+        console.error(
+          '[PurchasesService] NOT NULL constraint violated. Check entity definition and database schema.'
+        );
+        console.error(
+          '[PurchasesService] Constraint details:',
+          error.detail || error.message
+        );
+      }
+      // Перебрасываем ошибку дальше
+      throw error;
+    }
 
     // Создаем транзакции в инвентаре для всех товаров
     for (const item of createPurchaseDto.items) {
-      await this.createPurchaseTransaction(
-        userId,
-        savedPurchase,
-        item,
-        createPurchaseDto
-      );
+      try {
+        await this.createPurchaseTransaction(
+          userId,
+          savedPurchase,
+          item,
+          createPurchaseDto
+        );
+      } catch (error) {
+        console.error(
+          `[PurchasesService] ERROR creating transaction for item ${item.productId}:`,
+          error
+        );
+        throw error;
+      }
     }
 
     // Обновляем цены товаров, если нужно

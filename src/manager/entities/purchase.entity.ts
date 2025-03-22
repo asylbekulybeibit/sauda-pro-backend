@@ -29,13 +29,13 @@ export class Purchase {
   @ManyToOne(() => Shop)
   shop: Shop;
 
-  @Column()
+  @Column({ nullable: true })
   supplierId: string;
 
   @ManyToOne(() => Supplier)
   supplier: Supplier;
 
-  @Column()
+  @Column({ nullable: true })
   invoiceNumber: string;
 
   @Column('timestamp')

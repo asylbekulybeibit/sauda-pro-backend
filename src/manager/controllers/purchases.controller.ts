@@ -28,7 +28,64 @@ export class PurchasesController {
     @Body() createPurchaseDto: CreatePurchaseDto,
     @Request() req
   ): Promise<PurchaseWithItems> {
-    return this.purchasesService.createPurchase(req.user.id, createPurchaseDto);
+    console.log(
+      '[PurchasesController] Received createPurchase request from user ID:',
+      req.user.id
+    );
+    console.log(
+      '[PurchasesController] Request body:',
+      JSON.stringify(createPurchaseDto, null, 2)
+    );
+
+    try {
+      const result = await this.purchasesService.createPurchase(
+        req.user.id,
+        createPurchaseDto
+      );
+      console.log(
+        '[PurchasesController] Purchase created successfully with ID:',
+        result.id
+      );
+      return result;
+    } catch (error) {
+      console.error('[PurchasesController] Error creating purchase:', error);
+      throw error;
+    }
+  }
+
+  @Post('no-supplier')
+  async createPurchaseWithoutSupplier(
+    @Body() createPurchaseDto: CreatePurchaseDto,
+    @Request() req
+  ): Promise<PurchaseWithItems> {
+    console.log(
+      '[PurchasesController] Received createPurchaseWithoutSupplier request'
+    );
+    console.log(
+      '[PurchasesController] Request body:',
+      JSON.stringify(createPurchaseDto, null, 2)
+    );
+
+    // Явно устанавливаем supplierId в null
+    createPurchaseDto.supplierId = null;
+
+    try {
+      const result = await this.purchasesService.createPurchase(
+        req.user.id,
+        createPurchaseDto
+      );
+      console.log(
+        '[PurchasesController] Purchase created successfully without supplier, ID:',
+        result.id
+      );
+      return result;
+    } catch (error) {
+      console.error(
+        '[PurchasesController] Error creating purchase without supplier:',
+        error
+      );
+      throw error;
+    }
   }
 
   @Get(':shopId')
