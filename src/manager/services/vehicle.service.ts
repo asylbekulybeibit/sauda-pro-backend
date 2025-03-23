@@ -74,18 +74,25 @@ export class VehicleService {
   async findAll(userId: string, shopId: string) {
     await this.validateManagerAccess(userId, shopId);
 
-    return this.vehicleRepository.find({
-      where: { shopId },
+    return await this.vehicleRepository.find({
+      where: {
+        shopId,
+        isActive: true,
+      },
       relations: ['client'],
       order: { make: 'ASC', model: 'ASC' },
     });
   }
 
-  async findByClient(clientId: string, userId: string, shopId: string) {
+  async findByClient(userId: string, shopId: string, clientId: string) {
     await this.validateManagerAccess(userId, shopId);
 
     return this.vehicleRepository.find({
-      where: { clientId, shopId },
+      where: {
+        clientId,
+        shopId,
+        isActive: true,
+      },
       order: { make: 'ASC', model: 'ASC' },
     });
   }
@@ -94,12 +101,16 @@ export class VehicleService {
     await this.validateManagerAccess(userId, shopId);
 
     const vehicle = await this.vehicleRepository.findOne({
-      where: { id, shopId },
+      where: {
+        id,
+        shopId,
+        isActive: true,
+      },
       relations: ['client'],
     });
 
     if (!vehicle) {
-      throw new NotFoundException('Автомобиль не найден');
+      throw new NotFoundException(`Vehicle not found`);
     }
 
     return vehicle;
@@ -134,8 +145,8 @@ export class VehicleService {
 
     const vehicle = await this.findOne(id, userId, shopId);
 
-    // Мягкое удаление - в данной сущности пока нет поля isActive
-    // поэтому будет удалять физически
-    return this.vehicleRepository.remove(vehicle);
+    // Мягкое удаление - устанавливаем isActive в false
+    vehicle.isActive = false;
+    return this.vehicleRepository.save(vehicle);
   }
 }

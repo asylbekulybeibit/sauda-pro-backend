@@ -79,4 +79,14 @@ export class VehicleController {
   ) {
     return this.vehicleService.remove(id, req.user.id, shopId);
   }
+
+  // Метод для мягкого удаления (установка isActive = false)
+  @Patch('shop/:shopId/:id/soft-remove')
+  softRemove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req,
+    @Param('shopId', ParseUUIDPipe) shopId: string
+  ) {
+    return this.vehicleService.remove(id, req.user.id, shopId);
+  }
 }

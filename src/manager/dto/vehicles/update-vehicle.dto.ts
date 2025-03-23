@@ -1,4 +1,11 @@
-import { IsOptional, IsString, IsNumber, Min, IsUUID } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  Min,
+  IsUUID,
+  IsBoolean,
+} from 'class-validator';
 
 export class UpdateVehicleDto {
   @IsUUID()
@@ -34,4 +41,8 @@ export class UpdateVehicleDto {
   @IsString()
   @IsOptional()
   vin?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }

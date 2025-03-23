@@ -16,10 +16,10 @@ export class Vehicle {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ nullable: true })
   clientId: string;
 
-  @ManyToOne(() => Client, 'vehicles', { onDelete: 'CASCADE' })
+  @ManyToOne(() => Client, 'vehicles', { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'clientId' })
   client: Client;
 
@@ -50,6 +50,9 @@ export class Vehicle {
 
   @Column({ nullable: true })
   vin: string;
+
+  @Column({ default: true })
+  isActive: boolean;
 
   @OneToMany('Service', 'vehicle')
   services: any[];

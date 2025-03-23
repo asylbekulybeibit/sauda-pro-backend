@@ -9,7 +9,8 @@ import {
 
 export class CreateVehicleDto {
   @IsUUID()
-  clientId: string;
+  @IsOptional()
+  clientId?: string;
 
   @IsString()
   @IsNotEmpty()
