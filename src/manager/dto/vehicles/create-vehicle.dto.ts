@@ -16,8 +16,8 @@ export class CreateVehicleDto {
   make: string;
 
   @IsString()
-  @IsNotEmpty()
-  model: string;
+  @IsOptional()
+  model?: string;
 
   @IsNumber()
   @IsOptional()
@@ -29,9 +29,9 @@ export class CreateVehicleDto {
   bodyType: string;
 
   @IsNumber()
-  @IsNotEmpty()
+  @IsOptional()
   @Min(0)
-  engineVolume: number;
+  engineVolume?: number;
 
   @IsString()
   @IsNotEmpty()

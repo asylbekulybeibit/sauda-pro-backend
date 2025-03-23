@@ -33,7 +33,7 @@ export class Vehicle {
   @Column()
   make: string;
 
-  @Column()
+  @Column({ nullable: true })
   model: string;
 
   @Column({ nullable: true })
@@ -42,7 +42,7 @@ export class Vehicle {
   @Column()
   bodyType: string;
 
-  @Column({ type: 'decimal', precision: 3, scale: 1 })
+  @Column({ type: 'decimal', precision: 3, scale: 1, nullable: true })
   engineVolume: number;
 
   @Column()
