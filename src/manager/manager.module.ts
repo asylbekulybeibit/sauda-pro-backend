@@ -56,6 +56,20 @@ import { Vehicle } from './entities/vehicle.entity';
 import { Service } from './entities/service.entity';
 import { ServiceStaff } from './entities/service-staff.entity';
 
+// Импорты новых контроллеров и сервисов для услуг
+import { ServiceTypeController } from './controllers/service-type.controller';
+import { ServiceTypeService } from './services/service-type.service';
+import { EmployeeController } from './controllers/employee.controller';
+import { EmployeeService } from './services/employee.service';
+import { ClientController } from './controllers/client.controller';
+import { ClientService } from './services/client.service';
+import { VehicleController } from './controllers/vehicle.controller';
+import { VehicleService } from './services/vehicle.service';
+import { ServiceController } from './controllers/service.controller';
+import { ServiceService } from './services/service.service';
+import { ServiceStaffController } from './controllers/service-staff.controller';
+import { ServiceStaffService } from './services/service-staff.service';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -102,6 +116,13 @@ import { ServiceStaff } from './entities/service-staff.entity';
     SupplierProductsController,
     PurchasesController,
     BulkOperationsController,
+    // Новые контроллеры для услуг
+    ServiceTypeController,
+    EmployeeController,
+    ClientController,
+    VehicleController,
+    ServiceController,
+    ServiceStaffController,
   ],
   providers: [
     ManagerService,
@@ -118,6 +139,13 @@ import { ServiceStaff } from './entities/service-staff.entity';
     SupplierProductsService,
     PurchasesService,
     BulkOperationsService,
+    // Новые сервисы для услуг
+    ServiceTypeService,
+    EmployeeService,
+    ClientService,
+    VehicleService,
+    ServiceService,
+    ServiceStaffService,
   ],
   exports: [
     ManagerService,
