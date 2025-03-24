@@ -104,6 +104,13 @@ export class Service {
   @JoinColumn({ name: 'completedBy' })
   completer: User;
 
+  @Column({ nullable: true })
+  cashierId: string;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'cashierId' })
+  cashier: User;
+
   @OneToMany('ServiceStaff', 'service')
   serviceStaff: any[];
 

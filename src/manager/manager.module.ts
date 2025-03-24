@@ -56,6 +56,13 @@ import { Vehicle } from './entities/vehicle.entity';
 import { Service } from './entities/service.entity';
 import { ServiceStaff } from './entities/service-staff.entity';
 
+// Импорты новых сущностей для чеков
+import { SalesReceipt } from './entities/sales-receipt.entity';
+import { SalesReceiptItem } from './entities/sales-receipt-item.entity';
+import { ServiceReceipt } from './entities/service-receipt.entity';
+import { ServiceReceiptDetail } from './entities/service-receipt-detail.entity';
+import { ReceiptAction } from './entities/receipt-action.entity';
+
 // Импорты новых контроллеров и сервисов для услуг
 import { ServiceTypeController } from './controllers/service-type.controller';
 import { ServiceTypeService } from './services/service-type.service';
@@ -97,6 +104,12 @@ import { ServiceStaffService } from './services/service-staff.service';
       Vehicle,
       Service,
       ServiceStaff,
+      // Добавляем новые сущности для чеков
+      SalesReceipt,
+      SalesReceiptItem,
+      ServiceReceipt,
+      ServiceReceiptDetail,
+      ReceiptAction,
     ]),
     NotificationsModule,
     ReportsModule,
