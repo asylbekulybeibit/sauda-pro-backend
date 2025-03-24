@@ -8,6 +8,7 @@ import {
   Request,
   Query,
   Req,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -22,6 +23,8 @@ import { Service } from '../entities/service.entity';
 import { CashShift } from '../entities/cash-shift.entity';
 import { SalesReceipt } from '../entities/sales-receipt.entity';
 import { ServiceReceipt } from '../entities/service-receipt.entity';
+import { CreateVehicleDto } from '../dto/vehicles/create-vehicle.dto';
+import { Vehicle } from '../entities/vehicle.entity';
 
 @Controller('manager/:shopId/cashier')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -108,5 +111,33 @@ export class CashierController {
     @Param('date') date: string
   ): Promise<any> {
     return this.cashierService.getDailySummary(shopId, date);
+  }
+
+  /**
+   * Получение списка автомобилей клиента для кассира
+   */
+  @Get('vehicles/client/:clientId')
+  async getClientVehicles(
+    @Param('shopId') shopId: string,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Req() req
+  ): Promise<Vehicle[]> {
+    return this.cashierService.getClientVehicles(clientId, shopId);
+  }
+
+  /**
+   * Создание нового автомобиля для клиента (для кассира)
+   */
+  @Post('vehicles')
+  async createVehicle(
+    @Param('shopId') shopId: string,
+    @Body() createVehicleDto: CreateVehicleDto,
+    @Req() req
+  ): Promise<Vehicle> {
+    return this.cashierService.createVehicle(
+      createVehicleDto,
+      shopId,
+      req.user.id
+    );
   }
 }

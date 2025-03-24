@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, MoreThan, IsNull, LessThan, In } from 'typeorm';
@@ -31,6 +32,7 @@ import { Client } from '../entities/client.entity';
 import { Vehicle } from '../entities/vehicle.entity';
 import { User } from '../../users/entities/user.entity';
 import { Product } from '../entities/product.entity';
+import { CreateVehicleDto } from '../dto/vehicles/create-vehicle.dto';
 
 @Injectable()
 export class CashierService {
@@ -644,5 +646,67 @@ export class CashierService {
       activeShifts: shifts.filter((s) => s.status === CashShiftStatus.OPEN)
         .length,
     };
+  }
+
+  /**
+   * Получение автомобилей клиента для кассира
+   */
+  async getClientVehicles(
+    clientId: string,
+    shopId: string
+  ): Promise<Vehicle[]> {
+    // Проверяем существование клиента
+    await this.validateClient(clientId, shopId);
+
+    // Получаем список автомобилей клиента
+    return this.vehicleRepository.find({
+      where: {
+        clientId,
+        shopId,
+        isActive: true,
+      },
+      order: { make: 'ASC', model: 'ASC' },
+    });
+  }
+
+  /**
+   * Создание нового автомобиля (с привязкой к клиенту или без)
+   */
+  async createVehicle(
+    createVehicleDto: CreateVehicleDto,
+    shopId: string,
+    userId: string
+  ): Promise<Vehicle> {
+    // Проверяем существование клиента, если ID клиента указан
+    if (createVehicleDto.clientId) {
+      await this.validateClient(createVehicleDto.clientId, shopId);
+    }
+
+    // Создаем новый автомобиль
+    const vehicle = this.vehicleRepository.create({
+      ...createVehicleDto,
+      shopId,
+    });
+
+    // Сохраняем и возвращаем результат
+    return this.vehicleRepository.save(vehicle);
+  }
+
+  /**
+   * Проверка существования клиента
+   */
+  private async validateClient(
+    clientId: string,
+    shopId: string
+  ): Promise<Client> {
+    const client = await this.clientRepository.findOne({
+      where: { id: clientId, shopId, isActive: true },
+    });
+
+    if (!client) {
+      throw new NotFoundException('Клиент не найден в данном магазине');
+    }
+
+    return client;
   }
 }
