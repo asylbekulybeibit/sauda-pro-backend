@@ -89,8 +89,24 @@ export class CashShiftsService {
     cashShift.startTime = new Date();
     cashShift.initialAmount = createCashShiftDto.initialAmount;
     cashShift.status = CashShiftStatus.OPEN;
+    cashShift.shopId = shopId;
+
+    // Добавляем логирование для отладки
+    console.log('[CashShiftsService] Создание новой смены:', {
+      cashRegisterId: cashShift.cashRegisterId,
+      userId: cashShift.userId,
+      shopId: cashShift.shopId,
+      initialAmount: cashShift.initialAmount,
+      shopIdType: typeof shopId,
+    });
 
     const savedShift = await this.cashShiftRepository.save(cashShift);
+
+    // Логируем результат сохранения
+    console.log('[CashShiftsService] Смена успешно создана:', {
+      shiftId: savedShift.id,
+      shopId: savedShift.shopId,
+    });
 
     // Создаем операцию внесения начальной суммы
     if (createCashShiftDto.initialAmount > 0) {
