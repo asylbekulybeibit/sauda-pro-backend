@@ -77,6 +77,21 @@ import { ServiceService } from './services/service.service';
 import { ServiceStaffController } from './controllers/service-staff.controller';
 import { ServiceStaffService } from './services/service-staff.service';
 
+// Импорты для кассовых смен и статистики
+import { CashShift } from './entities/cash-shift.entity';
+import { CashOperation } from './entities/cash-operation.entity';
+import { CashShiftsController } from './controllers/cash-shifts.controller';
+import { CashShiftsService } from './services/cash-shifts.service';
+import { CashierStatsService } from './services/cashier-stats.service';
+import { CashierStatsController } from './controllers/cashier-stats.controller';
+
+// Новые импорты для контроллеров кассира
+import { SalesReceiptsController } from './controllers/sales-receipts.controller';
+import { ServiceReceiptsController } from './controllers/service-receipts.controller';
+import { CashOperationsController } from './controllers/cash-operations.controller';
+import { ReceiptActionsController } from './controllers/receipt-actions.controller';
+import { CashierController } from './controllers/cashier.controller';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -110,6 +125,9 @@ import { ServiceStaffService } from './services/service-staff.service';
       ServiceReceipt,
       ServiceReceiptDetail,
       ReceiptAction,
+      // Добавляем сущности для кассовых смен и операций
+      CashShift,
+      CashOperation,
     ]),
     NotificationsModule,
     ReportsModule,
@@ -136,6 +154,16 @@ import { ServiceStaffService } from './services/service-staff.service';
     VehicleController,
     ServiceController,
     ServiceStaffController,
+    // Контроллер для кассовых смен
+    CashShiftsController,
+    // Контроллер для статистики кассиров
+    CashierStatsController,
+    // Новые контроллеры для кассира
+    SalesReceiptsController,
+    ServiceReceiptsController,
+    CashOperationsController,
+    ReceiptActionsController,
+    CashierController,
   ],
   providers: [
     ManagerService,
@@ -159,6 +187,9 @@ import { ServiceStaffService } from './services/service-staff.service';
     VehicleService,
     ServiceService,
     ServiceStaffService,
+    // Сервисы для кассовых смен и статистики
+    CashShiftsService,
+    CashierStatsService,
   ],
   exports: [
     ManagerService,

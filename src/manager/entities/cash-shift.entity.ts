@@ -5,7 +5,9 @@ import {
   ManyToOne,
   OneToMany,
   CreateDateColumn,
+  JoinColumn,
 } from 'typeorm';
+import { Shop } from '../../shops/entities/shop.entity';
 import { CashRegister } from './cash-register.entity';
 import { User } from '../../users/entities/user.entity';
 import { CashOperation } from './cash-operation.entity';
@@ -21,17 +23,37 @@ export class CashShift {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'uuid' })
+  shopId: string;
+
+  @ManyToOne(() => Shop)
+  @JoinColumn({ name: 'shopId' })
+  shop: Shop;
+
   @ManyToOne(() => CashRegister, (register) => register.shifts)
+  @JoinColumn({ name: 'cashRegisterId' })
   cashRegister: CashRegister;
 
   @Column()
   cashRegisterId: string;
 
   @ManyToOne(() => User)
+  @JoinColumn({ name: 'userId' })
   user: User;
 
   @Column()
   userId: string;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'userId' })
+  openedBy: User;
+
+  @Column({ nullable: true })
+  closedById: string;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'closedById' })
+  closedBy: User;
 
   @Column({ type: 'timestamp' })
   startTime: Date;
@@ -45,12 +67,18 @@ export class CashShift {
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   finalAmount: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  currentAmount: number;
+
   @Column({
     type: 'enum',
     enum: CashShiftStatus,
     default: CashShiftStatus.OPEN,
   })
   status: CashShiftStatus;
+
+  @Column({ nullable: true, type: 'text' })
+  notes: string;
 
   @OneToMany(() => CashOperation, (operation) => operation.shift)
   operations: CashOperation[];

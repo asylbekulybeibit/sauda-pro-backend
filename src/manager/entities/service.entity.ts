@@ -13,6 +13,7 @@ import { ServiceType } from './service-type.entity';
 import { Client } from './client.entity';
 import { Vehicle } from './vehicle.entity';
 import { User } from '../../users/entities/user.entity';
+import { CashShift } from './cash-shift.entity';
 
 export enum ServiceStatus {
   PENDING = 'pending',
@@ -57,6 +58,13 @@ export class Service {
   })
   @JoinColumn({ name: 'vehicleId' })
   vehicle: Vehicle;
+
+  @Column({ nullable: true })
+  cashShiftId: string;
+
+  @ManyToOne(() => CashShift, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'cashShiftId' })
+  cashShift: CashShift;
 
   @Column({
     type: 'enum',

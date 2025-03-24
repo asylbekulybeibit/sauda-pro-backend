@@ -38,6 +38,12 @@ export class ServiceReceiptDetail {
   @JoinColumn({ name: 'staffId' })
   staff: User;
 
+  @Column({ type: 'text', nullable: true })
+  description: string;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  amount: number;
+
   @Column({ nullable: true })
   role: string;
 

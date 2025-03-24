@@ -4,16 +4,22 @@ import {
   Column,
   ManyToOne,
   CreateDateColumn,
+  JoinColumn,
 } from 'typeorm';
+import { Shop } from '../../shops/entities/shop.entity';
 import { CashRegister } from './cash-register.entity';
 import { CashShift } from './cash-shift.entity';
 import { Order } from './order.entity';
+import { User } from '../../users/entities/user.entity';
 
 export enum CashOperationType {
   SALE = 'sale',
   RETURN = 'return',
   DEPOSIT = 'deposit',
   WITHDRAWAL = 'withdrawal',
+  SERVICE = 'service',
+  TRANSFER_IN = 'transfer_in',
+  TRANSFER_OUT = 'transfer_out',
 }
 
 export enum PaymentMethodType {
@@ -27,6 +33,13 @@ export class CashOperation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ type: 'uuid' })
+  shopId: string;
+
+  @ManyToOne(() => Shop)
+  @JoinColumn({ name: 'shopId' })
+  shop: Shop;
+
   @ManyToOne(() => CashRegister, (register) => register.operations)
   cashRegister: CashRegister;
 
@@ -38,6 +51,12 @@ export class CashOperation {
 
   @Column()
   shiftId: string;
+
+  @ManyToOne(() => User, { nullable: true })
+  user: User;
+
+  @Column({ nullable: true })
+  userId: string;
 
   @ManyToOne(() => Order, { nullable: true })
   order: Order;
@@ -59,6 +78,9 @@ export class CashOperation {
     enum: PaymentMethodType,
   })
   paymentMethod: PaymentMethodType;
+
+  @Column({ nullable: true })
+  description: string;
 
   @CreateDateColumn()
   createdAt: Date;
