@@ -126,6 +126,17 @@ export class CashierController {
   }
 
   /**
+   * Получение списка всех автомобилей магазина
+   */
+  @Get('vehicles')
+  async getAllVehicles(
+    @Param('shopId') shopId: string,
+    @Req() req
+  ): Promise<Vehicle[]> {
+    return this.cashierService.getAllVehicles(shopId);
+  }
+
+  /**
    * Создание нового автомобиля для клиента (для кассира)
    */
   @Post('vehicles')

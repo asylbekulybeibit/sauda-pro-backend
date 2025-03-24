@@ -670,6 +670,23 @@ export class CashierService {
   }
 
   /**
+   * Получение всех автомобилей магазина для кассира
+   */
+  async getAllVehicles(shopId: string): Promise<Vehicle[]> {
+    // Получаем список всех автомобилей магазина
+    const vehicles = await this.vehicleRepository.find({
+      where: {
+        shopId,
+        isActive: true,
+      },
+      relations: ['client'], // Добавляем связь с клиентом, чтобы получить его данные
+      order: { make: 'ASC', model: 'ASC' },
+    });
+
+    return vehicles;
+  }
+
+  /**
    * Создание нового автомобиля (с привязкой к клиенту или без)
    */
   async createVehicle(
