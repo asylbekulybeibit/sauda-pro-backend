@@ -92,6 +92,16 @@ import { CashOperationsController } from './controllers/cash-operations.controll
 import { ReceiptActionsController } from './controllers/receipt-actions.controller';
 import { CashierController } from './controllers/cashier.controller';
 
+// Импорты недостающих сервисов для кассира
+import { SalesReceiptsService } from './services/sales-receipts.service';
+import { ServiceReceiptsService } from './services/service-receipts.service';
+import { CashOperationsService } from './services/cash-operations.service';
+import { ReceiptActionsService } from './services/receipt-actions.service';
+import { CashierService } from './services/cashier.service';
+
+// Добавляем User для CashierService
+import { User } from '../users/entities/user.entity';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -128,6 +138,8 @@ import { CashierController } from './controllers/cashier.controller';
       // Добавляем сущности для кассовых смен и операций
       CashShift,
       CashOperation,
+      // Добавляем User для CashierService
+      User,
     ]),
     NotificationsModule,
     ReportsModule,
@@ -190,6 +202,12 @@ import { CashierController } from './controllers/cashier.controller';
     // Сервисы для кассовых смен и статистики
     CashShiftsService,
     CashierStatsService,
+    // Добавляем недостающие сервисы кассира
+    SalesReceiptsService,
+    ServiceReceiptsService,
+    CashOperationsService,
+    ReceiptActionsService,
+    CashierService,
   ],
   exports: [
     ManagerService,
