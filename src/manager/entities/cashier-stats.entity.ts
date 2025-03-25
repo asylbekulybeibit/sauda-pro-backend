@@ -7,7 +7,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Shop } from '../../shops/entities/shop.entity';
+import { Warehouse } from './warehouse.entity';
 import { User } from '../../users/entities/user.entity';
 
 @Entity('cashier_stats')
@@ -16,11 +16,11 @@ export class CashierStats {
   id: string;
 
   @Column({ type: 'uuid' })
-  shopId: string;
+  warehouseId: string;
 
-  @ManyToOne(() => Shop)
-  @JoinColumn({ name: 'shopId' })
-  shop: Shop;
+  @ManyToOne(() => Warehouse)
+  @JoinColumn({ name: 'warehouseId' })
+  warehouse: Warehouse;
 
   @Column({ type: 'uuid' })
   userId: string;
@@ -35,8 +35,29 @@ export class CashierStats {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   totalSales: number;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  totalCash: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  totalCard: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  totalOnline: number;
+
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
+  totalReturns: number;
+
   @Column({ type: 'integer', default: 0 })
   totalTransactions: number;
+
+  @Column({ type: 'integer', default: 0 })
+  salesCount: number;
+
+  @Column({ type: 'integer', default: 0 })
+  returnsCount: number;
+
+  @Column({ type: 'integer', default: 0 })
+  shiftsCount: number;
 
   @Column({ type: 'integer', default: 0 })
   workMinutes: number;

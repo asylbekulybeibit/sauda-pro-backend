@@ -9,7 +9,12 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Shop } from '../../shops/entities/shop.entity';
+import { Warehouse } from './warehouse.entity';
 
+/**
+ * Clients are currently associated with the entire shop,
+ * but this entity includes warehouseId for future warehouse-specific clients.
+ */
 @Entity('clients')
 export class Client {
   @PrimaryGeneratedColumn('uuid')
@@ -21,6 +26,16 @@ export class Client {
   @ManyToOne(() => Shop, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'shopId' })
   shop: Shop;
+
+  @Column({ nullable: true })
+  warehouseId: string;
+
+  @ManyToOne(() => Warehouse, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'warehouseId' })
+  warehouse: Warehouse;
+
+  @Column({ default: false })
+  isWarehouseSpecific: boolean;
 
   @Column()
   firstName: string;

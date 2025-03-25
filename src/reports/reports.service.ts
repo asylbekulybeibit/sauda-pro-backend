@@ -18,7 +18,6 @@ import {
 } from '../manager/entities/inventory-transaction.entity';
 import { CashierStats } from '../manager/entities/cashier-stats.entity';
 import { Promotion } from '../manager/entities/promotion.entity';
-import { Shop } from '../shops/entities/shop.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
 import { RoleType } from '../auth/types/role.type';
 import { ReportGeneratorService } from './services/report-generator.service';
@@ -44,8 +43,6 @@ export class ReportsService {
     private readonly cashierStatsRepository: Repository<CashierStats>,
     @InjectRepository(Promotion)
     private readonly promotionRepository: Repository<Promotion>,
-    @InjectRepository(Shop)
-    private readonly shopRepository: Repository<Shop>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
     private readonly reportGeneratorService: ReportGeneratorService
@@ -55,7 +52,7 @@ export class ReportsService {
     userId: string,
     createReportDto: CreateReportDto
   ): Promise<Report> {
-    await this.validateAccess(userId, createReportDto.shopId);
+    await this.validateAccess(userId, createReportDto.warehouseId);
 
     const report = this.reportRepository.create({
       ...createReportDto,
@@ -75,19 +72,23 @@ export class ReportsService {
     return this.reportRepository.save(report);
   }
 
-  async findAll(userId: string, shopId: string): Promise<Report[]> {
-    await this.validateAccess(userId, shopId);
+  async findAll(userId: string, warehouseId: string): Promise<Report[]> {
+    await this.validateAccess(userId, warehouseId);
     return this.reportRepository.find({
-      where: { shopId, isActive: true },
+      where: { warehouseId, isActive: true },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async findOne(userId: string, shopId: string, id: string): Promise<Report> {
-    await this.validateAccess(userId, shopId);
+  async findOne(
+    userId: string,
+    warehouseId: string,
+    id: string
+  ): Promise<Report> {
+    await this.validateAccess(userId, warehouseId);
 
     const report = await this.reportRepository.findOne({
-      where: { id, shopId, isActive: true },
+      where: { id, warehouseId, isActive: true },
     });
 
     if (!report) {
@@ -97,11 +98,11 @@ export class ReportsService {
     return report;
   }
 
-  async delete(userId: string, shopId: string, id: string): Promise<void> {
-    await this.validateAccess(userId, shopId);
+  async delete(userId: string, warehouseId: string, id: string): Promise<void> {
+    await this.validateAccess(userId, warehouseId);
 
     const report = await this.reportRepository.findOne({
-      where: { id, shopId, isActive: true },
+      where: { id, warehouseId, isActive: true },
     });
 
     if (!report) {
@@ -112,18 +113,21 @@ export class ReportsService {
     await this.reportRepository.save(report);
   }
 
-  private async validateAccess(userId: string, shopId: string): Promise<void> {
-    const userRole = await this.userRoleRepository.findOne({
+  private async validateAccess(
+    userId: string,
+    warehouseId: string
+  ): Promise<void> {
+    // Проверяем доступ к складу
+    const hasAccess = await this.userRoleRepository.findOne({
       where: {
         userId,
-        shopId,
-        type: RoleType.MANAGER,
+        warehouse: { id: warehouseId },
         isActive: true,
       },
     });
 
-    if (!userRole) {
-      throw new ForbiddenException('Access denied');
+    if (!hasAccess) {
+      throw new ForbiddenException('У вас нет доступа к этому складу');
     }
   }
 
@@ -190,21 +194,17 @@ export class ReportsService {
   }
 
   private async generateInventoryReport(report: CreateReportDto) {
-    // Находим склад по магазину
-    const warehouses = await this.warehouseRepository.find({
-      where: { shopId: report.shopId },
-    });
-
-    const warehouseIds = warehouses.map((w) => w.id);
+    // Используем непосредственно warehouseId из отчета
+    const warehouseId = report.warehouseId;
 
     const warehouseProducts = await this.warehouseProductRepository.find({
-      where: { warehouseId: In(warehouseIds) },
+      where: { warehouseId },
       relations: ['barcode', 'barcode.category', 'warehouse'],
     });
 
     const transactions = await this.transactionRepository.find({
       where: {
-        warehouseId: In(warehouseIds),
+        warehouseId,
         createdAt: Between(report.startDate, report.endDate),
       },
       relations: ['warehouseProduct', 'warehouseProduct.barcode'],
@@ -251,7 +251,7 @@ export class ReportsService {
   private async generateStaffReport(report: CreateReportDto) {
     const stats = await this.cashierStatsRepository.find({
       where: {
-        shopId: report.shopId,
+        warehouseId: report.warehouseId,
         date: Between(report.startDate, report.endDate),
       },
       relations: ['user'],
@@ -261,7 +261,9 @@ export class ReportsService {
     stats.forEach((stat) => {
       if (!statsByUser[stat.userId]) {
         statsByUser[stat.userId] = {
-          name: stat.user.name,
+          name:
+            stat.user?.firstName + ' ' + stat.user?.lastName ||
+            'Неизвестный пользователь',
           totalSales: 0,
           totalTransactions: 0,
           averageTransactionValue: 0,
@@ -304,10 +306,10 @@ export class ReportsService {
   private async generateFinancialReport(report: CreateReportDto) {
     const transactions = await this.transactionRepository.find({
       where: {
-        shopId: report.shopId,
+        warehouseId: report.warehouseId,
         createdAt: Between(report.startDate, report.endDate),
       },
-      relations: ['product'],
+      relations: ['warehouseProduct', 'warehouseProduct.barcode'],
     });
 
     const revenue = transactions
@@ -330,7 +332,8 @@ export class ReportsService {
       details: transactions.map((t) => ({
         date: t.createdAt,
         type: t.type,
-        product: t.product.name,
+        product:
+          t.warehouseProduct?.barcode?.productName || 'Неизвестный продукт',
         quantity: t.quantity,
         price: t.price,
         total: t.quantity * t.price,
@@ -348,17 +351,17 @@ export class ReportsService {
 
   private async generateCategoriesReport(report: CreateReportDto) {
     const categories = await this.categoryRepository.find({
-      where: { shopId: report.shopId },
-      relations: ['products'],
+      where: { warehouseId: report.warehouseId },
+      relations: ['barcodes'],
     });
 
     const transactions = await this.transactionRepository.find({
       where: {
-        shopId: report.shopId,
+        warehouseId: report.warehouseId,
         type: TransactionType.SALE,
         createdAt: Between(report.startDate, report.endDate),
       },
-      relations: ['product', 'product.category'],
+      relations: ['warehouseProduct', 'warehouseProduct.barcode'],
     });
 
     const categoryStats: Record<
@@ -374,18 +377,20 @@ export class ReportsService {
     categories.forEach((category) => {
       categoryStats[category.id] = {
         name: category.name || 'Без названия',
-        productCount: category.products?.length || 0,
+        productCount: category.barcodes?.length || 0,
         totalSales: 0,
         totalQuantity: 0,
       };
     });
 
     transactions.forEach((transaction) => {
-      const categoryId = transaction.product?.categoryId;
-      if (categoryId && categoryStats[categoryId]) {
-        categoryStats[categoryId].totalSales +=
-          transaction.quantity * transaction.price;
-        categoryStats[categoryId].totalQuantity += transaction.quantity;
+      if (transaction.warehouseProduct?.barcode?.categoryId) {
+        const categoryId = transaction.warehouseProduct.barcode.categoryId;
+        if (categoryId && categoryStats[categoryId]) {
+          categoryStats[categoryId].totalSales +=
+            transaction.quantity * transaction.price;
+          categoryStats[categoryId].totalQuantity += transaction.quantity;
+        }
       }
     });
 
@@ -393,7 +398,7 @@ export class ReportsService {
       summary: {
         totalCategories: categories.length,
         totalProducts: categories.reduce(
-          (sum, c) => sum + c.products.length,
+          (sum, c) => sum + (c.barcodes?.length || 0),
           0
         ),
         topCategory: Object.values(categoryStats).reduce((top, curr) =>
@@ -416,19 +421,19 @@ export class ReportsService {
   private async generatePromotionsReport(report: CreateReportDto) {
     const promotions = await this.promotionRepository.find({
       where: {
-        shopId: report.shopId,
+        warehouseId: report.warehouseId,
         startDate: Between(report.startDate, report.endDate),
       },
-      relations: ['products'],
+      relations: ['barcodes'],
     });
 
     const transactions = await this.transactionRepository.find({
       where: {
-        shopId: report.shopId,
+        warehouseId: report.warehouseId,
         type: TransactionType.SALE,
         createdAt: Between(report.startDate, report.endDate),
       },
-      relations: ['product'],
+      relations: ['warehouseProduct', 'warehouseProduct.barcode'],
     });
 
     const promotionStats = {};
@@ -438,14 +443,16 @@ export class ReportsService {
         startDate: promotion.startDate,
         endDate: promotion.endDate,
         discount: promotion.discount,
-        productCount: promotion.products.length,
+        productCount: promotion.barcodes.length,
         totalSales: 0,
         totalQuantity: 0,
       };
 
       const promotionTransactions = transactions.filter(
         (t) =>
-          promotion.products.some((p) => p.id === t.productId) &&
+          promotion.barcodes.some(
+            (b) => b.id === t.warehouseProduct?.barcode?.id
+          ) &&
           t.createdAt >= promotion.startDate &&
           t.createdAt <= promotion.endDate
       );
@@ -484,11 +491,17 @@ export class ReportsService {
   private aggregateByProduct(transactions: InventoryTransaction[]) {
     const aggregated = {};
     transactions.forEach((t) => {
+      if (!t.warehouseProduct?.barcode?.productName) return;
+
       const key = t.warehouseProduct.barcode.productName;
       if (!aggregated[key]) {
-        aggregated[key] = 0;
+        aggregated[key] = {
+          quantity: 0,
+          sales: 0,
+        };
       }
-      aggregated[key] += t.quantity * t.price;
+      aggregated[key].quantity += t.quantity;
+      aggregated[key].sales += t.quantity * t.price;
     });
     return aggregated;
   }
@@ -496,11 +509,11 @@ export class ReportsService {
   private aggregateByDate(transactions: InventoryTransaction[]) {
     const aggregated = {};
     transactions.forEach((t) => {
-      const key = t.createdAt.toISOString().split('T')[0];
-      if (!aggregated[key]) {
-        aggregated[key] = 0;
+      const date = t.createdAt.toISOString().split('T')[0];
+      if (!aggregated[date]) {
+        aggregated[date] = 0;
       }
-      aggregated[key] += t.quantity * t.price;
+      aggregated[date] += t.quantity * t.price;
     });
     return aggregated;
   }
@@ -508,11 +521,17 @@ export class ReportsService {
   private aggregateByCategory(products: WarehouseProduct[]) {
     const aggregated = {};
     products.forEach((p) => {
-      const key = p.barcode.category?.name || 'Без категории';
-      if (!aggregated[key]) {
-        aggregated[key] = 0;
+      if (!p.barcode?.category?.name) return;
+
+      const category = p.barcode.category.name || 'Без категории';
+      if (!aggregated[category]) {
+        aggregated[category] = {
+          quantity: 0,
+          value: 0,
+        };
       }
-      aggregated[key] += p.quantity;
+      aggregated[category].quantity += p.quantity;
+      aggregated[category].value += p.quantity * p.sellingPrice;
     });
     return aggregated;
   }
@@ -520,10 +539,11 @@ export class ReportsService {
   private aggregateByTransactionType(transactions: InventoryTransaction[]) {
     const aggregated = {};
     transactions.forEach((t) => {
-      if (!aggregated[t.type]) {
-        aggregated[t.type] = 0;
+      const type = t.type;
+      if (!aggregated[type]) {
+        aggregated[type] = 0;
       }
-      aggregated[t.type] += t.quantity;
+      aggregated[type] += t.quantity;
     });
     return aggregated;
   }

@@ -23,10 +23,10 @@ class TransferItemDto {
 
 export class CreateTransferDto {
   @IsUUID()
-  fromShopId: string;
+  fromWarehouseId: string;
 
   @IsUUID()
-  toShopId: string;
+  toWarehouseId: string;
 
   @IsDateString()
   date: string;

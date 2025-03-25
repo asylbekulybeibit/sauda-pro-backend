@@ -4,10 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToMany,
 } from 'typeorm';
-import { UserRole } from '../../roles/entities/user-role.entity';
-import { Warehouse } from '../../manager/entities/warehouse.entity';
 
 @Entity('shops')
 export class Shop {
@@ -34,10 +31,4 @@ export class Shop {
 
   @UpdateDateColumn()
   updatedAt: Date;
-
-  @OneToMany(() => UserRole, (userRole) => userRole.shop)
-  userRoles: UserRole[];
-
-  @OneToMany(() => Warehouse, (warehouse) => warehouse.shop)
-  warehouses: Warehouse[];
 }

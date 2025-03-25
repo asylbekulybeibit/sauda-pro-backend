@@ -2,8 +2,6 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ManagerController } from './controllers/manager.controller';
 import { ManagerService } from './services/manager.service';
-import { ProductsController } from './controllers/products.controller';
-import { ProductsService } from './services/products.service';
 import { CategoriesController } from './controllers/categories.controller';
 import { CategoriesService } from './services/categories.service';
 import { InventoryController } from './controllers/inventory.controller';
@@ -35,7 +33,6 @@ import { CashierStats } from './entities/cashier-stats.entity';
 import { Supplier } from './entities/supplier.entity';
 import { CashRegister } from './entities/cash-register.entity';
 import { RegisterPaymentMethod } from './entities/register-payment-method.entity';
-import { Shop } from '../shops/entities/shop.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
 import { Invite } from '../invites/entities/invite.entity';
 import { LabelTemplate } from './entities/label-template.entity';
@@ -60,6 +57,7 @@ import { ServiceStaff } from './entities/service-staff.entity';
 
 // Импорты новых сущностей для чеков
 import { ReceiptAction } from './entities/receipt-action.entity';
+import { Receipt } from './entities/receipt.entity';
 
 // Импорты новых контроллеров и сервисов для услуг
 import { ServiceTypeController } from './controllers/service-type.controller';
@@ -76,26 +74,12 @@ import { ServiceStaffController } from './controllers/service-staff.controller';
 import { ServiceStaffService } from './services/service-staff.service';
 
 // Импорты для кассовых смен и статистики
-import { CashShift } from './entities/cash-shift.entity';
-import { CashOperation } from './entities/cash-operation.entity';
-import { CashShiftsController } from './controllers/cash-shifts.controller';
-import { CashShiftsService } from './services/cash-shifts.service';
-import { CashierStatsService } from './services/cashier-stats.service';
-import { CashierStatsController } from './controllers/cashier-stats.controller';
 
 // Новые импорты для контроллеров кассира
-import { SalesReceiptsController } from './controllers/sales-receipts.controller';
-import { ServiceReceiptsController } from './controllers/service-receipts.controller';
-import { CashOperationsController } from './controllers/cash-operations.controller';
 import { ReceiptActionsController } from './controllers/receipt-actions.controller';
-import { CashierController } from './controllers/cashier.controller';
 
 // Импорты недостающих сервисов для кассира
-import { SalesReceiptsService } from './services/sales-receipts.service';
-import { ServiceReceiptsService } from './services/service-receipts.service';
-import { CashOperationsService } from './services/cash-operations.service';
 import { ReceiptActionsService } from './services/receipt-actions.service';
-import { CashierService } from './services/cashier.service';
 
 // Добавляем User для CashierService
 import { User } from '../users/entities/user.entity';
@@ -107,7 +91,6 @@ import { User } from '../users/entities/user.entity';
       WarehouseProduct,
       Warehouse,
       Category,
-      Shop,
       UserRole,
       InventoryTransaction,
       Invite,
@@ -130,11 +113,9 @@ import { User } from '../users/entities/user.entity';
       Service,
       ServiceStaff,
       // Добавляем новые сущности для чеков
-
       ReceiptAction,
+      Receipt,
       // Добавляем сущности для кассовых смен и операций
-      CashShift,
-      CashOperation,
       // Добавляем User для CashierService
       User,
     ]),
@@ -143,7 +124,6 @@ import { User } from '../users/entities/user.entity';
   ],
   controllers: [
     ManagerController,
-    ProductsController,
     CategoriesController,
     InventoryController,
     StaffController,
@@ -164,19 +144,12 @@ import { User } from '../users/entities/user.entity';
     ServiceController,
     ServiceStaffController,
     // Контроллер для кассовых смен
-    CashShiftsController,
     // Контроллер для статистики кассиров
-    CashierStatsController,
     // Новые контроллеры для кассира
-    SalesReceiptsController,
-    ServiceReceiptsController,
-    CashOperationsController,
     ReceiptActionsController,
-    CashierController,
   ],
   providers: [
     ManagerService,
-    ProductsService,
     CategoriesService,
     InventoryService,
     StaffService,
@@ -197,20 +170,9 @@ import { User } from '../users/entities/user.entity';
     ServiceService,
     ServiceStaffService,
     // Сервисы для кассовых смен и статистики
-    CashShiftsService,
-    CashierStatsService,
     // Добавляем недостающие сервисы кассира
-    SalesReceiptsService,
-    ServiceReceiptsService,
-    CashOperationsService,
     ReceiptActionsService,
-    CashierService,
   ],
-  exports: [
-    ManagerService,
-    ProductsService,
-    InventoryService,
-    PurchasesService,
-  ],
+  exports: [ManagerService, InventoryService, PurchasesService],
 })
 export class ManagerModule {}

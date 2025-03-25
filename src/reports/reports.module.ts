@@ -11,7 +11,6 @@ import { Category } from '../manager/entities/category.entity';
 import { InventoryTransaction } from '../manager/entities/inventory-transaction.entity';
 import { CashierStats } from '../manager/entities/cashier-stats.entity';
 import { Promotion } from '../manager/entities/promotion.entity';
-import { Shop } from '../shops/entities/shop.entity';
 import { UserRole } from '../roles/entities/user-role.entity';
 
 @Module({
@@ -25,7 +24,6 @@ import { UserRole } from '../roles/entities/user-role.entity';
       InventoryTransaction,
       CashierStats,
       Promotion,
-      Shop,
       UserRole,
     ]),
   ],

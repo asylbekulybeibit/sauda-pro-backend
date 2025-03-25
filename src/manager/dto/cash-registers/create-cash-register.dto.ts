@@ -1,13 +1,46 @@
 import {
   IsString,
-  IsEnum,
-  IsOptional,
   IsArray,
+  IsOptional,
   ValidateNested,
+  IsBoolean,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import {
+  PaymentMethodSource,
+  PaymentMethodStatus,
+} from '../../entities/register-payment-method.entity';
 import { CashRegisterType } from '../../entities/cash-register.entity';
-import { PaymentMethodDto } from '../payment-methods/payment-method.dto';
+import { PaymentMethodType } from '../../entities/cash-operation.entity';
+
+export class PaymentMethodItemDto {
+  @IsString()
+  name: string;
+
+  @IsEnum(PaymentMethodSource)
+  source: PaymentMethodSource;
+
+  @IsEnum(PaymentMethodType)
+  @IsOptional()
+  systemType?: PaymentMethodType;
+
+  @IsString()
+  @IsOptional()
+  code?: string;
+
+  @IsString()
+  @IsOptional()
+  description?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+
+  @IsEnum(PaymentMethodStatus)
+  @IsOptional()
+  status?: PaymentMethodStatus;
+}
 
 export class CreateCashRegisterDto {
   @IsString()
@@ -22,6 +55,6 @@ export class CreateCashRegisterDto {
 
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => PaymentMethodDto)
-  paymentMethods: PaymentMethodDto[];
+  @Type(() => PaymentMethodItemDto)
+  paymentMethods: PaymentMethodItemDto[];
 }

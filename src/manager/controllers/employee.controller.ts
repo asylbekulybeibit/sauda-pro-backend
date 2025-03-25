@@ -24,58 +24,65 @@ import { UpdateEmployeeDto } from '../dto/staff/update-employee.dto';
 export class EmployeeController {
   constructor(private readonly employeeService: EmployeeService) {}
 
-  @Post('shop/:shopId')
+  @Post('warehouse/:warehouseId')
   create(
     @Body() createEmployeeDto: CreateEmployeeDto,
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ) {
-    return this.employeeService.create(createEmployeeDto, req.user.id, shopId);
+    return this.employeeService.create(
+      createEmployeeDto,
+      req.user.id,
+      warehouseId
+    );
   }
 
-  @Get('shop/:shopId')
-  findAll(@Request() req, @Param('shopId', ParseUUIDPipe) shopId: string) {
-    return this.employeeService.findAll(req.user.id, shopId);
+  @Get('warehouse/:warehouseId')
+  findAll(
+    @Request() req,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
+  ) {
+    return this.employeeService.findAll(req.user.id, warehouseId);
   }
 
-  @Get('shop/:shopId/active')
+  @Get('warehouse/:warehouseId/active')
   findAllActive(
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ) {
-    return this.employeeService.findAllActive(req.user.id, shopId);
+    return this.employeeService.findAllActive(req.user.id, warehouseId);
   }
 
-  @Get('shop/:shopId/:id')
+  @Get('warehouse/:warehouseId/:id')
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ) {
-    return this.employeeService.findOne(id, req.user.id, shopId);
+    return this.employeeService.findOne(id, req.user.id, warehouseId);
   }
 
-  @Patch('shop/:shopId/:id')
+  @Patch('warehouse/:warehouseId/:id')
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateEmployeeDto: UpdateEmployeeDto,
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ) {
     return this.employeeService.update(
       id,
       updateEmployeeDto,
       req.user.id,
-      shopId
+      warehouseId
     );
   }
 
-  @Delete('shop/:shopId/:id')
+  @Delete('warehouse/:warehouseId/:id')
   remove(
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ) {
-    return this.employeeService.remove(id, req.user.id, shopId);
+    return this.employeeService.remove(id, req.user.id, warehouseId);
   }
 }

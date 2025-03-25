@@ -4,11 +4,8 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  ManyToOne,
-  JoinColumn,
   OneToMany,
 } from 'typeorm';
-import { Shop } from '../../shops/entities/shop.entity';
 import { WarehouseProduct } from './warehouse-product.entity';
 import { CashRegister } from './cash-register.entity';
 
@@ -16,13 +13,6 @@ import { CashRegister } from './cash-register.entity';
 export class Warehouse {
   @PrimaryGeneratedColumn('uuid')
   id: string;
-
-  @Column()
-  shopId: string;
-
-  @ManyToOne(() => Shop, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'shopId' })
-  shop: Shop;
 
   @Column()
   name: string;

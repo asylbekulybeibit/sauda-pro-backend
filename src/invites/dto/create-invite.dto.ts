@@ -13,9 +13,9 @@ export class CreateInviteDto {
   role: RoleType;
 
   @IsUUID()
-  shopId: string;
+  warehouseId: string;
 
   @IsOptional()
   @IsUUID()
-  warehouseId?: string;
+  shopId?: string;
 }

@@ -8,7 +8,6 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Warehouse } from './warehouse.entity';
-import { Shop } from '../../shops/entities/shop.entity';
 
 @Entity()
 export class Supplier {
@@ -19,16 +18,9 @@ export class Supplier {
   name: string;
 
   @Column()
-  shopId: string;
-
-  @ManyToOne(() => Shop)
-  @JoinColumn({ name: 'shopId' })
-  shop: Shop;
-
-  @Column({ nullable: true })
   warehouseId: string;
 
-  @ManyToOne(() => Warehouse, { nullable: true })
+  @ManyToOne(() => Warehouse)
   @JoinColumn({ name: 'warehouseId' })
   warehouse: Warehouse;
 
@@ -37,6 +29,9 @@ export class Supplier {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ nullable: true })
+  contactName?: string;
 
   @Column({ nullable: true })
   contactPerson?: string;

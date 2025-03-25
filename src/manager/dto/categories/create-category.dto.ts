@@ -9,7 +9,7 @@ export class CreateCategoryDto {
   description?: string;
 
   @IsUUID()
-  shopId: string;
+  warehouseId: string;
 
   @IsOptional()
   @IsUUID()

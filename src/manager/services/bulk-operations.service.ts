@@ -6,8 +6,9 @@ import {
 import * as XLSX from 'xlsx';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Shop } from '../../shops/entities/shop.entity';
-import { Product } from '../entities/product.entity';
+import { Warehouse } from '../entities/warehouse.entity';
+import { WarehouseProduct } from '../entities/warehouse-product.entity';
+import { Barcode } from '../entities/barcode.entity';
 import { Category } from '../entities/category.entity';
 import {
   BulkProductOperationDto,
@@ -18,10 +19,12 @@ import {
 @Injectable()
 export class BulkOperationsService {
   constructor(
-    @InjectRepository(Shop)
-    private readonly shopRepository: Repository<Shop>,
-    @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>,
+    @InjectRepository(Warehouse)
+    private readonly warehouseRepository: Repository<Warehouse>,
+    @InjectRepository(WarehouseProduct)
+    private readonly warehouseProductRepository: Repository<WarehouseProduct>,
+    @InjectRepository(Barcode)
+    private readonly barcodeRepository: Repository<Barcode>,
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>
   ) {}
@@ -80,13 +83,15 @@ export class BulkOperationsService {
   }
 
   async processProductUpload(
-    shopId: string,
+    warehouseId: string,
     data: BulkProductOperationDto
   ): Promise<BulkOperationResultDto> {
-    // Проверяем существование магазина
-    const shop = await this.shopRepository.findOne({ where: { id: shopId } });
-    if (!shop) {
-      throw new NotFoundException(`Shop with ID ${shopId} not found`);
+    // Проверяем существование склада
+    const warehouse = await this.warehouseRepository.findOne({
+      where: { id: warehouseId },
+    });
+    if (!warehouse) {
+      throw new NotFoundException(`Warehouse with ID ${warehouseId} not found`);
     }
 
     const result: BulkOperationResultDto = {
@@ -101,59 +106,85 @@ export class BulkOperationsService {
       const product = data.products[i];
       try {
         if (data.operation === 'create') {
-          // Создаем новый товар
-          const newProduct = this.productRepository.create({
-            name: product.name,
-            sku: product.sku,
-            sellingPrice: product.price,
-            purchasePrice: product.price, // По умолчанию установим закупочную цену равной продажной
-            quantity: product.quantity,
+          // Поиск или создание категории
+          let categoryId: string | null = null;
+          if (product.category) {
+            const category = await this.categoryRepository.findOne({
+              where: { name: product.category, warehouseId: warehouseId },
+            });
+            if (category) {
+              categoryId = category.id;
+            }
+          }
+
+          // Создаем новый штрих-код
+          const barcode = this.barcodeRepository.create({
+            code: product.sku,
+            productName: product.name,
             description: product.description,
-            shopId: shopId,
+            categoryId: categoryId,
             isActive: true,
           });
 
-          // Если указана категория, попробуем найти ее по имени
-          if (product.category) {
-            const category = await this.categoryRepository.findOne({
-              where: { name: product.category, shopId: shopId },
-            });
-            if (category) {
-              newProduct.categoryId = category.id;
-            }
-          }
+          const savedBarcode = await this.barcodeRepository.save(barcode);
 
-          await this.productRepository.save(newProduct);
-        } else if (data.operation === 'update') {
-          // Обновляем существующий товар
-          const existingProduct = await this.productRepository.findOne({
-            where: {
-              sku: product.sku,
-              shopId: shopId,
-            },
+          // Создаем товар в складе
+          const warehouseProduct = this.warehouseProductRepository.create({
+            barcodeId: savedBarcode.id,
+            warehouseId: warehouseId,
+            purchasePrice: product.price,
+            sellingPrice: product.price,
+            quantity: product.quantity,
+            isActive: true,
           });
 
-          if (!existingProduct) {
+          await this.warehouseProductRepository.save(warehouseProduct);
+        } else if (data.operation === 'update') {
+          // Находим штрих-код по SKU
+          const barcode = await this.barcodeRepository.findOne({
+            where: { code: product.sku },
+          });
+
+          if (!barcode) {
             throw new Error(`Product with SKU ${product.sku} not found`);
           }
 
-          // Обновляем основные поля
-          existingProduct.name = product.name;
-          existingProduct.sellingPrice = product.price;
-          existingProduct.quantity = product.quantity;
-          existingProduct.description = product.description;
+          // Обновляем данные штрих-кода
+          barcode.productName = product.name;
+          barcode.description = product.description;
 
-          // Если указана категория, попробуем найти ее по имени
+          // Обновляем категорию если нужно
           if (product.category) {
             const category = await this.categoryRepository.findOne({
-              where: { name: product.category, shopId: shopId },
+              where: { name: product.category, warehouseId: warehouseId },
             });
             if (category) {
-              existingProduct.categoryId = category.id;
+              barcode.categoryId = category.id;
             }
           }
 
-          await this.productRepository.save(existingProduct);
+          await this.barcodeRepository.save(barcode);
+
+          // Находим товар на складе
+          const warehouseProduct =
+            await this.warehouseProductRepository.findOne({
+              where: {
+                barcodeId: barcode.id,
+                warehouseId: warehouseId,
+              },
+            });
+
+          if (!warehouseProduct) {
+            throw new Error(
+              `Warehouse product not found for SKU ${product.sku}`
+            );
+          }
+
+          // Обновляем данные товара
+          warehouseProduct.sellingPrice = product.price;
+          warehouseProduct.quantity = product.quantity;
+
+          await this.warehouseProductRepository.save(warehouseProduct);
         }
         result.processed++;
       } catch (error) {

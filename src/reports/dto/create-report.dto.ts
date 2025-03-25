@@ -77,5 +77,5 @@ export class CreateReportDto {
   filters: ReportFiltersDto;
 
   @IsUUID()
-  shopId: string;
+  warehouseId: string;
 }

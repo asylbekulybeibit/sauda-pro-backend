@@ -7,7 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, In } from 'typeorm';
 import * as PDFDocument from 'pdfkit';
 import * as bwipjs from 'bwip-js';
-import { Product } from '../entities/product.entity';
+import { WarehouseProduct } from '../entities/warehouse-product.entity';
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
 import { LabelTemplate } from '../entities/label-template.entity';
@@ -29,8 +29,8 @@ export class LabelsService {
   private readonly FONTS_PATH = path.join(process.cwd(), 'dist', 'fonts');
 
   constructor(
-    @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>,
+    @InjectRepository(WarehouseProduct)
+    private readonly warehouseProductRepository: Repository<WarehouseProduct>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
     @InjectRepository(LabelTemplate)
@@ -97,14 +97,14 @@ export class LabelsService {
 
   private async validateManagerAccess(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<void> {
     const hasAccess = await this.userRoleRepository.findOne({
-      where: { userId, shopId, type: RoleType.MANAGER, isActive: true },
+      where: { userId, warehouseId, type: RoleType.MANAGER, isActive: true },
     });
 
     if (!hasAccess) {
-      throw new BadRequestException('No access to this shop');
+      throw new BadRequestException('No access to this warehouse');
     }
   }
 
@@ -296,7 +296,7 @@ export class LabelsService {
     userId: string,
     createTemplateDto: CreateTemplateDto
   ): Promise<LabelTemplate> {
-    await this.validateManagerAccess(userId, createTemplateDto.shopId);
+    await this.validateManagerAccess(userId, createTemplateDto.warehouseId);
 
     const template = this.templateRepository.create(createTemplateDto);
     return this.templateRepository.save(template);
@@ -304,25 +304,25 @@ export class LabelsService {
 
   async findTemplates(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<LabelTemplate[]> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     return this.templateRepository.find({
-      where: { shopId, isActive: true },
+      where: { warehouseId, isActive: true },
       order: { createdAt: 'DESC' },
     });
   }
 
   async findTemplate(
     userId: string,
-    shopId: string,
+    warehouseId: string,
     id: string
   ): Promise<LabelTemplate> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     const template = await this.templateRepository.findOne({
-      where: { id, shopId, isActive: true },
+      where: { id, warehouseId, isActive: true },
     });
 
     if (!template) {
@@ -338,11 +338,11 @@ export class LabelsService {
     updateTemplateDto: Partial<LabelTemplate>
   ): Promise<LabelTemplate> {
     // Проверяем доступ менеджера
-    await this.validateManagerAccess(userId, updateTemplateDto.shopId);
+    await this.validateManagerAccess(userId, updateTemplateDto.warehouseId);
 
     // Находим существующий шаблон
     const template = await this.templateRepository.findOne({
-      where: { id, shopId: updateTemplateDto.shopId, isActive: true },
+      where: { id, warehouseId: updateTemplateDto.warehouseId, isActive: true },
     });
 
     if (!template) {
@@ -358,12 +358,12 @@ export class LabelsService {
 
   async deleteTemplate(
     userId: string,
-    shopId: string,
+    warehouseId: string,
     id: string
   ): Promise<void> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
-    const template = await this.findTemplate(userId, shopId, id);
+    const template = await this.findTemplate(userId, warehouseId, id);
     template.isActive = false;
     await this.templateRepository.save(template);
   }
@@ -469,19 +469,19 @@ export class LabelsService {
     });
   }
 
-  private replaceVariables(text: string, product: Product): string {
+  private replaceVariables(text: string, product: WarehouseProduct): string {
     if (!text) return '';
 
     return text
-      .replace('{{name}}', product.name || '')
+      .replace('{{name}}', product.barcode?.productName || '')
       .replace('{{price}}', (product.sellingPrice || 0).toString())
-      .replace('{{barcodes[0]}}', product.barcodes?.[0] || '')
-      .replace('{{category}}', product.category?.name || '')
-      .replace('{{description}}', product.description || '');
+      .replace('{{barcodes[0]}}', product.barcode?.code || '')
+      .replace('{{category}}', product.barcode?.category?.name || '')
+      .replace('{{description}}', product.barcode?.description || '');
   }
 
   private async generatePDF(
-    product: Product,
+    product: WarehouseProduct,
     template: LabelTemplate
   ): Promise<Buffer> {
     return new Promise(async (resolve) => {
@@ -521,10 +521,10 @@ export class LabelsService {
               );
             break;
           case 'barcode':
-            if (product.barcodes?.[0]) {
+            if (product.barcode?.code) {
               const barcodeBuffer = await this.generateBarcode(
                 'ean13',
-                product.barcodes[0],
+                product.barcode.code,
                 element.style,
                 template.template.width
               );
@@ -549,13 +549,13 @@ export class LabelsService {
 
   async generateBatchLabels(
     userId: string,
-    shopId: string,
+    warehouseId: string,
     generateLabelsDto: GenerateLabelsDto
   ): Promise<Buffer> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     const template = await this.templateRepository.findOne({
-      where: { id: generateLabelsDto.templateId, shopId },
+      where: { id: generateLabelsDto.templateId, warehouseId },
     });
 
     if (!template) {
@@ -563,13 +563,13 @@ export class LabelsService {
     }
 
     const productIds = generateLabelsDto.products.map((p) => p.productId);
-    const products = await this.productRepository.find({
+    const products = await this.warehouseProductRepository.find({
       where: {
         id: In(productIds),
-        shopId,
+        warehouseId,
         isActive: true,
       },
-      relations: ['category'],
+      relations: ['barcode', 'barcode.category'],
     });
 
     if (products.length !== generateLabelsDto.products.length) {
@@ -654,11 +654,11 @@ export class LabelsService {
                   );
                 break;
               case 'barcode':
-                if (product.barcodes?.[0]) {
+                if (product.barcode?.code) {
                   try {
                     const barcodeBuffer = await this.generateBarcode(
                       'ean13',
-                      product.barcodes[0],
+                      product.barcode.code,
                       element.style,
                       template.template.width
                     );
@@ -708,18 +708,20 @@ export class LabelsService {
 
   async findProductByBarcode(
     userId: string,
-    shopId: string,
+    warehouseId: string,
     barcode: string
-  ): Promise<Product> {
-    await this.validateManagerAccess(userId, shopId);
+  ): Promise<WarehouseProduct> {
+    await this.validateManagerAccess(userId, warehouseId);
 
-    const product = await this.productRepository.findOne({
+    const product = await this.warehouseProductRepository.findOne({
       where: {
-        shopId,
+        warehouseId,
         isActive: true,
-        barcodes: Like(`%${barcode}%`),
+        barcode: {
+          code: Like(`%${barcode}%`),
+        },
       },
-      relations: ['category'],
+      relations: ['barcode', 'barcode.category'],
     });
 
     if (!product) {
@@ -731,18 +733,18 @@ export class LabelsService {
 
   async generatePreview(
     userId: string,
-    shopId: string,
+    warehouseId: string,
     productId: string,
     templateId: string
   ): Promise<Buffer> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     const [product, template] = await Promise.all([
-      this.productRepository.findOne({
-        where: { id: productId, shopId, isActive: true },
-        relations: ['category'],
+      this.warehouseProductRepository.findOne({
+        where: { id: productId, warehouseId, isActive: true },
+        relations: ['barcode', 'barcode.category'],
       }),
-      this.findTemplate(userId, shopId, templateId),
+      this.findTemplate(userId, warehouseId, templateId),
     ]);
 
     if (!product) {

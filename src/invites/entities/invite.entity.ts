@@ -10,10 +10,10 @@ import {
   BeforeUpdate,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { Shop } from '../../shops/entities/shop.entity';
 import { RoleType } from '../../auth/types/role.type';
 import { normalizePhoneNumber } from '../../common/utils/phone.util';
 import { Warehouse } from '../../manager/entities/warehouse.entity';
+import { Shop } from '../../shops/entities/shop.entity';
 
 export enum InviteStatus {
   PENDING = 'pending',
@@ -76,18 +76,18 @@ export class Invite {
   @Column({ nullable: true })
   invitedUserId: string;
 
-  @ManyToOne(() => Shop)
+  @ManyToOne(() => Shop, { nullable: true })
   @JoinColumn({ name: 'shopId' })
   shop: Shop;
 
-  @Column()
+  @Column({ nullable: true })
   shopId: string;
 
-  @ManyToOne(() => Warehouse, { nullable: true })
+  @ManyToOne(() => Warehouse)
   @JoinColumn({ name: 'warehouseId' })
   warehouse: Warehouse;
 
-  @Column({ nullable: true })
+  @Column()
   warehouseId: string;
 
   @BeforeInsert()

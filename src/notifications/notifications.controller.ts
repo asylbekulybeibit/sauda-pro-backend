@@ -19,50 +19,50 @@ import { Notification } from './entities/notification.entity';
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
-  @Get('shop/:shopId')
+  @Get('warehouse/:warehouseId')
   async findAll(
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ): Promise<Notification[]> {
-    // Проверяем, что пользователь имеет доступ к магазину
-    if (!req.user.shops.includes(shopId)) {
-      throw new ForbiddenException('No access to this shop');
+    // Проверяем, что пользователь имеет доступ к складу
+    if (!req.user.warehouses.includes(warehouseId)) {
+      throw new ForbiddenException('No access to this warehouse');
     }
-    return this.notificationsService.findAll(shopId);
+    return this.notificationsService.findAll(warehouseId);
   }
 
-  @Get('shop/:shopId/unread')
+  @Get('warehouse/:warehouseId/unread')
   async getUnreadNotifications(
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ): Promise<Notification[]> {
-    if (!req.user.shops.includes(shopId)) {
-      throw new ForbiddenException('No access to this shop');
+    if (!req.user.warehouses.includes(warehouseId)) {
+      throw new ForbiddenException('No access to this warehouse');
     }
-    return this.notificationsService.getUnreadNotifications(shopId);
+    return this.notificationsService.getUnreadNotifications(warehouseId);
   }
 
   @Post(':id/read')
   async markAsRead(
     @Request() req,
     @Param('id', ParseUUIDPipe) id: string,
-    @Param('shopId', ParseUUIDPipe) shopId: string
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ): Promise<void> {
-    if (!req.user.shops.includes(shopId)) {
-      throw new ForbiddenException('No access to this shop');
+    if (!req.user.warehouses.includes(warehouseId)) {
+      throw new ForbiddenException('No access to this warehouse');
     }
-    await this.notificationsService.markAsRead(id, shopId);
+    await this.notificationsService.markAsRead(id, warehouseId);
   }
 
   @Post(':id/archive')
   async archive(
     @Request() req,
     @Param('id', ParseUUIDPipe) id: string,
-    @Param('shopId', ParseUUIDPipe) shopId: string
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ): Promise<void> {
-    if (!req.user.shops.includes(shopId)) {
-      throw new ForbiddenException('No access to this shop');
+    if (!req.user.warehouses.includes(warehouseId)) {
+      throw new ForbiddenException('No access to this warehouse');
     }
-    await this.notificationsService.archive(id, shopId);
+    await this.notificationsService.archive(id, warehouseId);
   }
 }

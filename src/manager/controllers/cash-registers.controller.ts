@@ -18,7 +18,7 @@ import { CreateCashRegisterDto } from '../dto/cash-registers/create-cash-registe
 import { CashRegister } from '../entities/cash-register.entity';
 import { PaymentMethodDto } from '../dto/payment-methods/payment-method.dto';
 
-@Controller('manager/:shopId/cash-registers')
+@Controller('manager/:warehouseId/cash-registers')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(RoleType.MANAGER)
 export class CashRegistersController {
@@ -27,51 +27,51 @@ export class CashRegistersController {
   @Post()
   create(
     @Body() createCashRegisterDto: CreateCashRegisterDto,
-    @Param('shopId') shopId: string
+    @Param('warehouseId') warehouseId: string
   ): Promise<CashRegister> {
-    return this.cashRegistersService.create(createCashRegisterDto, shopId);
+    return this.cashRegistersService.create(createCashRegisterDto, warehouseId);
   }
 
   @Get()
-  findAll(@Param('shopId') shopId: string): Promise<CashRegister[]> {
-    return this.cashRegistersService.findAllByShop(shopId);
+  findAll(@Param('warehouseId') warehouseId: string): Promise<CashRegister[]> {
+    return this.cashRegistersService.findAllByWarehouse(warehouseId);
   }
 
   @Get(':id')
   findOne(
     @Param('id') id: string,
-    @Param('shopId') shopId: string
+    @Param('warehouseId') warehouseId: string
   ): Promise<CashRegister> {
-    return this.cashRegistersService.findOne(id, shopId);
+    return this.cashRegistersService.findOne(id, warehouseId);
   }
 
   @Put(':id/status')
   updateStatus(
     @Param('id') id: string,
     @Body('status') status: string,
-    @Param('shopId') shopId: string
+    @Param('warehouseId') warehouseId: string
   ): Promise<CashRegister> {
-    return this.cashRegistersService.updateStatus(id, status, shopId);
+    return this.cashRegistersService.updateStatus(id, status, warehouseId);
   }
 
   @Delete(':id')
   remove(
     @Param('id') id: string,
-    @Param('shopId') shopId: string
+    @Param('warehouseId') warehouseId: string
   ): Promise<void> {
-    return this.cashRegistersService.remove(id, shopId);
+    return this.cashRegistersService.remove(id, warehouseId);
   }
 
   @Put(':id/payment-methods')
   updatePaymentMethods(
     @Param('id') id: string,
     @Body('paymentMethods') paymentMethods: PaymentMethodDto[],
-    @Param('shopId') shopId: string
+    @Param('warehouseId') warehouseId: string
   ): Promise<CashRegister> {
     return this.cashRegistersService.updatePaymentMethods(
       id,
       paymentMethods,
-      shopId
+      warehouseId
     );
   }
 }

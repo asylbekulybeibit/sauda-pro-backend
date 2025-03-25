@@ -42,12 +42,7 @@ export class NotificationsService {
     const savedNotification =
       await this.notificationRepository.save(notification);
 
-    // Эмитим событие в комнату магазина
-    this.server
-      ?.to(`shop:${createNotificationDto.shopId}`)
-      .emit('notification', savedNotification);
-
-    // Если указан склад, эмитим событие ещё и в комнату склада
+    // Эмитим событие в комнату склада
     if (createNotificationDto.warehouseId) {
       this.server
         ?.to(`warehouse:${createNotificationDto.warehouseId}`)
@@ -67,7 +62,6 @@ export class NotificationsService {
         warehouseProductId: warehouseProduct.id,
         quantity: warehouseProduct.quantity,
       },
-      shopId: warehouseProduct.warehouse.shopId,
       warehouseId: warehouseProduct.warehouseId,
     });
   }
@@ -78,7 +72,7 @@ export class NotificationsService {
   ): Promise<void> {
     const warehouseProduct = await this.warehouseProductRepository.findOne({
       where: { id: transaction.warehouseProductId },
-      relations: ['barcode', 'warehouse'],
+      relations: ['barcode', 'barcode.category', 'warehouse'],
     });
 
     if (!warehouseProduct) return;
@@ -101,17 +95,12 @@ export class NotificationsService {
         fromWarehouseId: transaction.warehouseId,
         toWarehouseId: transaction.metadata?.targetWarehouseId,
       },
-      shopId: warehouseProduct.warehouse.shopId,
       warehouseId: transaction.warehouseId,
     });
   }
 
-  async findAll(shopId: string, warehouseId?: string): Promise<Notification[]> {
-    const whereCondition: any = { shopId };
-
-    if (warehouseId) {
-      whereCondition.warehouseId = warehouseId;
-    }
+  async findAll(warehouseId: string): Promise<Notification[]> {
+    const whereCondition: any = { warehouseId };
 
     return this.notificationRepository.find({
       where: whereCondition,
@@ -119,32 +108,16 @@ export class NotificationsService {
     });
   }
 
-  async markAsRead(
-    id: string,
-    shopId: string,
-    warehouseId?: string
-  ): Promise<void> {
-    const whereCondition: any = { id, shopId };
-
-    if (warehouseId) {
-      whereCondition.warehouseId = warehouseId;
-    }
+  async markAsRead(id: string, warehouseId: string): Promise<void> {
+    const whereCondition: any = { id, warehouseId };
 
     await this.notificationRepository.update(whereCondition, {
       status: NotificationStatus.READ,
     });
   }
 
-  async archive(
-    id: string,
-    shopId: string,
-    warehouseId?: string
-  ): Promise<void> {
-    const whereCondition: any = { id, shopId };
-
-    if (warehouseId) {
-      whereCondition.warehouseId = warehouseId;
-    }
+  async archive(id: string, warehouseId: string): Promise<void> {
+    const whereCondition: any = { id, warehouseId };
 
     // Архивацию пока заменим на отметку как прочитанное
     await this.notificationRepository.update(whereCondition, {
@@ -152,18 +125,11 @@ export class NotificationsService {
     });
   }
 
-  async getUnreadNotifications(
-    shopId: string,
-    warehouseId?: string
-  ): Promise<Notification[]> {
+  async getUnreadNotifications(warehouseId: string): Promise<Notification[]> {
     const whereCondition: any = {
-      shopId,
+      warehouseId,
       status: NotificationStatus.UNREAD,
     };
-
-    if (warehouseId) {
-      whereCondition.warehouseId = warehouseId;
-    }
 
     return this.notificationRepository.find({
       where: whereCondition,
@@ -172,10 +138,9 @@ export class NotificationsService {
   }
 
   async createLowStockNotification(
-    shopId: string,
+    warehouseId: string,
     productName: string,
-    currentStock: number,
-    warehouseId?: string
+    currentStock: number
   ) {
     return await this.create({
       type: NotificationType.SYSTEM,
@@ -186,59 +151,54 @@ export class NotificationsService {
         productId: productName,
         currentQuantity: currentStock,
       },
-      shopId,
       warehouseId,
     });
   }
 
   async createTransferInitiatedNotification(
-    shopId: string,
+    warehouseId: string,
     transferId: string,
     productName: string,
     quantity: number,
-    targetShopName: string,
-    warehouseId?: string,
+    targetWarehouseName: string,
     targetWarehouseId?: string
   ) {
     return await this.create({
       type: NotificationType.SYSTEM,
       title: 'Начато перемещение товара',
-      message: `Начато перемещение ${quantity} шт. товара "${productName}" в магазин ${targetShopName}`,
+      message: `Начато перемещение ${quantity} шт. товара "${productName}" в склад ${targetWarehouseName}`,
       priority: NotificationPriority.MEDIUM,
       metadata: {
         transferId,
         productId: productName,
         quantity,
-        targetShopId: targetShopName,
+        targetWarehouseName,
         targetWarehouseId,
       },
-      shopId,
       warehouseId,
     });
   }
 
   async createTransferCompletedNotification(
-    shopId: string,
+    warehouseId: string,
     transferId: string,
     productName: string,
     quantity: number,
-    sourceShopName: string,
-    warehouseId?: string,
+    sourceWarehouseName: string,
     sourceWarehouseId?: string
   ) {
     return await this.create({
       type: NotificationType.SYSTEM,
       title: 'Завершено перемещение товара',
-      message: `Получено ${quantity} шт. товара "${productName}" из магазина ${sourceShopName}`,
+      message: `Получено ${quantity} шт. товара "${productName}" из склада ${sourceWarehouseName}`,
       priority: NotificationPriority.MEDIUM,
       metadata: {
         transferId,
         productId: productName,
         quantity,
-        sourceShopId: sourceShopName,
+        sourceWarehouseName,
         sourceWarehouseId,
       },
-      shopId,
       warehouseId,
     });
   }
@@ -248,20 +208,20 @@ export class NotificationsService {
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(0, 0, 0, 0);
 
-    if (promotion.endDate.getTime() === tomorrow.getTime()) {
-      await this.create({
-        type: NotificationType.SYSTEM,
-        title: 'Скоро завершится акция',
-        message: `Акция "${promotion.name}" завершится завтра`,
-        priority: NotificationPriority.MEDIUM,
-        metadata: {
-          promotionId: promotion.id,
-          endDate: promotion.endDate,
-        },
-        shopId: promotion.shopId,
-        warehouseId: promotion.warehouseId,
-      });
-    }
+    if (promotion.endDate >= tomorrow) return;
+
+    await this.create({
+      type: NotificationType.SYSTEM,
+      title: 'Акция заканчивается',
+      message: `Акция "${promotion.name}" закончится завтра`,
+      priority: NotificationPriority.MEDIUM,
+      metadata: {
+        promotionId: promotion.id,
+        promotionName: promotion.name,
+        endDate: promotion.endDate,
+      },
+      warehouseId: promotion.warehouseId,
+    });
   }
 
   async deleteOldNotifications(): Promise<void> {

@@ -35,5 +35,5 @@ export class CreateTemplateDto {
   metadata?: Record<string, any>;
 
   @IsUUID()
-  shopId: string;
+  warehouseId: string;
 }

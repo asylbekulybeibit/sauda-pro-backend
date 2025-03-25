@@ -21,51 +21,48 @@ export class StaffService {
     private readonly inviteRepository: Repository<Invite>
   ) {}
 
-  private async validateManagerAccess(userId: string, shopId: string) {
+  private async validateManagerAccess(userId: string, warehouseId: string) {
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
-        shopId,
+        warehouseId,
         type: RoleType.MANAGER,
         isActive: true,
       },
-      relations: ['shop'],
+      relations: ['warehouse'],
     });
 
     if (!managerRole) {
-      throw new ForbiddenException(
-        'У вас нет прав менеджера для этого магазина'
-      );
+      throw new ForbiddenException('У вас нет прав менеджера для этого склада');
     }
 
     return managerRole;
   }
 
-  async getStaff(userId: string, shopId: string) {
-    await this.validateManagerAccess(userId, shopId);
+  async getStaff(userId: string, warehouseId: string) {
+    await this.validateManagerAccess(userId, warehouseId);
 
     // Получаем все роли сотрудников (активные и неактивные)
     return this.userRoleRepository
       .createQueryBuilder('role')
       .leftJoinAndSelect('role.user', 'user')
-      .leftJoinAndSelect('role.shop', 'shop')
+      .leftJoinAndSelect('role.warehouse', 'warehouse')
       .select([
         'role.id',
         'role.type',
         'role.isActive',
         'role.createdAt',
         'role.deactivatedAt',
-        'role.shopId',
+        'role.warehouseId',
         'user.id',
         'user.firstName',
         'user.lastName',
         'user.phone',
-        'shop.id',
-        'shop.name',
-        'shop.type',
-        'shop.address',
+        'warehouse.id',
+        'warehouse.name',
+        'warehouse.address',
       ])
-      .where('shop.id = :shopId', { shopId })
+      .where('warehouse.id = :warehouseId', { warehouseId })
       .andWhere('role.type IN (:...types)', {
         types: [RoleType.OWNER, RoleType.MANAGER, RoleType.CASHIER],
       })
@@ -77,14 +74,14 @@ export class StaffService {
   async createInvite(
     createStaffInviteDto: CreateStaffInviteDto,
     userId: string,
-    shopId: string
+    warehouseId: string
   ) {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     const existingInvite = await this.inviteRepository.findOne({
       where: {
         phone: createStaffInviteDto.phone,
-        shopId,
+        warehouseId,
         status: InviteStatus.PENDING,
       },
     });
@@ -99,7 +96,7 @@ export class StaffService {
       .createQueryBuilder('role')
       .innerJoin('role.user', 'user')
       .where('user.phone = :phone', { phone: createStaffInviteDto.phone })
-      .andWhere('role.shopId = :shopId', { shopId })
+      .andWhere('role.warehouseId = :warehouseId', { warehouseId })
       .andWhere('role.type = :roleType', {
         roleType: createStaffInviteDto.role,
       })
@@ -108,13 +105,13 @@ export class StaffService {
 
     if (existingRole) {
       throw new ForbiddenException(
-        'Этот номер телефона уже зарегистрирован как кассир в вашем магазине'
+        'Этот номер телефона уже зарегистрирован как кассир в вашем складе'
       );
     }
 
     const invite = this.inviteRepository.create({
       ...createStaffInviteDto,
-      shopId,
+      warehouseId,
       createdById: userId,
       status: InviteStatus.PENDING,
     });
@@ -122,23 +119,23 @@ export class StaffService {
     return this.inviteRepository.save(invite);
   }
 
-  async getInvites(userId: string, shopId: string) {
-    await this.validateManagerAccess(userId, shopId);
+  async getInvites(userId: string, warehouseId: string) {
+    await this.validateManagerAccess(userId, warehouseId);
 
     return this.inviteRepository.find({
-      where: { shopId },
+      where: { warehouseId },
       relations: ['invitedUser', 'createdBy'],
       order: { createdAt: 'DESC' },
     });
   }
 
-  async deactivateStaff(staffId: string, userId: string, shopId: string) {
-    await this.validateManagerAccess(userId, shopId);
+  async deactivateStaff(staffId: string, userId: string, warehouseId: string) {
+    await this.validateManagerAccess(userId, warehouseId);
 
     const staffRole = await this.userRoleRepository.findOne({
       where: {
         id: staffId,
-        shopId,
+        warehouseId,
         isActive: true,
       },
       relations: ['user'],
@@ -160,12 +157,12 @@ export class StaffService {
 
   async getInviteStats(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<InviteStatsDto> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     const invites = await this.inviteRepository.find({
-      where: { shopId },
+      where: { warehouseId },
       relations: ['invitedUser'],
     });
 
@@ -229,12 +226,12 @@ export class StaffService {
   async cancelInvite(
     inviteId: string,
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<Invite> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     const invite = await this.inviteRepository.findOne({
-      where: { id: inviteId, shopId },
+      where: { id: inviteId, warehouseId },
     });
 
     if (!invite) {
@@ -242,8 +239,8 @@ export class StaffService {
     }
 
     if (invite.status !== InviteStatus.PENDING) {
-      throw new BadRequestException(
-        'Можно отменить только активные приглашения'
+      throw new ForbiddenException(
+        'Можно отменить только ожидающие приглашения'
       );
     }
 
@@ -256,12 +253,12 @@ export class StaffService {
   async resendInvite(
     inviteId: string,
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<Invite> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     const invite = await this.inviteRepository.findOne({
-      where: { id: inviteId, shopId },
+      where: { id: inviteId, warehouseId },
     });
 
     if (!invite) {
@@ -269,28 +266,25 @@ export class StaffService {
     }
 
     if (invite.status !== InviteStatus.PENDING) {
-      throw new BadRequestException(
-        'Можно повторно отправить только активные приглашения'
+      throw new ForbiddenException(
+        'Можно повторно отправить только ожидающие приглашения'
       );
     }
 
-    // Обновляем время создания и сбрасываем OTP
+    // Обновляем время создания
     invite.createdAt = new Date();
-    invite.otp = null;
-    invite.otpExpiresAt = null;
 
-    const savedInvite = await this.inviteRepository.save(invite);
-
-    // TODO: Добавить отправку уведомления через NotificationsService
-
-    return savedInvite;
+    return this.inviteRepository.save(invite);
   }
 
-  async getInviteHistory(userId: string, shopId: string): Promise<Invite[]> {
-    await this.validateManagerAccess(userId, shopId);
+  async getInviteHistory(
+    userId: string,
+    warehouseId: string
+  ): Promise<Invite[]> {
+    await this.validateManagerAccess(userId, warehouseId);
 
     return this.inviteRepository.find({
-      where: { shopId },
+      where: { warehouseId },
       relations: ['invitedUser', 'createdBy'],
       order: { createdAt: 'DESC' },
     });

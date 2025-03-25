@@ -15,10 +15,10 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { RoleType } from '../../auth/types/role.type';
 import { SupplierProductsService } from '../services/supplier-products.service';
-import { Product } from '../entities/product.entity';
+import { Barcode } from '../entities/barcode.entity';
 import { SupplierProduct } from '../entities/supplier-product.entity';
 
-@Controller('manager/suppliers')
+@Controller('manager/:warehouseId/suppliers')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(RoleType.MANAGER)
 export class SupplierProductsController {
@@ -30,44 +30,44 @@ export class SupplierProductsController {
   getSupplierProducts(
     @Request() req,
     @Param('supplierId', ParseUUIDPipe) supplierId: string,
-    @Query('shopId', ParseUUIDPipe) shopId: string
-  ): Promise<Product[]> {
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
+  ): Promise<any[]> {
     return this.supplierProductsService.getSupplierProducts(
       req.user.id,
       supplierId,
-      shopId
+      warehouseId
     );
   }
 
-  @Post(':supplierId/products/:productId')
+  @Post(':supplierId/products/:barcodeId')
   addProductToSupplier(
     @Request() req,
     @Param('supplierId', ParseUUIDPipe) supplierId: string,
-    @Param('productId', ParseUUIDPipe) productId: string,
-    @Query('shopId', ParseUUIDPipe) shopId: string,
+    @Param('barcodeId', ParseUUIDPipe) barcodeId: string,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Body() data: { price: number; minimumOrder?: number }
   ): Promise<SupplierProduct> {
     return this.supplierProductsService.addProductToSupplier(
       req.user.id,
       supplierId,
-      productId,
-      shopId,
+      barcodeId,
+      warehouseId,
       data
     );
   }
 
-  @Delete(':supplierId/products/:productId')
+  @Delete(':supplierId/products/:barcodeId')
   removeProductFromSupplier(
     @Request() req,
     @Param('supplierId', ParseUUIDPipe) supplierId: string,
-    @Param('productId', ParseUUIDPipe) productId: string,
-    @Query('shopId', ParseUUIDPipe) shopId: string
+    @Param('barcodeId', ParseUUIDPipe) barcodeId: string,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ): Promise<void> {
     return this.supplierProductsService.removeProductFromSupplier(
       req.user.id,
       supplierId,
-      productId,
-      shopId
+      barcodeId,
+      warehouseId
     );
   }
 }

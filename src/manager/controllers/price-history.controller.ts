@@ -39,34 +39,37 @@ export class PriceHistoryController {
     return this.priceHistoryService.findByProduct(req.user.id, productId);
   }
 
-  @Get('shop/:shopId')
-  findByShop(
+  @Get('warehouse/:warehouseId')
+  findByWarehouse(
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ): Promise<PriceHistory[]> {
-    console.log('[PriceHistoryController] findByShop called with params:', {
-      userId: req.user.id,
-      shopId,
-    });
-    return this.priceHistoryService.findByShop(req.user.id, shopId);
+    console.log(
+      '[PriceHistoryController] findByWarehouse called with params:',
+      {
+        userId: req.user.id,
+        warehouseId,
+      }
+    );
+    return this.priceHistoryService.findByWarehouse(req.user.id, warehouseId);
   }
 
-  @Get('report/:shopId')
+  @Get('report/:warehouseId')
   getReport(
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string
   ): Promise<PriceHistory[]> {
     console.log('[PriceHistoryController] getReport called with params:', {
       userId: req.user.id,
-      shopId,
+      warehouseId,
       startDate,
       endDate,
     });
-    return this.priceHistoryService.findByShopAndDateRange(
+    return this.priceHistoryService.findByWarehouseAndDateRange(
       req.user.id,
-      shopId,
+      warehouseId,
       startDate,
       endDate
     );

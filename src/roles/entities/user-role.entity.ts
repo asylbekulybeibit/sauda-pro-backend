@@ -8,9 +8,9 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
-import { Shop } from '../../shops/entities/shop.entity';
 import { RoleType } from '../../auth/types/role.type';
 import { Warehouse } from '../../manager/entities/warehouse.entity';
+import { Shop } from '../../shops/entities/shop.entity';
 
 @Entity('user_roles')
 export class UserRole {
@@ -21,10 +21,10 @@ export class UserRole {
   userId: string;
 
   @Column('uuid')
-  shopId: string;
+  warehouseId: string;
 
   @Column('uuid', { nullable: true })
-  warehouseId: string;
+  shopId: string;
 
   @Column({
     type: 'enum',
@@ -48,11 +48,11 @@ export class UserRole {
   @JoinColumn({ name: 'userId' })
   user: User;
 
-  @ManyToOne(() => Shop, (shop) => shop.userRoles)
-  @JoinColumn({ name: 'shopId' })
-  shop: Shop;
-
-  @ManyToOne(() => Warehouse, { nullable: true })
+  @ManyToOne(() => Warehouse)
   @JoinColumn({ name: 'warehouseId' })
   warehouse: Warehouse;
+
+  @ManyToOne(() => Shop)
+  @JoinColumn({ name: 'shopId' })
+  shop: Shop;
 }

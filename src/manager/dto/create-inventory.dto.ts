@@ -11,7 +11,7 @@ import { Type } from 'class-transformer';
 
 export class InventoryItemDto {
   @IsUUID()
-  productId: string;
+  warehouseProductId: string;
 
   @IsNumber()
   currentQuantity: number;
@@ -29,7 +29,7 @@ export class InventoryItemDto {
 
 export class CreateInventoryDto {
   @IsString()
-  shopId: string;
+  warehouseId: string;
 
   @Type(() => Date)
   @IsDate()

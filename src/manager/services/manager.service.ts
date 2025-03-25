@@ -5,26 +5,27 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Shop } from '../../shops/entities/shop.entity';
+import { Warehouse } from '../entities/warehouse.entity';
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
 
 @Injectable()
 export class ManagerService {
   constructor(
-    @InjectRepository(Shop)
-    private readonly shopRepository: Repository<Shop>,
+    @InjectRepository(Warehouse)
+    private readonly warehouseRepository: Repository<Warehouse>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>
   ) {}
 
   private async validateManagerAccess(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<void> {
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
+        warehouseId,
         type: RoleType.MANAGER,
         isActive: true,
       },
@@ -35,29 +36,29 @@ export class ManagerService {
     }
   }
 
-  async getShop(shopId: string, userId: string): Promise<Shop> {
-    await this.validateManagerAccess(userId, shopId);
+  async getWarehouse(warehouseId: string, userId: string): Promise<Warehouse> {
+    await this.validateManagerAccess(userId, warehouseId);
 
-    const shop = await this.shopRepository.findOne({
-      where: { id: shopId },
+    const warehouse = await this.warehouseRepository.findOne({
+      where: { id: warehouseId },
     });
 
-    if (!shop) {
-      throw new NotFoundException('Магазин не найден');
+    if (!warehouse) {
+      throw new NotFoundException('Склад не найден');
     }
 
-    return shop;
+    return warehouse;
   }
 
   async getDashboard(userId: string) {
-    // Получаем магазин, где пользователь является менеджером
+    // Получаем склад, где пользователь является менеджером
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId: userId,
         type: RoleType.MANAGER,
         isActive: true,
       },
-      relations: ['shop'],
+      relations: ['warehouse'],
     });
 
     if (!managerRole) {
@@ -66,7 +67,7 @@ export class ManagerService {
 
     // Базовая информация для дашборда
     return {
-      shop: managerRole.shop,
+      warehouse: managerRole.warehouse,
       stats: {
         // TODO: Добавить статистику
         products: {

@@ -41,23 +41,25 @@ export class NotificationsGateway
       }
 
       const decoded = this.jwtService.verify(token);
-      const { sub: userId, shopId } = decoded;
+      const { sub: userId, warehouseId } = decoded;
 
-      if (!userId || !shopId) {
+      if (!userId || !warehouseId) {
         this.disconnect(client);
         return;
       }
 
       client.data.userId = userId;
-      client.data.shopId = shopId;
+      client.data.warehouseId = warehouseId;
 
-      if (!this.connectedClients.has(shopId)) {
-        this.connectedClients.set(shopId, new Set());
+      if (!this.connectedClients.has(warehouseId)) {
+        this.connectedClients.set(warehouseId, new Set());
       }
-      this.connectedClients.get(shopId).add(client.id);
+      this.connectedClients.get(warehouseId).add(client.id);
 
-      await client.join(`shop:${shopId}`);
-      this.logger.log(`Client connected: ${client.id} for shop: ${shopId}`);
+      await client.join(`warehouse:${warehouseId}`);
+      this.logger.log(
+        `Client connected: ${client.id} for warehouse: ${warehouseId}`
+      );
     } catch (error) {
       this.logger.error(`Connection error: ${error.message}`);
       this.disconnect(client);
@@ -65,13 +67,13 @@ export class NotificationsGateway
   }
 
   handleDisconnect(client: Socket) {
-    const { shopId } = client.data;
-    if (shopId) {
-      const shopClients = this.connectedClients.get(shopId);
-      if (shopClients) {
-        shopClients.delete(client.id);
-        if (shopClients.size === 0) {
-          this.connectedClients.delete(shopId);
+    const { warehouseId } = client.data;
+    if (warehouseId) {
+      const warehouseClients = this.connectedClients.get(warehouseId);
+      if (warehouseClients) {
+        warehouseClients.delete(client.id);
+        if (warehouseClients.size === 0) {
+          this.connectedClients.delete(warehouseId);
         }
       }
     }
@@ -85,8 +87,11 @@ export class NotificationsGateway
     @MessageBody() data: { notificationId: string }
   ) {
     try {
-      const { shopId } = client.data;
-      await this.notificationsService.markAsRead(data.notificationId, shopId);
+      const { warehouseId } = client.data;
+      await this.notificationsService.markAsRead(
+        data.notificationId,
+        warehouseId
+      );
       return { success: true };
     } catch (error) {
       this.logger.error(`Error marking notification as read: ${error.message}`);
@@ -99,8 +104,8 @@ export class NotificationsGateway
     client.disconnect();
   }
 
-  // Method to emit notifications to specific shop
-  async emitToShop(shopId: string, event: string, data: any) {
-    this.server.to(`shop:${shopId}`).emit(event, data);
+  // Method to emit notifications to specific warehouse
+  async emitToWarehouse(warehouseId: string, event: string, data: any) {
+    this.server.to(`warehouse:${warehouseId}`).emit(event, data);
   }
 }

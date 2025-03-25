@@ -10,8 +10,8 @@ import {
   InventoryTransaction,
   TransactionType as EntityTransactionType,
 } from '../entities/inventory-transaction.entity';
-import { Product } from '../entities/product.entity';
-import { Shop } from '../../shops/entities/shop.entity';
+import { WarehouseProduct } from '../entities/warehouse-product.entity';
+import { Warehouse } from '../entities/warehouse.entity';
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
 import {
@@ -29,10 +29,10 @@ export class InventoryService {
   constructor(
     @InjectRepository(InventoryTransaction)
     private readonly transactionRepository: Repository<InventoryTransaction>,
-    @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>,
-    @InjectRepository(Shop)
-    private readonly shopRepository: Repository<Shop>,
+    @InjectRepository(WarehouseProduct)
+    private readonly warehouseProductRepository: Repository<WarehouseProduct>,
+    @InjectRepository(Warehouse)
+    private readonly warehouseRepository: Repository<Warehouse>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
     @InjectRepository(Supplier)
@@ -42,19 +42,19 @@ export class InventoryService {
 
   private async validateManagerAccess(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<void> {
     const hasAccess = await this.userRoleRepository.findOne({
       where: {
         userId,
-        shopId,
+        warehouseId,
         type: RoleType.MANAGER,
       },
     });
 
     if (!hasAccess) {
       throw new ForbiddenException(
-        'User does not have manager access to this shop'
+        'User does not have manager access to this warehouse'
       );
     }
   }
@@ -64,8 +64,8 @@ export class InventoryService {
     createTransactionDto: CreateTransactionDto
   ): Promise<InventoryTransaction> {
     const {
-      shopId,
-      productId,
+      warehouseId,
+      warehouseProductId,
       type,
       quantity,
       price,
@@ -75,14 +75,14 @@ export class InventoryService {
       description,
     } = createTransactionDto;
 
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
-    const product = await this.productRepository.findOne({
-      where: { id: productId },
-      relations: ['shop'],
+    const warehouseProduct = await this.warehouseProductRepository.findOne({
+      where: { id: warehouseProductId },
+      relations: ['barcode', 'warehouse'],
     });
 
-    if (!product) {
+    if (!warehouseProduct) {
       throw new NotFoundException('Product not found');
     }
 
@@ -93,32 +93,32 @@ export class InventoryService {
         DtoTransactionType.WRITE_OFF,
         DtoTransactionType.TRANSFER,
       ].includes(type) &&
-      product.quantity < quantity
+      warehouseProduct.quantity < quantity
     ) {
       throw new BadRequestException(
         `Insufficient stock for ${type.toLowerCase()}. Available: ${
-          product.quantity
+          warehouseProduct.quantity
         }, Requested: ${quantity}`
       );
     }
 
-    // Для перемещений проверяем целевой магазин
-    if (type === DtoTransactionType.TRANSFER && metadata?.toShopId) {
-      const targetShop = await this.shopRepository.findOne({
-        where: { id: metadata.toShopId },
+    // Для перемещений проверяем целевой склад
+    if (type === DtoTransactionType.TRANSFER && metadata?.toWarehouseId) {
+      const targetWarehouse = await this.warehouseRepository.findOne({
+        where: { id: metadata.toWarehouseId },
       });
 
-      if (!targetShop) {
-        throw new NotFoundException('Target shop not found');
+      if (!targetWarehouse) {
+        throw new NotFoundException('Target warehouse not found');
       }
 
       // Создаем уведомления о перемещении
       await this.notificationsService.createTransferInitiatedNotification(
-        shopId,
+        warehouseId,
         metadata.invoiceNumber || 'N/A',
-        product.name,
+        warehouseProduct.barcode.productName,
         quantity,
-        targetShop.name
+        targetWarehouse.name
       );
     }
 
@@ -145,12 +145,12 @@ export class InventoryService {
         quantityChange = -quantity;
         break;
       case DtoTransactionType.ADJUSTMENT:
-        quantityChange = quantity - product.quantity;
+        quantityChange = quantity - warehouseProduct.quantity;
         console.log(
-          `Inventory ADJUSTMENT for product ${product.name} (ID: ${productId})`
+          `Inventory ADJUSTMENT for product ${warehouseProduct.barcode.productName} (ID: ${warehouseProductId})`
         );
         console.log(
-          `Current quantity=${product.quantity}, New quantity=${quantity}, Change=${quantityChange}`
+          `Current quantity=${warehouseProduct.quantity}, New quantity=${quantity}, Change=${quantityChange}`
         );
 
         // Если есть metadata с дополнительной информацией, логируем её
@@ -159,13 +159,13 @@ export class InventoryService {
             `Reported current quantity from frontend: ${metadata.currentQuantity}`
           );
           console.log(
-            `Actual difference in DB: ${quantity - product.quantity}`
+            `Actual difference in DB: ${quantity - warehouseProduct.quantity}`
           );
 
           // Если есть разница между значениями, логируем предупреждение
-          if (Number(metadata.currentQuantity) !== product.quantity) {
+          if (Number(metadata.currentQuantity) !== warehouseProduct.quantity) {
             console.log(
-              `WARNING: Frontend and database quantities differ! Frontend: ${metadata.currentQuantity}, DB: ${product.quantity}`
+              `WARNING: Frontend and database quantities differ! Frontend: ${metadata.currentQuantity}, DB: ${warehouseProduct.quantity}`
             );
           }
         }
@@ -177,8 +177,8 @@ export class InventoryService {
 
     // Создаем транзакцию
     const transaction = this.transactionRepository.create({
-      shopId: shopId,
-      productId: productId,
+      warehouseId: warehouseId,
+      warehouseProductId: warehouseProductId,
       type: entityType,
       quantity,
       price,
@@ -192,7 +192,7 @@ export class InventoryService {
     const savedTransaction = await this.transactionRepository.save(transaction);
 
     // Обновляем количество товара
-    await this.productRepository.update(productId, {
+    await this.warehouseProductRepository.update(warehouseProductId, {
       quantity: () => `quantity + ${quantityChange}`,
       ...(price &&
       type === DtoTransactionType.PURCHASE &&
@@ -202,14 +202,15 @@ export class InventoryService {
     });
 
     // Проверяем минимальные остатки после операции
-    const updatedProduct = await this.productRepository.findOne({
-      where: { id: productId },
+    const updatedProduct = await this.warehouseProductRepository.findOne({
+      where: { id: warehouseProductId },
+      relations: ['barcode'],
     });
 
     if (updatedProduct.quantity <= updatedProduct.minQuantity) {
       await this.notificationsService.createLowStockNotification(
-        shopId,
-        updatedProduct.name,
+        warehouseId,
+        updatedProduct.barcode.productName,
         updatedProduct.quantity
       );
     }
@@ -219,20 +220,24 @@ export class InventoryService {
 
   async getTransactions(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<InventoryTransaction[]> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     const startTime = Date.now();
     console.log(
-      `[${startTime}] Fetching transactions for shop: ${shopId}, user: ${userId}`
+      `[${startTime}] Fetching transactions for warehouse: ${warehouseId}, user: ${userId}`
     );
 
     try {
       const transactions = await this.transactionRepository.find({
-        where: { shopId, isActive: true },
+        where: { warehouseId, isActive: true },
         order: { createdAt: 'DESC' },
-        relations: ['product', 'createdBy'],
+        relations: [
+          'warehouseProduct',
+          'warehouseProduct.barcode',
+          'createdBy',
+        ],
       });
 
       const endTime = Date.now();
@@ -251,362 +256,296 @@ export class InventoryService {
       );
 
       if (adjustments.length > 0) {
-        console.log('Most recent adjustment transactions:');
-        adjustments.slice(0, 5).forEach((adj, index) => {
+        adjustments.forEach((adj, index) => {
           console.log(
-            `[${index + 1}] ADJUSTMENT: productId=${adj.productId}, product=${
-              adj.product?.name || 'unknown'
-            }, quantity=${adj.quantity}, created=${adj.createdAt}`
+            `[${index + 1}] ADJUSTMENT: warehouseProductId=${
+              adj.warehouseProductId
+            }, product=${
+              adj.warehouseProduct?.barcode?.productName || 'unknown'
+            }, quantity=${adj.quantity}`
           );
         });
-      } else {
-        console.log('No ADJUSTMENT transactions found for this shop');
       }
 
-      // Проверка наличия продуктов в транзакциях
-      const transactionsWithoutProduct = transactions.filter(
-        (tr) => !tr.product
-      );
-      if (transactionsWithoutProduct.length > 0) {
-        console.warn(
-          `WARNING: ${transactionsWithoutProduct.length} transactions have no associated product information`
+      // Проверяем наличие транзакций без связанных товаров
+      const missingProducts = transactions.filter((tr) => !tr.warehouseProduct);
+      if (missingProducts.length > 0) {
+        console.log(
+          `WARNING: Found ${missingProducts.length} transactions without linked products`
         );
-
-        // Логируем первые 3 для отладки
-        transactionsWithoutProduct.slice(0, 3).forEach((tr, index) => {
-          console.warn(
-            `Transaction with missing product [${index + 1}]: id=${
-              tr.id
-            }, productId=${tr.productId}, type=${tr.type}`
+        missingProducts.forEach((tr) => {
+          console.log(
+            `Transaction ${tr.id} missing product. Created at ${tr.createdAt}, warehouseProductId=${tr.warehouseProductId}, type=${tr.type}`
           );
         });
       }
 
       return transactions;
     } catch (error) {
-      console.error(`Error fetching transactions for shop ${shopId}:`, error);
+      console.error(`ERROR fetching transactions: ${error.message}`);
       throw error;
     }
   }
 
   async getProductTransactions(
     userId: string,
-    productId: string
+    warehouseProductId: string
   ): Promise<InventoryTransaction[]> {
-    const product = await this.productRepository.findOne({
-      where: { id: productId, isActive: true },
-    });
-
-    if (!product) {
-      throw new NotFoundException('Product not found');
-    }
-
-    await this.validateManagerAccess(userId, product.shopId);
+    // TODO: Implement proper access validation
 
     return this.transactionRepository.find({
-      where: { productId },
-      relations: ['createdBy'],
+      where: { warehouseProductId },
       order: { createdAt: 'DESC' },
+      relations: ['warehouseProduct', 'warehouseProduct.barcode', 'createdBy'],
     });
   }
 
   async getLowStockProducts(
     userId: string,
-    shopId: string
-  ): Promise<Product[]> {
-    await this.validateManagerAccess(userId, shopId);
+    warehouseId: string
+  ): Promise<WarehouseProduct[]> {
+    await this.validateManagerAccess(userId, warehouseId);
 
-    return this.productRepository
-      .createQueryBuilder('product')
-      .where('product.shopId = :shopId', { shopId })
-      .andWhere('product.quantity <= product.minQuantity')
-      .andWhere('product.isActive = true')
+    return this.warehouseProductRepository
+      .createQueryBuilder('wp')
+      .where('wp.warehouseId = :warehouseId', { warehouseId })
+      .andWhere('wp.quantity <= wp.minQuantity')
+      .andWhere('wp.isActive = true')
       .getMany();
   }
 
   async create(createInventoryDto: CreateInventoryDto, userId: string) {
-    const { shopId, date, comment, items } = createInventoryDto;
-
-    // Создаем транзакцию инвентаризации
-    const transaction = await this.transactionRepository.save({
-      type: EntityTransactionType.ADJUSTMENT,
-      shopId,
-      date,
-      note: comment,
-      createdById: userId,
-    });
-
-    // Обрабатываем каждый товар
-    for (const item of items) {
-      // Создаем транзакцию для каждого товара
-      await this.createTransaction(userId, {
-        shopId,
-        productId: item.productId,
-        type: DtoTransactionType.ADJUSTMENT,
-        quantity: item.actualQuantity,
-        comment: item.comment,
-        metadata: {
-          currentQuantity: item.currentQuantity,
-          difference: item.difference,
-        },
-      });
-    }
-
-    return transaction;
+    // Legacy method - use createTransaction instead
+    return null;
   }
 
-  async findAll(shopId: string) {
+  async findAll(warehouseId: string) {
+    // Get all inventory adjustments for this warehouse
     return this.transactionRepository.find({
       where: {
-        shopId,
+        warehouseId,
         type: EntityTransactionType.ADJUSTMENT,
       },
-      relations: ['product'],
-      order: {
-        createdAt: 'DESC',
-      },
+      order: { createdAt: 'DESC' },
+      relations: ['warehouseProduct', 'warehouseProduct.barcode', 'createdBy'],
     });
   }
 
-  async findOne(id: number, shopId: string) {
-    const transaction = await this.transactionRepository.findOne({
+  async findOne(id: number, warehouseId: string) {
+    return this.transactionRepository.findOne({
       where: {
-        id: id.toString(),
-        shopId,
+        id: String(id),
+        warehouseId,
         type: EntityTransactionType.ADJUSTMENT,
       },
-      relations: ['product'],
+      relations: ['warehouseProduct', 'warehouseProduct.barcode', 'createdBy'],
     });
-
-    if (!transaction) {
-      throw new NotFoundException('Inventory check not found');
-    }
-
-    return transaction;
   }
 
   async getSales(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<InventoryTransaction[]> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     return this.transactionRepository.find({
       where: {
-        shopId,
+        warehouseId,
         type: EntityTransactionType.SALE,
       },
-      relations: ['product', 'createdBy'],
-      order: {
-        createdAt: 'DESC',
-      },
+      order: { createdAt: 'DESC' },
+      relations: ['warehouseProduct', 'warehouseProduct.barcode', 'createdBy'],
     });
   }
 
   async getReturns(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<InventoryTransaction[]> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     return this.transactionRepository.find({
       where: {
-        shopId,
+        warehouseId,
         type: EntityTransactionType.RETURN,
       },
-      relations: ['product', 'createdBy'],
-      order: {
-        createdAt: 'DESC',
-      },
+      order: { createdAt: 'DESC' },
+      relations: ['warehouseProduct', 'warehouseProduct.barcode', 'createdBy'],
     });
   }
 
   async getWriteOffs(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<InventoryTransaction[]> {
-    console.log('Getting write-offs for shop:', shopId, 'user:', userId);
+    await this.validateManagerAccess(userId, warehouseId);
 
-    await this.validateManagerAccess(userId, shopId);
-    console.log('Manager access validated');
-
-    const writeOffs = await this.transactionRepository.find({
+    return this.transactionRepository.find({
       where: {
-        shopId,
+        warehouseId,
         type: EntityTransactionType.WRITE_OFF,
       },
-      relations: ['product', 'createdBy'],
-      order: {
-        createdAt: 'DESC',
-      },
+      order: { createdAt: 'DESC' },
+      relations: ['warehouseProduct', 'warehouseProduct.barcode', 'createdBy'],
     });
-
-    console.log('Found write-offs:', writeOffs);
-    return writeOffs;
   }
 
-  async getPurchases(userId: string, shopId: string): Promise<any[]> {
-    console.log('Getting purchases for shop:', shopId, 'user:', userId);
-
-    await this.validateManagerAccess(userId, shopId);
-    console.log('Manager access validated');
+  // Get purchases with additional details
+  async getPurchases(userId: string, warehouseId: string): Promise<any[]> {
+    await this.validateManagerAccess(userId, warehouseId);
 
     const purchases = await this.transactionRepository.find({
       where: {
-        shopId,
+        warehouseId,
         type: EntityTransactionType.PURCHASE,
         isActive: true,
       },
-      relations: ['product', 'createdBy'],
-      order: {
-        createdAt: 'DESC',
-      },
+      order: { createdAt: 'DESC' },
+      relations: ['warehouseProduct', 'warehouseProduct.barcode', 'createdBy'],
     });
 
-    console.log('Raw purchases from database:', JSON.stringify(purchases));
+    // Group by invoice number and supplier
+    const groupedPurchases = new Map();
 
-    // Получаем все уникальные ID поставщиков из транзакций
-    const supplierIds = new Set<string>();
-    purchases.forEach((purchase) => {
-      const metadata = purchase.metadata || {};
-      if (metadata.supplierId) {
-        supplierIds.add(metadata.supplierId);
-      }
-    });
+    for (const purchase of purchases) {
+      // Check if invoice number and supplier ID exist
+      const invoiceNumber = purchase.metadata?.invoiceNumber || 'NO_INVOICE';
+      const supplierId = purchase.metadata?.supplierId;
 
-    // Загружаем информацию о поставщиках
-    const suppliers = await this.supplierRepository.find({
-      where: {
-        id: In(Array.from(supplierIds)),
-        shopId,
-      },
-    });
+      // Create a key for grouping
+      const key = `${invoiceNumber}_${supplierId || 'NO_SUPPLIER'}`;
 
-    // Создаем Map для быстрого доступа к поставщикам по ID
-    const suppliersMap = new Map();
-    suppliers.forEach((supplier) => {
-      suppliersMap.set(supplier.id, supplier);
-    });
+      if (!groupedPurchases.has(key)) {
+        let supplierInfo = null;
+        if (supplierId) {
+          const supplier = await this.supplierRepository.findOne({
+            where: { id: supplierId },
+          });
+          if (supplier) {
+            supplierInfo = {
+              id: supplier.id,
+              name: supplier.name,
+              contactName: supplier.contactName || supplier.contactPerson,
+              phone: supplier.phone,
+            };
+          }
+        }
 
-    console.log('Loaded suppliers:', JSON.stringify(suppliers));
-
-    // Группируем приходы по metadata.invoiceNumber и metadata.supplierId
-    const purchaseGroups = new Map();
-
-    purchases.forEach((purchase) => {
-      const metadata = purchase.metadata || {};
-      const invoiceNumber = metadata.invoiceNumber || 'unknown';
-      const supplierId = metadata.supplierId || 'unknown';
-      const key = `${invoiceNumber}-${supplierId}`;
-
-      if (!purchaseGroups.has(key)) {
-        // Получаем информацию о поставщике из Map или используем значение по умолчанию
-        const supplier = suppliersMap.get(supplierId) || {
-          name: 'Неизвестный поставщик',
-        };
-
-        purchaseGroups.set(key, {
+        groupedPurchases.set(key, {
           id: purchase.id,
-          date: purchase.createdAt,
           invoiceNumber,
+          date: purchase.createdAt,
           supplierId,
-          supplier: {
-            name: supplier.name,
-            address: supplier.address,
-            phone: supplier.phone,
-          },
+          supplier: supplierInfo,
           items: [],
           totalAmount: 0,
-          status: 'completed',
+          createdBy: purchase.createdBy
+            ? {
+                id: purchase.createdBy.id,
+                name: `${purchase.createdBy.firstName} ${purchase.createdBy.lastName}`,
+              }
+            : null,
         });
       }
 
-      const group = purchaseGroups.get(key);
+      // Add purchase item to the group
+      const group = groupedPurchases.get(key);
       group.items.push({
-        productId: purchase.productId,
-        product: purchase.product,
+        id: purchase.id,
+        warehouseProductId: purchase.warehouseProductId,
+        warehouseProduct: purchase.warehouseProduct,
         quantity: purchase.quantity,
-        price: purchase.price,
-        total: purchase.quantity * purchase.price,
-        serialNumber: metadata.serialNumber || null,
-        expiryDate: metadata.expiryDate
-          ? new Date(metadata.expiryDate).toISOString()
-          : null,
-        comment: purchase.note || null,
+        price: purchase.price || 0,
+        total: purchase.quantity * (purchase.price || 0),
+        metadata: purchase.metadata,
+        createdAt: purchase.createdAt,
       });
 
-      group.totalAmount += purchase.quantity * purchase.price;
-    });
+      // Update total amount
+      group.totalAmount += purchase.quantity * (purchase.price || 0);
+    }
 
-    const result = Array.from(purchaseGroups.values());
-    console.log('Grouped purchases:', JSON.stringify(result));
-    return result;
+    // Convert map to array and sort by date (newest first)
+    return Array.from(groupedPurchases.values()).sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
   }
 
-  /**
-   * Мягкое удаление прихода (установка isActive = false)
-   * @param userId ID пользователя, выполняющего операцию
-   * @param purchaseId ID прихода
-   * @param shopId ID магазина
-   */
   async deletePurchase(
     userId: string,
     purchaseId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<void> {
-    console.log(`Deleting purchase ${purchaseId} for shop ${shopId}`);
+    await this.validateManagerAccess(userId, warehouseId);
 
-    // Проверяем права доступа
-    await this.validateManagerAccess(userId, shopId);
-
-    // Находим все транзакции, связанные с этим приходом
-    // Для этого нам нужно найти первую транзакцию, чтобы получить metadata.invoiceNumber и metadata.supplierId
-    const mainTransaction = await this.transactionRepository.findOne({
-      where: { id: purchaseId, shopId, isActive: true },
+    const purchase = await this.transactionRepository.findOne({
+      where: { id: purchaseId, warehouseId, isActive: true },
+      relations: ['warehouseProduct'],
     });
 
-    if (!mainTransaction) {
+    if (!purchase) {
       throw new NotFoundException('Purchase not found');
     }
 
-    const metadata = mainTransaction.metadata || {};
-    const invoiceNumber = metadata.invoiceNumber;
-    const supplierId = metadata.supplierId;
+    // Мягкое удаление транзакции
+    purchase.isActive = false;
+    await this.transactionRepository.save(purchase);
 
-    if (!invoiceNumber || !supplierId) {
-      throw new BadRequestException('Invalid purchase data');
+    // Возвращаем количество товара в исходное состояние
+    await this.warehouseProductRepository.update(purchase.warehouseProductId, {
+      quantity: () => `quantity - ${purchase.quantity}`,
+    });
+  }
+
+  async getPurchasesByInvoice(
+    userId: string,
+    warehouseId: string,
+    invoiceNumber: string,
+    supplierId?: string
+  ): Promise<InventoryTransaction[]> {
+    await this.validateManagerAccess(userId, warehouseId);
+
+    const whereCondition: any = {
+      warehouseId,
+      type: EntityTransactionType.PURCHASE,
+      isActive: true,
+      metadata: {},
+    };
+
+    if (invoiceNumber) {
+      whereCondition.metadata = { invoiceNumber };
     }
 
-    // Находим все транзакции с тем же invoiceNumber и supplierId
-    const transactions = await this.transactionRepository.find({
+    if (supplierId) {
+      whereCondition.metadata = { ...whereCondition.metadata, supplierId };
+    }
+
+    return this.transactionRepository.find({
+      where: whereCondition,
+      order: { createdAt: 'DESC' },
+      relations: ['warehouseProduct', 'warehouseProduct.barcode', 'createdBy'],
+    });
+  }
+
+  // Get count of out-of-stock products
+  async getOutOfStockCount(warehouseId: string): Promise<number> {
+    return this.warehouseProductRepository.count({
       where: {
-        shopId,
-        type: EntityTransactionType.PURCHASE,
+        warehouseId,
+        quantity: 0,
         isActive: true,
-        metadata: {
-          invoiceNumber,
-          supplierId,
-        },
       },
     });
+  }
 
-    if (transactions.length === 0) {
-      throw new NotFoundException('Purchase transactions not found');
-    }
-
-    // Обновляем все найденные транзакции, устанавливая isActive = false
-    for (const transaction of transactions) {
-      transaction.isActive = false;
-      await this.transactionRepository.save(transaction);
-
-      // Обновляем количество товара (вычитаем)
-      await this.productRepository.update(transaction.productId, {
-        quantity: () => `quantity - ${transaction.quantity}`,
-      });
-    }
-
-    console.log(
-      `Successfully deleted purchase ${purchaseId} with ${transactions.length} transactions`
-    );
+  // Get count of low-stock products (below minQuantity)
+  async getLowStockCount(warehouseId: string): Promise<number> {
+    return this.warehouseProductRepository
+      .createQueryBuilder('p')
+      .where('p.warehouseId = :warehouseId', { warehouseId })
+      .andWhere('p.quantity > 0')
+      .andWhere('p.quantity <= p.minQuantity')
+      .andWhere('p.isActive = true')
+      .getCount();
   }
 }

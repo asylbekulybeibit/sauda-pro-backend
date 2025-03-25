@@ -20,7 +20,7 @@ import { CreateReceiptActionDto } from '../dto/receipt-actions/create-receipt-ac
 import { UpdateReceiptActionDto } from '../dto/receipt-actions/update-receipt-action.dto';
 import { ReceiptAction } from '../entities/receipt-action.entity';
 
-@Controller('manager/:shopId/receipt-actions')
+@Controller('manager/:warehouseId/receipt-actions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(RoleType.CASHIER, RoleType.MANAGER, RoleType.SUPERADMIN, RoleType.OWNER)
 export class ReceiptActionsController {
@@ -29,68 +29,70 @@ export class ReceiptActionsController {
   @Post()
   @Roles(RoleType.CASHIER, RoleType.MANAGER)
   async create(
-    @Param('shopId') shopId: string,
+    @Param('warehouseId') warehouseId: string,
     @Body() createReceiptActionDto: CreateReceiptActionDto,
     @Req() req
   ): Promise<ReceiptAction> {
     return this.receiptActionsService.create(
       createReceiptActionDto,
-      shopId,
+      warehouseId,
       req.user.id
     );
   }
 
   @Get()
-  async findAll(@Param('shopId') shopId: string): Promise<ReceiptAction[]> {
-    return this.receiptActionsService.findAll(shopId);
+  async findAll(
+    @Param('warehouseId') warehouseId: string
+  ): Promise<ReceiptAction[]> {
+    return this.receiptActionsService.findAll(warehouseId);
   }
 
   @Get(':id')
   async findOne(
-    @Param('shopId') shopId: string,
+    @Param('warehouseId') warehouseId: string,
     @Param('id') id: string
   ): Promise<ReceiptAction> {
-    return this.receiptActionsService.findOne(id, shopId);
+    return this.receiptActionsService.findOne(id, warehouseId);
   }
 
   @Patch(':id')
   @Roles(RoleType.CASHIER, RoleType.MANAGER)
   async update(
-    @Param('shopId') shopId: string,
+    @Param('warehouseId') warehouseId: string,
     @Param('id') id: string,
     @Body() updateReceiptActionDto: UpdateReceiptActionDto
   ): Promise<ReceiptAction> {
     return this.receiptActionsService.update(
       id,
       updateReceiptActionDto,
-      shopId
+      warehouseId
     );
   }
 
   @Post(':id/print')
   @Roles(RoleType.CASHIER, RoleType.MANAGER)
   async printReceipt(
-    @Param('shopId') shopId: string,
+    @Param('warehouseId') warehouseId: string,
     @Param('id') id: string
   ): Promise<ReceiptAction> {
-    return this.receiptActionsService.printReceipt(id, shopId);
+    return this.receiptActionsService.printReceipt(id, warehouseId);
   }
 
   @Post(':id/send-whatsapp')
   @Roles(RoleType.CASHIER, RoleType.MANAGER)
   async sendReceiptWhatsapp(
-    @Param('shopId') shopId: string,
+    @Param('warehouseId') warehouseId: string,
     @Param('id') id: string
   ): Promise<ReceiptAction> {
-    return this.receiptActionsService.sendReceiptWhatsapp(id, shopId);
+    return this.receiptActionsService.sendReceiptWhatsapp(id, warehouseId);
   }
 
   @Post(':id/send-email')
   @Roles(RoleType.CASHIER, RoleType.MANAGER)
   async sendReceiptEmail(
-    @Param('shopId') shopId: string,
+    @Param('warehouseId') warehouseId: string,
     @Param('id') id: string
   ): Promise<ReceiptAction> {
-    return this.receiptActionsService.sendReceiptEmail(id, shopId);
+    return this.receiptActionsService.sendReceiptEmail(id, warehouseId);
   }
 }

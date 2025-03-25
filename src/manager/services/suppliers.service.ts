@@ -21,14 +21,14 @@ export class SuppliersService {
 
   private async validateManagerAccess(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<void> {
     const hasAccess = await this.userRoleRepository.findOne({
-      where: { userId, shopId, type: RoleType.MANAGER, isActive: true },
+      where: { userId, warehouseId, type: RoleType.MANAGER, isActive: true },
     });
 
     if (!hasAccess) {
-      throw new ForbiddenException('No access to this shop');
+      throw new ForbiddenException('No access to this warehouse');
     }
   }
 
@@ -36,26 +36,30 @@ export class SuppliersService {
     userId: string,
     createSupplierDto: CreateSupplierDto
   ): Promise<Supplier> {
-    await this.validateManagerAccess(userId, createSupplierDto.shopId);
+    await this.validateManagerAccess(userId, createSupplierDto.warehouseId);
 
     const supplier = this.suppliersRepository.create(createSupplierDto);
     return this.suppliersRepository.save(supplier);
   }
 
-  async findAll(userId: string, shopId: string): Promise<Supplier[]> {
-    await this.validateManagerAccess(userId, shopId);
+  async findAll(userId: string, warehouseId: string): Promise<Supplier[]> {
+    await this.validateManagerAccess(userId, warehouseId);
 
     return this.suppliersRepository.find({
-      where: { shopId, isActive: true },
+      where: { warehouseId, isActive: true },
       order: { name: 'ASC' },
     });
   }
 
-  async findOne(userId: string, shopId: string, id: string): Promise<Supplier> {
-    await this.validateManagerAccess(userId, shopId);
+  async findOne(
+    userId: string,
+    warehouseId: string,
+    id: string
+  ): Promise<Supplier> {
+    await this.validateManagerAccess(userId, warehouseId);
 
     const supplier = await this.suppliersRepository.findOne({
-      where: { id, shopId, isActive: true },
+      where: { id, warehouseId, isActive: true },
     });
 
     if (!supplier) {
@@ -67,22 +71,22 @@ export class SuppliersService {
 
   async update(
     userId: string,
-    shopId: string,
+    warehouseId: string,
     id: string,
     updateData: Partial<CreateSupplierDto>
   ): Promise<Supplier> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
-    const supplier = await this.findOne(userId, shopId, id);
+    const supplier = await this.findOne(userId, warehouseId, id);
     Object.assign(supplier, updateData);
 
     return this.suppliersRepository.save(supplier);
   }
 
-  async remove(userId: string, shopId: string, id: string): Promise<void> {
-    await this.validateManagerAccess(userId, shopId);
+  async remove(userId: string, warehouseId: string, id: string): Promise<void> {
+    await this.validateManagerAccess(userId, warehouseId);
 
-    const supplier = await this.findOne(userId, shopId, id);
+    const supplier = await this.findOne(userId, warehouseId, id);
     supplier.isActive = false;
 
     await this.suppliersRepository.save(supplier);

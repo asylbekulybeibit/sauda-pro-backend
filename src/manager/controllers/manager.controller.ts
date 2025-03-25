@@ -16,8 +16,8 @@ export class ManagerController {
     return this.managerService.getDashboard(req.user.id);
   }
 
-  @Get('shops/:id')
-  async getShop(@Param('id') id: string, @Request() req) {
-    return this.managerService.getShop(id, req.user.id);
+  @Get('warehouses/:id')
+  async getWarehouse(@Param('id') id: string, @Request() req) {
+    return this.managerService.getWarehouse(id, req.user.id);
   }
 }

@@ -10,7 +10,7 @@ import {
   InventoryTransaction,
   TransactionType,
 } from '../entities/inventory-transaction.entity';
-import { Product } from '../entities/product.entity';
+import { WarehouseProduct } from '../entities/warehouse-product.entity';
 import { Supplier } from '../entities/supplier.entity';
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
@@ -32,8 +32,8 @@ export class PurchasesService {
     private purchaseRepository: Repository<Purchase>,
     @InjectRepository(InventoryTransaction)
     private transactionRepository: Repository<InventoryTransaction>,
-    @InjectRepository(Product)
-    private productRepository: Repository<Product>,
+    @InjectRepository(WarehouseProduct)
+    private warehouseProductRepository: Repository<WarehouseProduct>,
     @InjectRepository(Supplier)
     private supplierRepository: Repository<Supplier>,
     @InjectRepository(UserRole)
@@ -48,14 +48,14 @@ export class PurchasesService {
 
   private async validateManagerAccess(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<void> {
     const hasAccess = await this.userRoleRepository.findOne({
-      where: { userId, shopId, type: RoleType.MANAGER, isActive: true },
+      where: { userId, warehouseId, type: RoleType.MANAGER, isActive: true },
     });
 
     if (!hasAccess) {
-      throw new ForbiddenException('No access to this shop');
+      throw new ForbiddenException('No access to this warehouse');
     }
   }
 
@@ -75,11 +75,16 @@ export class PurchasesService {
     );
 
     // Проверяем существование товара
-    const product = await this.productRepository.findOne({
-      where: { id: item.productId, shopId: purchase.shopId, isActive: true },
+    const warehouseProduct = await this.warehouseProductRepository.findOne({
+      where: {
+        id: item.productId,
+        warehouseId: purchase.warehouseId,
+        isActive: true,
+      },
+      relations: ['barcode', 'barcode.category'],
     });
 
-    if (!product) {
+    if (!warehouseProduct) {
       console.error(
         `[createPurchaseTransaction] ERROR: Product with ID ${item.productId} not found`
       );
@@ -89,7 +94,7 @@ export class PurchasesService {
     }
 
     console.log(
-      `[createPurchaseTransaction] Product found: ${product.name} (ID: ${product.id})`
+      `[createPurchaseTransaction] Product found: ${warehouseProduct.barcode.productName} (ID: ${warehouseProduct.id})`
     );
 
     // Строгое преобразование цены в число
@@ -102,14 +107,14 @@ export class PurchasesService {
 
     console.log(
       `[createPurchaseTransaction] Создаем транзакцию для товара ${
-        product.name
+        warehouseProduct.barcode.productName
       } с ценой ${price}, исходный тип: ${typeof item.price}`
     );
 
     // Создаем транзакцию
     const transaction = new InventoryTransaction();
-    transaction.shopId = purchase.shopId;
-    transaction.productId = item.productId;
+    transaction.warehouseId = purchase.warehouseId;
+    transaction.warehouseProductId = item.productId;
     transaction.type = TransactionType.PURCHASE;
     transaction.quantity = item.quantity;
     transaction.price = price; // Используем обработанную цену
@@ -133,7 +138,7 @@ export class PurchasesService {
     transaction.metadata = metadata;
 
     console.log(`[createPurchaseTransaction] Транзакция подготовлена:`, {
-      productId: transaction.productId,
+      warehouseProductId: transaction.warehouseProductId,
       quantity: transaction.quantity,
       price: transaction.price,
       supplierId: metadata.supplierId,
@@ -183,7 +188,7 @@ export class PurchasesService {
       createPurchaseDto.invoiceNumber
     );
 
-    await this.validateManagerAccess(userId, createPurchaseDto.shopId);
+    await this.validateManagerAccess(userId, createPurchaseDto.warehouseId);
 
     // Устанавливаем createdById, чтобы использовать его при сохранении истории цен
     createPurchaseDto.createdById = userId;
@@ -219,7 +224,7 @@ export class PurchasesService {
 
     // Создаем новую запись для покупки
     const purchase = new Purchase();
-    purchase.shopId = createPurchaseDto.shopId;
+    purchase.warehouseId = createPurchaseDto.warehouseId;
     purchase.supplierId = createPurchaseDto.supplierId || null;
     purchase.invoiceNumber = createPurchaseDto.invoiceNumber || '';
     purchase.date = createPurchaseDto.date;
@@ -228,7 +233,7 @@ export class PurchasesService {
     purchase.status = PurchaseStatus.COMPLETED; // Все новые приходы имеют статус COMPLETED
 
     console.log('[PurchasesService] Purchase entity created:', {
-      shopId: purchase.shopId,
+      warehouseId: purchase.warehouseId,
       supplierId: purchase.supplierId,
       invoiceNumber: purchase.invoiceNumber,
       date: purchase.date,
@@ -326,7 +331,7 @@ export class PurchasesService {
     }
 
     // Перезагружаем покупку с обновленными данными
-    return this.findOne(savedPurchase.id, createPurchaseDto.shopId);
+    return this.findOne(savedPurchase.id, createPurchaseDto.warehouseId);
   }
 
   private async updateProductPrices(
@@ -369,23 +374,24 @@ export class PurchasesService {
         `[updateProductPrices] Обработка товара с ID ${item.productId}`
       );
 
-      const product = await this.productRepository.findOne({
+      const warehouseProduct = await this.warehouseProductRepository.findOne({
         where: {
           id: item.productId,
-          shopId: createPurchaseDto.shopId,
+          warehouseId: createPurchaseDto.warehouseId,
           isActive: true,
         },
+        relations: ['barcode', 'barcode.category'],
       });
 
-      if (product) {
+      if (warehouseProduct) {
         console.log(
-          `[updateProductPrices] Товар найден: ${product.name} (ID: ${product.id})`
+          `[updateProductPrices] Товар найден: ${warehouseProduct.barcode.productName} (ID: ${warehouseProduct.id})`
         );
         console.log(
-          `[updateProductPrices] Текущая закупочная цена: ${product.purchasePrice}`
+          `[updateProductPrices] Текущая закупочная цена: ${warehouseProduct.purchasePrice}`
         );
         console.log(
-          `[updateProductPrices] Текущая цена продажи: ${product.sellingPrice}`
+          `[updateProductPrices] Текущая цена продажи: ${warehouseProduct.sellingPrice}`
         );
 
         // Получаем числовое представление цены
@@ -398,7 +404,7 @@ export class PurchasesService {
 
         console.log(
           `[updateProductPrices] Цена из прихода для товара ${
-            product.name
+            warehouseProduct.barcode.productName
           }: ${itemPrice} (тип: ${typeof item.price})`
         );
 
@@ -407,20 +413,20 @@ export class PurchasesService {
         // Обновляем закупочную цену, если нужно
         if (createPurchaseDto.updatePurchasePrices) {
           console.log(
-            `[updateProductPrices] Обновляем закупочную цену для товара ${product.name}`
+            `[updateProductPrices] Обновляем закупочную цену для товара ${warehouseProduct.barcode.productName}`
           );
           console.log(
-            `[updateProductPrices] Старая закупочная цена: ${product.purchasePrice}`
+            `[updateProductPrices] Старая закупочная цена: ${warehouseProduct.purchasePrice}`
           );
 
           // Сохраняем старую цену
-          const oldPurchasePrice = product.purchasePrice;
+          const oldPurchasePrice = warehouseProduct.purchasePrice;
 
           // Устанавливаем новую цену
-          product.purchasePrice = itemPrice;
+          warehouseProduct.purchasePrice = itemPrice;
 
           console.log(
-            `[updateProductPrices] Новая закупочная цена: ${product.purchasePrice}`
+            `[updateProductPrices] Новая закупочная цена: ${warehouseProduct.purchasePrice}`
           );
 
           // Сохраняем изменение в истории цен
@@ -428,7 +434,7 @@ export class PurchasesService {
             oldPrice: oldPurchasePrice,
             newPrice: itemPrice,
             reason: 'Обновление через приход',
-            productId: product.id,
+            productId: warehouseProduct.id,
             changedById: createPurchaseDto.createdById || 'system',
             priceType: PriceType.PURCHASE,
           });
@@ -443,14 +449,14 @@ export class PurchasesService {
         // Обновляем цену продажи, если нужно
         if (createPurchaseDto.updatePrices) {
           console.log(
-            `[updateProductPrices] Обновляем цену продажи для товара ${product.name}`
+            `[updateProductPrices] Обновляем цену продажи для товара ${warehouseProduct.barcode.productName}`
           );
           console.log(
-            `[updateProductPrices] Старая цена продажи: ${product.sellingPrice}`
+            `[updateProductPrices] Старая цена продажи: ${warehouseProduct.sellingPrice}`
           );
 
           // Сохраняем старую цену
-          const oldSellingPrice = product.sellingPrice;
+          const oldSellingPrice = warehouseProduct.sellingPrice;
 
           // Рассчитываем новую цену продажи в зависимости от типа наценки
           let newSellingPrice: number;
@@ -469,9 +475,9 @@ export class PurchasesService {
             );
           }
 
-          product.sellingPrice = newSellingPrice;
+          warehouseProduct.sellingPrice = newSellingPrice;
           console.log(
-            `[updateProductPrices] Новая цена продажи: ${product.sellingPrice}`
+            `[updateProductPrices] Новая цена продажи: ${warehouseProduct.sellingPrice}`
           );
 
           // Сохраняем изменение в истории цен
@@ -479,7 +485,7 @@ export class PurchasesService {
             oldPrice: oldSellingPrice,
             newPrice: newSellingPrice,
             reason: 'Обновление через приход',
-            productId: product.id,
+            productId: warehouseProduct.id,
             changedById: createPurchaseDto.createdById || 'system',
             priceType: PriceType.SELLING,
           });
@@ -493,19 +499,19 @@ export class PurchasesService {
 
         if (priceUpdated) {
           console.log(
-            `[updateProductPrices] Сохраняем обновленные цены для товара ${product.name}`
+            `[updateProductPrices] Сохраняем обновленные цены для товара ${warehouseProduct.barcode.productName}`
           );
-          await this.productRepository.save(product);
+          await this.warehouseProductRepository.save(warehouseProduct);
           updatedCount++;
         } else {
           console.log(
-            `[updateProductPrices] Нет изменений цен для товара ${product.name}`
+            `[updateProductPrices] Нет изменений цен для товара ${warehouseProduct.barcode.productName}`
           );
           skippedCount++;
         }
       } else {
         console.log(
-          `[updateProductPrices] Товар с ID ${item.productId} не найден в магазине ${createPurchaseDto.shopId}`
+          `[updateProductPrices] Товар с ID ${item.productId} не найден в магазине ${createPurchaseDto.warehouseId}`
         );
         skippedCount++;
       }
@@ -516,16 +522,20 @@ export class PurchasesService {
     );
   }
 
-  async findAll(userId: string, shopId: string): Promise<PurchaseWithItems[]> {
-    await this.validateManagerAccess(userId, shopId);
+  async findAll(
+    userId: string,
+    warehouseId: string
+  ): Promise<PurchaseWithItems[]> {
+    await this.validateManagerAccess(userId, warehouseId);
 
     // Get all purchases with related data
     const purchases = await this.purchaseRepository.find({
-      where: { shopId, isActive: true },
+      where: { warehouseId, isActive: true },
       relations: [
         'supplier',
         'transactions',
-        'transactions.product',
+        'transactions.warehouseProduct',
+        'transactions.warehouseProduct.barcode',
         'createdBy',
       ],
       order: { date: 'DESC' },
@@ -571,10 +581,9 @@ export class PurchasesService {
               : transaction.metadata?.price || 0;
 
           return {
-            productId: transaction.productId,
+            productId: transaction.warehouseProductId,
             product: {
-              name: transaction.product.name,
-              sku: transaction.product.sku,
+              name: transaction.warehouseProduct.barcode.productName,
             },
             quantity: transaction.quantity,
             price: price, // Используем цену из транзакции или метаданных
@@ -620,13 +629,14 @@ export class PurchasesService {
     });
   }
 
-  async findOne(id: string, shopId: string): Promise<PurchaseWithItems> {
+  async findOne(id: string, warehouseId: string): Promise<PurchaseWithItems> {
     const purchase = await this.purchaseRepository.findOne({
-      where: { id, shopId, isActive: true },
+      where: { id, warehouseId, isActive: true },
       relations: [
         'supplier',
         'transactions',
-        'transactions.product',
+        'transactions.warehouseProduct',
+        'transactions.warehouseProduct.barcode',
         'createdBy',
       ],
     });
@@ -672,10 +682,9 @@ export class PurchasesService {
           : transaction.metadata?.price || 0;
 
       return {
-        productId: transaction.productId,
+        productId: transaction.warehouseProductId,
         product: {
-          name: transaction.product.name,
-          sku: transaction.product.sku,
+          name: transaction.warehouseProduct.barcode.productName,
         },
         quantity: transaction.quantity,
         price: price, // Используем цену из транзакции или метаданных
@@ -707,12 +716,12 @@ export class PurchasesService {
   async deletePurchase(
     userId: string,
     id: string,
-    shopId: string
+    warehouseId: string
   ): Promise<void> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     const purchase = await this.purchaseRepository.findOne({
-      where: { id, shopId, isActive: true },
+      where: { id, warehouseId, isActive: true },
     });
 
     if (!purchase) {
@@ -729,25 +738,25 @@ export class PurchasesService {
     userId: string,
     createPurchaseDto: CreatePurchaseDto
   ): Promise<void> {
-    // Находим первый доступный шаблон этикетки для магазина
+    // Находим первый доступный шаблон этикетки для склада
     const defaultTemplate = await this.labelTemplateRepository.findOne({
       where: {
-        shopId: createPurchaseDto.shopId,
+        warehouseId: createPurchaseDto.warehouseId,
         isActive: true,
       },
     });
 
     if (!defaultTemplate) {
       console.warn(
-        'Шаблон этикетки не найден для магазина',
-        createPurchaseDto.shopId
+        'Шаблон этикетки не найден для склада',
+        createPurchaseDto.warehouseId
       );
       return;
     }
 
     // Формируем запрос на создание этикеток
     const labelsRequest = {
-      shopId: createPurchaseDto.shopId,
+      warehouseId: createPurchaseDto.warehouseId,
       templateId: defaultTemplate.id,
       products: createPurchaseDto.items.map((item) => ({
         productId: item.productId,
@@ -758,7 +767,7 @@ export class PurchasesService {
     // Создаем этикетки
     await this.labelsService.generateBatchLabels(
       userId,
-      createPurchaseDto.shopId,
+      createPurchaseDto.warehouseId,
       labelsRequest
     );
 

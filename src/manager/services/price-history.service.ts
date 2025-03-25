@@ -6,7 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PriceHistory } from '../entities/price-history.entity';
-import { Product } from '../entities/product.entity';
+import { WarehouseProduct } from '../entities/warehouse-product.entity';
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
 import { CreatePriceHistoryDto } from '../dto/price-history/create-price-history.dto';
@@ -16,27 +16,27 @@ export class PriceHistoryService {
   constructor(
     @InjectRepository(PriceHistory)
     private priceHistoryRepository: Repository<PriceHistory>,
-    @InjectRepository(Product)
-    private productRepository: Repository<Product>,
+    @InjectRepository(WarehouseProduct)
+    private warehouseProductRepository: Repository<WarehouseProduct>,
     @InjectRepository(UserRole)
     private userRoleRepository: Repository<UserRole>
   ) {}
 
   private async validateManagerAccess(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<void> {
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
-        shopId,
+        warehouseId,
         type: RoleType.MANAGER,
         isActive: true,
       },
     });
 
     if (!managerRole) {
-      throw new ForbiddenException('No access to this shop');
+      throw new ForbiddenException('No access to this warehouse');
     }
   }
 
@@ -44,15 +44,16 @@ export class PriceHistoryService {
     userId: string,
     createPriceHistoryDto: CreatePriceHistoryDto
   ): Promise<PriceHistory> {
-    const product = await this.productRepository.findOne({
+    const product = await this.warehouseProductRepository.findOne({
       where: { id: createPriceHistoryDto.productId, isActive: true },
+      relations: ['barcode', 'barcode.category'],
     });
 
     if (!product) {
       throw new NotFoundException('Product not found');
     }
 
-    await this.validateManagerAccess(userId, product.shopId);
+    await this.validateManagerAccess(userId, product.warehouseId);
 
     const priceHistory = this.priceHistoryRepository.create({
       ...createPriceHistoryDto,
@@ -66,15 +67,16 @@ export class PriceHistoryService {
     userId: string,
     productId: string
   ): Promise<PriceHistory[]> {
-    const product = await this.productRepository.findOne({
+    const product = await this.warehouseProductRepository.findOne({
       where: { id: productId, isActive: true },
+      relations: ['barcode', 'barcode.category'],
     });
 
     if (!product) {
       throw new NotFoundException('Product not found');
     }
 
-    await this.validateManagerAccess(userId, product.shopId);
+    await this.validateManagerAccess(userId, product.warehouseId);
 
     return this.priceHistoryRepository
       .createQueryBuilder('priceHistory')
@@ -85,23 +87,26 @@ export class PriceHistoryService {
       .getMany();
   }
 
-  async findByShop(userId: string, shopId: string): Promise<PriceHistory[]> {
-    console.log('[PriceHistoryService] findByShop started:', {
+  async findByWarehouse(
+    userId: string,
+    warehouseId: string
+  ): Promise<PriceHistory[]> {
+    console.log('[PriceHistoryService] findByWarehouse started:', {
       userId,
-      shopId,
+      warehouseId,
     });
 
     const result = await this.priceHistoryRepository
       .createQueryBuilder('priceHistory')
       .innerJoin('priceHistory.product', 'product')
-      .where('product.shopId = :shopId', { shopId })
+      .where('product.warehouseId = :warehouseId', { warehouseId })
       .andWhere('product.isActive = :isActive', { isActive: true })
       .leftJoinAndSelect('priceHistory.changedBy', 'changedBy')
       .leftJoinAndSelect('priceHistory.product', 'productDetails')
       .orderBy('priceHistory.createdAt', 'DESC')
       .getMany();
 
-    console.log('[PriceHistoryService] findByShop result:', {
+    console.log('[PriceHistoryService] findByWarehouse result:', {
       recordsFound: result.length,
       firstRecord: result[0],
       lastRecord: result[result.length - 1],
@@ -110,15 +115,15 @@ export class PriceHistoryService {
     return result;
   }
 
-  async findByShopAndDateRange(
+  async findByWarehouseAndDateRange(
     userId: string,
-    shopId: string,
+    warehouseId: string,
     startDate?: string,
     endDate?: string
   ): Promise<PriceHistory[]> {
-    console.log('[PriceHistoryService] findByShopAndDateRange started:', {
+    console.log('[PriceHistoryService] findByWarehouseAndDateRange started:', {
       userId,
-      shopId,
+      warehouseId,
       startDate,
       endDate,
     });
@@ -126,7 +131,7 @@ export class PriceHistoryService {
     const query = this.priceHistoryRepository
       .createQueryBuilder('priceHistory')
       .innerJoin('priceHistory.product', 'product')
-      .where('product.shopId = :shopId', { shopId })
+      .where('product.warehouseId = :warehouseId', { warehouseId })
       .andWhere('product.isActive = :isActive', { isActive: true });
 
     // Добавляем фильтры по датам только если они указаны
@@ -164,7 +169,7 @@ export class PriceHistoryService {
 
     const result = await query.getMany();
 
-    console.log('[PriceHistoryService] findByShopAndDateRange result:', {
+    console.log('[PriceHistoryService] findByWarehouseAndDateRange result:', {
       recordsFound: result.length,
       firstRecord: result[0],
       lastRecord: result[result.length - 1],
@@ -182,15 +187,16 @@ export class PriceHistoryService {
     avgPrice: number;
     priceChangesCount: number;
   }> {
-    const product = await this.productRepository.findOne({
+    const product = await this.warehouseProductRepository.findOne({
       where: { id: productId, isActive: true },
+      relations: ['barcode', 'barcode.category'],
     });
 
     if (!product) {
       throw new NotFoundException('Product not found');
     }
 
-    await this.validateManagerAccess(userId, product.shopId);
+    await this.validateManagerAccess(userId, product.warehouseId);
 
     const stats = await this.priceHistoryRepository
       .createQueryBuilder('priceHistory')

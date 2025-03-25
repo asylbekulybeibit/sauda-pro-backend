@@ -12,6 +12,9 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
+import { Roles } from '../../auth/decorators/roles.decorator';
+import { RoleType } from '../../auth/types/role.type';
 import { GetUser } from '../../auth/decorators/get-user.decorator';
 import { LabelsService } from '../services/labels.service';
 import { CreateTemplateDto } from '../dto/products/create-template.dto';
@@ -19,7 +22,8 @@ import { GenerateLabelsDto } from '../dto/products/generate-labels.dto';
 import { LabelTemplate } from '../entities/label-template.entity';
 
 @Controller('manager/labels')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(RoleType.MANAGER)
 export class LabelsController {
   constructor(private readonly labelsService: LabelsService) {}
 
@@ -34,27 +38,27 @@ export class LabelsController {
   @Get('templates')
   async findTemplates(
     @GetUser('id') userId: string,
-    @Query('shopId') shopId: string
+    @Query('warehouseId') warehouseId: string
   ): Promise<LabelTemplate[]> {
-    return this.labelsService.findTemplates(userId, shopId);
+    return this.labelsService.findTemplates(userId, warehouseId);
   }
 
   @Get('templates/:id')
   async findTemplate(
     @GetUser('id') userId: string,
-    @Query('shopId') shopId: string,
+    @Query('warehouseId') warehouseId: string,
     @Param('id') id: string
   ): Promise<LabelTemplate> {
-    return this.labelsService.findTemplate(userId, shopId, id);
+    return this.labelsService.findTemplate(userId, warehouseId, id);
   }
 
   @Delete('templates/:id')
   async deleteTemplate(
     @GetUser('id') userId: string,
-    @Query('shopId') shopId: string,
+    @Query('warehouseId') warehouseId: string,
     @Param('id') id: string
   ): Promise<void> {
-    return this.labelsService.deleteTemplate(userId, shopId, id);
+    return this.labelsService.deleteTemplate(userId, warehouseId, id);
   }
 
   @Patch('templates/:id')
@@ -74,7 +78,7 @@ export class LabelsController {
   ): Promise<void> {
     const buffer = await this.labelsService.generateBatchLabels(
       userId,
-      generateLabelsDto.shopId,
+      generateLabelsDto.warehouseId,
       generateLabelsDto
     );
 
@@ -90,14 +94,14 @@ export class LabelsController {
   @Get('preview')
   async generatePreview(
     @GetUser('id') userId: string,
-    @Query('shopId') shopId: string,
+    @Query('warehouseId') warehouseId: string,
     @Query('productId') productId: string,
     @Query('templateId') templateId: string,
     @Res() res: Response
   ): Promise<void> {
     const buffer = await this.labelsService.generatePreview(
       userId,
-      shopId,
+      warehouseId,
       productId,
       templateId
     );
@@ -114,10 +118,14 @@ export class LabelsController {
   @Get('barcode')
   async findProductByBarcode(
     @GetUser('id') userId: string,
-    @Query('shopId') shopId: string,
+    @Query('warehouseId') warehouseId: string,
     @Query('barcode') barcode: string
   ) {
-    return this.labelsService.findProductByBarcode(userId, shopId, barcode);
+    return this.labelsService.findProductByBarcode(
+      userId,
+      warehouseId,
+      barcode
+    );
   }
 
   @Get('default-templates')

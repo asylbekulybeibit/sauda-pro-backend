@@ -6,7 +6,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Shop } from '../../shops/entities/shop.entity';
+import { Warehouse } from './warehouse.entity';
 import { LabelType, LabelSize } from '../dto/products/label-template.dto';
 
 @Entity()
@@ -50,11 +50,11 @@ export class LabelTemplate {
   @Column({ default: true })
   isActive: boolean;
 
-  @ManyToOne(() => Shop)
-  shop: Shop;
+  @ManyToOne(() => Warehouse)
+  warehouse: Warehouse;
 
   @Column()
-  shopId: string;
+  warehouseId: string;
 
   @CreateDateColumn()
   createdAt: Date;

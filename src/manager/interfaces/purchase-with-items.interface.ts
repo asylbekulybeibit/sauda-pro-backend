@@ -7,7 +7,6 @@ export interface PurchaseWithItems
     productId: string;
     product: {
       name: string;
-      sku: string;
     };
     quantity: number;
     price: number;

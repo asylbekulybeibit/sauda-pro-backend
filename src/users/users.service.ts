@@ -93,7 +93,7 @@ export class UsersService {
         roles: u.roles.map((r) => ({
           type: r.type,
           isActive: r.isActive,
-          shopId: r.shop?.id,
+          warehouseId: r.warehouse?.id,
         })),
       }))
     );
@@ -105,7 +105,7 @@ export class UsersService {
     const superadmins = activeUsers.filter((user) => user.isSuperAdmin).length;
     this.logger.debug(`Суперадминов среди активных: ${superadmins}`);
 
-    // Подсчитываем все роли, включая дубликаты в разных магазинах
+    // Подсчитываем все роли, включая дубликаты в разных складах
     const byRole = {
       [RoleType.OWNER]: activeUsers.reduce(
         (count, user) =>
@@ -128,7 +128,7 @@ export class UsersService {
     };
 
     this.logger.debug(
-      'Распределение по ролям (с учетом всех магазинов):',
+      'Распределение по ролям (с учетом всех складов):',
       byRole
     );
     this.logger.debug(
@@ -137,7 +137,7 @@ export class UsersService {
         userId: user.id,
         roles: user.roles.map((r) => ({
           type: r.type,
-          shopId: r.shop?.id,
+          warehouseId: r.warehouse?.id,
         })),
       }))
     );

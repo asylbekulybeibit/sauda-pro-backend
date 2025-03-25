@@ -31,10 +31,10 @@ export class CreateNotificationDto {
   @IsUUID()
   userId?: string;
 
-  @IsUUID()
-  shopId: string;
-
   @IsOptional()
   @IsUUID()
-  warehouseId?: string;
+  shopId?: string;
+
+  @IsUUID()
+  warehouseId: string;
 }

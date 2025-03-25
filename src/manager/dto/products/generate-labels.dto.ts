@@ -19,7 +19,7 @@ export class ProductLabelDto {
 
 export class GenerateLabelsDto {
   @IsUUID()
-  shopId: string;
+  warehouseId: string;
 
   @IsString()
   templateId: string;

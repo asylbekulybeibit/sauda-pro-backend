@@ -37,13 +37,13 @@ export class OwnerController {
     return this.ownerService.getOwnerInvites(req.user.id);
   }
 
-  @Get('invites/:shopId')
+  @Get('invites/:warehouseId')
   @Roles(RoleType.OWNER)
-  async getShopInvites(
+  async getWarehouseInvites(
     @Request() req,
-    @Param('shopId') shopId: string
+    @Param('warehouseId') warehouseId: string
   ): Promise<Invite[]> {
-    return this.ownerService.getShopInvites(req.user.id, shopId);
+    return this.ownerService.getWarehouseInvites(req.user.id, warehouseId);
   }
 
   @Patch('invites/:id/cancel')
@@ -52,13 +52,13 @@ export class OwnerController {
     await this.ownerService.cancelInvite(req.user.id, id);
   }
 
-  @Get('staff/:shopId')
+  @Get('staff/:warehouseId')
   @Roles(RoleType.OWNER)
-  async getShopStaff(
+  async getWarehouseStaff(
     @Request() req,
-    @Param('shopId') shopId: string
+    @Param('warehouseId') warehouseId: string
   ): Promise<UserRole[]> {
-    return this.ownerService.getShopStaff(req.user.id, shopId);
+    return this.ownerService.getWarehouseStaff(req.user.id, warehouseId);
   }
 
   @Patch('staff/:id/deactivate')

@@ -20,21 +20,19 @@ export class EmployeeService {
     private readonly userRoleRepository: Repository<UserRole>
   ) {}
 
-  private async validateManagerAccess(userId: string, shopId: string) {
+  private async validateManagerAccess(userId: string, warehouseId: string) {
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
-        shopId,
+        warehouseId,
         type: RoleType.MANAGER,
         isActive: true,
       },
-      relations: ['shop'],
+      relations: ['warehouse'],
     });
 
     if (!managerRole) {
-      throw new ForbiddenException(
-        'У вас нет прав менеджера для этого магазина'
-      );
+      throw new ForbiddenException('У вас нет прав менеджера для этого склада');
     }
 
     return managerRole;
@@ -43,41 +41,41 @@ export class EmployeeService {
   async create(
     createEmployeeDto: CreateEmployeeDto,
     userId: string,
-    shopId: string
+    warehouseId: string
   ) {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     const employee = this.staffRepository.create({
       ...createEmployeeDto,
-      shopId,
+      warehouseId,
     });
 
     return this.staffRepository.save(employee);
   }
 
-  async findAll(userId: string, shopId: string) {
-    await this.validateManagerAccess(userId, shopId);
+  async findAll(userId: string, warehouseId: string) {
+    await this.validateManagerAccess(userId, warehouseId);
 
     return this.staffRepository.find({
-      where: { shopId },
+      where: { warehouseId },
       order: { lastName: 'ASC', firstName: 'ASC' },
     });
   }
 
-  async findAllActive(userId: string, shopId: string) {
-    await this.validateManagerAccess(userId, shopId);
+  async findAllActive(userId: string, warehouseId: string) {
+    await this.validateManagerAccess(userId, warehouseId);
 
     return this.staffRepository.find({
-      where: { shopId, isActive: true },
+      where: { warehouseId, isActive: true },
       order: { lastName: 'ASC', firstName: 'ASC' },
     });
   }
 
-  async findOne(id: string, userId: string, shopId: string) {
-    await this.validateManagerAccess(userId, shopId);
+  async findOne(id: string, userId: string, warehouseId: string) {
+    await this.validateManagerAccess(userId, warehouseId);
 
     const employee = await this.staffRepository.findOne({
-      where: { id, shopId },
+      where: { id, warehouseId },
     });
 
     if (!employee) {
@@ -91,11 +89,11 @@ export class EmployeeService {
     id: string,
     updateEmployeeDto: UpdateEmployeeDto,
     userId: string,
-    shopId: string
+    warehouseId: string
   ) {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
-    const employee = await this.findOne(id, userId, shopId);
+    const employee = await this.findOne(id, userId, warehouseId);
 
     // Обновляем только те поля, которые переданы в DTO
     Object.assign(employee, updateEmployeeDto);
@@ -103,10 +101,10 @@ export class EmployeeService {
     return this.staffRepository.save(employee);
   }
 
-  async remove(id: string, userId: string, shopId: string) {
-    await this.validateManagerAccess(userId, shopId);
+  async remove(id: string, userId: string, warehouseId: string) {
+    await this.validateManagerAccess(userId, warehouseId);
 
-    const employee = await this.findOne(id, userId, shopId);
+    const employee = await this.findOne(id, userId, warehouseId);
 
     // Мягкое удаление - устанавливаем isActive в false
     employee.isActive = false;

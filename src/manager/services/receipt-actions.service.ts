@@ -14,70 +14,41 @@ import {
 import { CreateReceiptActionDto } from '../dto/receipt-actions/create-receipt-action.dto';
 import { UpdateReceiptActionDto } from '../dto/receipt-actions/update-receipt-action.dto';
 import {
-  SalesReceipt,
-  SalesReceiptStatus,
-} from '../entities/sales-receipt.entity';
-import {
-  ServiceReceipt,
-  ServiceReceiptStatus,
-} from '../entities/service-receipt.entity';
+  Receipt,
+  ReceiptStatus,
+  PaymentMethod,
+} from '../entities/receipt.entity';
 
 @Injectable()
 export class ReceiptActionsService {
   constructor(
     @InjectRepository(ReceiptAction)
     private readonly receiptActionRepository: Repository<ReceiptAction>,
-    @InjectRepository(SalesReceipt)
-    private readonly salesReceiptRepository: Repository<SalesReceipt>,
-    @InjectRepository(ServiceReceipt)
-    private readonly serviceReceiptRepository: Repository<ServiceReceipt>
+    @InjectRepository(Receipt)
+    private readonly receiptRepository: Repository<Receipt>
   ) {}
 
   async create(
     createReceiptActionDto: CreateReceiptActionDto,
-    shopId: string,
+    warehouseId: string,
     userId: string
   ): Promise<ReceiptAction> {
     // Проверка существования чека
-    if (createReceiptActionDto.receiptType === ReceiptType.SALES) {
-      const salesReceipt = await this.salesReceiptRepository.findOne({
-        where: { id: createReceiptActionDto.receiptId, shopId },
-      });
+    const receipt = await this.receiptRepository.findOne({
+      where: { id: createReceiptActionDto.receiptId, warehouseId },
+    });
 
-      if (!salesReceipt) {
-        throw new NotFoundException('Чек продажи не найден');
-      }
+    if (!receipt) {
+      throw new NotFoundException('Чек не найден');
+    }
 
-      // Проверка статуса чека для печати или отправки
-      if (
-        salesReceipt.status !== SalesReceiptStatus.PAID &&
-        salesReceipt.status !== SalesReceiptStatus.REFUNDED
-      ) {
-        throw new BadRequestException(
-          'Можно выполнять действия только с оплаченными или возвращенными чеками'
-        );
-      }
-    } else if (createReceiptActionDto.receiptType === ReceiptType.SERVICE) {
-      const serviceReceipt = await this.serviceReceiptRepository.findOne({
-        where: { id: createReceiptActionDto.receiptId, shopId },
-      });
-
-      if (!serviceReceipt) {
-        throw new NotFoundException('Чек услуги не найден');
-      }
-
-      // Проверка статуса чека для печати или отправки
-      if (
-        serviceReceipt.status !== ServiceReceiptStatus.PAID &&
-        serviceReceipt.status !== ServiceReceiptStatus.REFUNDED
-      ) {
-        throw new BadRequestException(
-          'Можно выполнять действия только с оплаченными или возвращенными чеками'
-        );
-      }
-    } else {
+    // Проверка статуса чека для печати или отправки
+    if (
+      receipt.status !== ReceiptStatus.PAID &&
+      receipt.status !== ReceiptStatus.REFUNDED
+    ) {
       throw new BadRequestException(
-        'Должен быть указан тип чека (продажа или услуга)'
+        'Можно выполнять действия только с оплаченными или возвращенными чеками'
       );
     }
 
@@ -86,7 +57,7 @@ export class ReceiptActionsService {
       receiptType: createReceiptActionDto.receiptType,
       receiptId: createReceiptActionDto.receiptId,
       actionType: createReceiptActionDto.actionType,
-      shopId,
+      warehouseId,
       performedBy: userId,
       status: ReceiptActionStatus.PENDING,
       additionalInfo: createReceiptActionDto.additionalInfo,
@@ -96,17 +67,17 @@ export class ReceiptActionsService {
     return this.receiptActionRepository.save(receiptAction);
   }
 
-  async findAll(shopId: string): Promise<ReceiptAction[]> {
+  async findAll(warehouseId: string): Promise<ReceiptAction[]> {
     return this.receiptActionRepository.find({
-      where: { shopId },
+      where: { warehouseId },
       relations: ['performer'],
       order: { actionTime: 'DESC' },
     });
   }
 
-  async findOne(id: string, shopId: string): Promise<ReceiptAction> {
+  async findOne(id: string, warehouseId: string): Promise<ReceiptAction> {
     const action = await this.receiptActionRepository.findOne({
-      where: { id, shopId },
+      where: { id, warehouseId },
       relations: ['performer'],
     });
 
@@ -120,9 +91,9 @@ export class ReceiptActionsService {
   async update(
     id: string,
     updateReceiptActionDto: UpdateReceiptActionDto,
-    shopId: string
+    warehouseId: string
   ): Promise<ReceiptAction> {
-    const action = await this.findOne(id, shopId);
+    const action = await this.findOne(id, warehouseId);
 
     // Обновляем поля действия
     Object.assign(action, updateReceiptActionDto);
@@ -131,8 +102,8 @@ export class ReceiptActionsService {
     return this.receiptActionRepository.save(action);
   }
 
-  async printReceipt(id: string, shopId: string): Promise<ReceiptAction> {
-    const action = await this.findOne(id, shopId);
+  async printReceipt(id: string, warehouseId: string): Promise<ReceiptAction> {
+    const action = await this.findOne(id, warehouseId);
 
     if (action.actionType !== ReceiptActionType.PRINT) {
       throw new BadRequestException('Действие не является печатью чека');
@@ -150,9 +121,9 @@ export class ReceiptActionsService {
 
   async sendReceiptWhatsapp(
     id: string,
-    shopId: string
+    warehouseId: string
   ): Promise<ReceiptAction> {
-    const action = await this.findOne(id, shopId);
+    const action = await this.findOne(id, warehouseId);
 
     if (action.actionType !== ReceiptActionType.SEND_WHATSAPP) {
       throw new BadRequestException(
@@ -169,8 +140,11 @@ export class ReceiptActionsService {
     return this.receiptActionRepository.save(action);
   }
 
-  async sendReceiptEmail(id: string, shopId: string): Promise<ReceiptAction> {
-    const action = await this.findOne(id, shopId);
+  async sendReceiptEmail(
+    id: string,
+    warehouseId: string
+  ): Promise<ReceiptAction> {
+    const action = await this.findOne(id, warehouseId);
 
     // Проверяем, что действие является отправкой по email
     // Здесь нужен дополнительный тип в enum ReceiptActionType

@@ -54,15 +54,20 @@ export class ReportsController {
     return this.reportsService.create(userId, createReportDto);
   }
 
-  @Get('shop/:shopId')
+  @Get('warehouse/:warehouseId')
   @Roles(RoleType.MANAGER)
   async getManagerReports(
     @CurrentUser('id') userId: string,
-    @Param('shopId', ParseUUIDPipe) shopId: string
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ): Promise<Report[]> {
-    console.log('Getting reports for shop:', shopId, 'userId:', userId);
+    console.log(
+      'Getting reports for warehouse:',
+      warehouseId,
+      'userId:',
+      userId
+    );
     try {
-      const reports = await this.reportsService.findAll(userId, shopId);
+      const reports = await this.reportsService.findAll(userId, warehouseId);
       console.log('Found reports:', reports?.length || 0);
       return reports;
     } catch (error) {
@@ -81,13 +86,13 @@ export class ReportsController {
     return this.reportsService.create(userId, createReportDto);
   }
 
-  @Get('owner/shop/:shopId')
+  @Get('owner/warehouse/:warehouseId')
   @Roles(RoleType.OWNER)
   async getOwnerReports(
     @CurrentUser('id') userId: string,
-    @Param('shopId', ParseUUIDPipe) shopId: string
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ): Promise<Report[]> {
-    return this.reportsService.findAll(userId, shopId);
+    return this.reportsService.findAll(userId, warehouseId);
   }
 
   @Get('owner/network')
@@ -105,9 +110,9 @@ export class ReportsController {
   async getReport(
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
-    @Query('shopId', ParseUUIDPipe) shopId: string
+    @Query('warehouseId', ParseUUIDPipe) warehouseId: string
   ): Promise<Report> {
-    return this.reportsService.findOne(userId, shopId, id);
+    return this.reportsService.findOne(userId, warehouseId, id);
   }
 
   @Get(':id/download')
@@ -115,10 +120,10 @@ export class ReportsController {
   async downloadReport(
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
-    @Query('shopId', ParseUUIDPipe) shopId: string,
+    @Query('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Res() res: Response
   ): Promise<void> {
-    const report = await this.reportsService.findOne(userId, shopId, id);
+    const report = await this.reportsService.findOne(userId, warehouseId, id);
 
     if (!report.fileUrl) {
       throw new NotFoundException('Report file not found');
@@ -152,8 +157,8 @@ export class ReportsController {
   async deleteReport(
     @CurrentUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
-    @Query('shopId', ParseUUIDPipe) shopId: string
+    @Query('warehouseId', ParseUUIDPipe) warehouseId: string
   ): Promise<void> {
-    return this.reportsService.delete(userId, shopId, id);
+    return this.reportsService.delete(userId, warehouseId, id);
   }
 }

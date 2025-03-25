@@ -17,27 +17,27 @@ export class TransfersService {
 
   private async validateManagerAccess(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<void> {
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
+        warehouseId,
         type: RoleType.MANAGER,
-        isActive: true,
       },
     });
 
     if (!managerRole) {
-      throw new ForbiddenException('No access to this shop');
+      throw new ForbiddenException('No access to this warehouse');
     }
   }
 
   async create(createTransferDto: CreateTransferDto, userId: string) {
-    await this.validateManagerAccess(userId, createTransferDto.fromShopId);
+    await this.validateManagerAccess(userId, createTransferDto.fromWarehouseId);
 
     const transfer = this.transferRepository.create({
-      fromShopId: createTransferDto.fromShopId,
-      toShopId: createTransferDto.toShopId,
+      fromWarehouseId: createTransferDto.fromWarehouseId,
+      toWarehouseId: createTransferDto.toWarehouseId,
       date: createTransferDto.date,
       items: createTransferDto.items,
       comment: createTransferDto.comment,
@@ -48,12 +48,12 @@ export class TransfersService {
     return this.transferRepository.save(transfer);
   }
 
-  async findAll(shopId: string, userId: string) {
-    await this.validateManagerAccess(userId, shopId);
+  async findAll(warehouseId: string, userId: string) {
+    await this.validateManagerAccess(userId, warehouseId);
 
     return this.transferRepository.find({
-      where: [{ fromShopId: shopId }, { toShopId: shopId }],
-      relations: ['fromShop', 'toShop', 'items', 'items.product'],
+      where: [{ fromWarehouseId: warehouseId }, { toWarehouseId: warehouseId }],
+      relations: ['fromWarehouse', 'toWarehouse', 'items', 'items.product'],
       order: {
         createdAt: 'DESC',
       },

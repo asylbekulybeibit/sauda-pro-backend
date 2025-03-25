@@ -53,7 +53,7 @@ export class CreatePromotionDto {
   endDate: Date;
 
   @IsUUID()
-  shopId: string;
+  warehouseId: string;
 
   @IsOptional()
   @IsArray()

@@ -11,7 +11,7 @@ import {
   PromotionTarget,
   PromotionType,
 } from '../entities/promotion.entity';
-import { Product } from '../entities/product.entity';
+import { WarehouseProduct } from '../entities/warehouse-product.entity';
 import { Category } from '../entities/category.entity';
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
@@ -22,8 +22,8 @@ export class PromotionsService {
   constructor(
     @InjectRepository(Promotion)
     private promotionsRepository: Repository<Promotion>,
-    @InjectRepository(Product)
-    private productsRepository: Repository<Product>,
+    @InjectRepository(WarehouseProduct)
+    private warehouseProductRepository: Repository<WarehouseProduct>,
     @InjectRepository(Category)
     private categoriesRepository: Repository<Category>,
     @InjectRepository(UserRole)
@@ -32,14 +32,14 @@ export class PromotionsService {
 
   private async validateManagerAccess(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<void> {
     const hasAccess = await this.userRoleRepository.findOne({
-      where: { userId, shopId, type: RoleType.MANAGER, isActive: true },
+      where: { userId, warehouseId, type: RoleType.MANAGER, isActive: true },
     });
 
     if (!hasAccess) {
-      throw new ForbiddenException('No access to this shop');
+      throw new ForbiddenException('No access to this warehouse');
     }
   }
 
@@ -47,7 +47,7 @@ export class PromotionsService {
     userId: string,
     createPromotionDto: CreatePromotionDto
   ): Promise<Promotion> {
-    await this.validateManagerAccess(userId, createPromotionDto.shopId);
+    await this.validateManagerAccess(userId, createPromotionDto.warehouseId);
 
     if (createPromotionDto.startDate > createPromotionDto.endDate) {
       throw new BadRequestException('Start date cannot be after end date');
@@ -61,12 +61,13 @@ export class PromotionsService {
       createPromotionDto.target === PromotionTarget.PRODUCT &&
       createPromotionDto.productIds?.length
     ) {
-      products = await this.productsRepository.find({
+      products = await this.warehouseProductRepository.find({
         where: {
           id: In(createPromotionDto.productIds),
-          shopId: createPromotionDto.shopId,
+          warehouseId: createPromotionDto.warehouseId,
           isActive: true,
         },
+        relations: ['barcode', 'barcode.category'],
       });
 
       if (products.length !== createPromotionDto.productIds.length) {
@@ -82,7 +83,7 @@ export class PromotionsService {
       categories = await this.categoriesRepository.find({
         where: {
           id: In(createPromotionDto.categoryIds),
-          shopId: createPromotionDto.shopId,
+          warehouseId: createPromotionDto.warehouseId,
           isActive: true,
         },
       });
@@ -125,11 +126,11 @@ export class PromotionsService {
     return this.promotionsRepository.save(promotion);
   }
 
-  async findAll(userId: string, shopId: string): Promise<Promotion[]> {
-    await this.validateManagerAccess(userId, shopId);
+  async findAll(userId: string, warehouseId: string): Promise<Promotion[]> {
+    await this.validateManagerAccess(userId, warehouseId);
 
     return this.promotionsRepository.find({
-      where: { shopId, isActive: true },
+      where: { warehouseId, isActive: true },
       relations: ['products', 'categories'],
       order: { createdAt: 'DESC' },
     });
@@ -137,13 +138,13 @@ export class PromotionsService {
 
   async findOne(
     userId: string,
-    shopId: string,
+    warehouseId: string,
     id: string
   ): Promise<Promotion> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     const promotion = await this.promotionsRepository.findOne({
-      where: { id, shopId, isActive: true },
+      where: { id, warehouseId, isActive: true },
       relations: ['products', 'categories'],
     });
 
@@ -156,13 +157,13 @@ export class PromotionsService {
 
   async update(
     userId: string,
-    shopId: string,
+    warehouseId: string,
     id: string,
     updatePromotionDto: Partial<CreatePromotionDto>
   ): Promise<Promotion> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
-    const promotion = await this.findOne(userId, shopId, id);
+    const promotion = await this.findOne(userId, warehouseId, id);
 
     // Validate dates if provided
     if (updatePromotionDto.startDate && updatePromotionDto.endDate) {
@@ -179,12 +180,13 @@ export class PromotionsService {
       updatePromotionDto.target === PromotionTarget.PRODUCT &&
       updatePromotionDto.productIds?.length
     ) {
-      products = await this.productsRepository.find({
+      products = await this.warehouseProductRepository.find({
         where: {
           id: In(updatePromotionDto.productIds),
-          shopId,
+          warehouseId,
           isActive: true,
         },
+        relations: ['barcode', 'barcode.category'],
       });
 
       if (products.length !== updatePromotionDto.productIds.length) {
@@ -211,7 +213,7 @@ export class PromotionsService {
       categories = await this.categoriesRepository.find({
         where: {
           id: In(updatePromotionDto.categoryIds),
-          shopId,
+          warehouseId,
           isActive: true,
         },
       });
@@ -252,39 +254,26 @@ export class PromotionsService {
       (updateData.type !== undefined || updateData.value !== undefined) &&
       updateData.discount === undefined
     ) {
-      // Определяем тип скидки (используем новый или существующий)
-      const promotionType = updateData.type || promotion.type;
-      // Определяем значение (используем новое или существующее)
+      // Определяем тип и значение для расчета discount
+      const type =
+        updateData.type !== undefined ? updateData.type : promotion.type;
       const value =
         updateData.value !== undefined ? updateData.value : promotion.value;
 
-      // Устанавливаем discount в зависимости от типа скидки
-      updateData.discount =
-        promotionType === PromotionType.PERCENTAGE ? value : 0;
-
-      console.log(
-        'Updating promotion with calculated discount:',
-        updateData.discount
-      );
+      // Для процентных скидок discount = value, для остальных = 0
+      updateData.discount = type === PromotionType.PERCENTAGE ? value : 0;
     }
 
-    console.log(
-      'Products in promotion after update:',
-      promotion.products?.map((p) => p.id) || []
-    );
-    console.log(
-      'Categories in promotion after update:',
-      promotion.categories?.map((c) => c.id) || []
-    );
-
+    // Обновляем поля акции
     Object.assign(promotion, updateData);
+
     return this.promotionsRepository.save(promotion);
   }
 
-  async remove(userId: string, shopId: string, id: string): Promise<void> {
-    await this.validateManagerAccess(userId, shopId);
+  async remove(userId: string, warehouseId: string, id: string): Promise<void> {
+    await this.validateManagerAccess(userId, warehouseId);
 
-    const promotion = await this.findOne(userId, shopId, id);
+    const promotion = await this.findOne(userId, warehouseId, id);
     promotion.isActive = false;
     await this.promotionsRepository.save(promotion);
   }

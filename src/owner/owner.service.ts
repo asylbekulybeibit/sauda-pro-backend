@@ -6,17 +6,17 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Shop } from '../shops/entities/shop.entity';
-import { UserRole } from '../roles/entities/user-role.entity';
-import { RoleType } from '../auth/types/role.type';
 import { Invite, InviteStatus } from '../invites/entities/invite.entity';
 import { CreateOwnerInviteDto } from './dto/create-owner-invite.dto';
+import { RoleType } from '../auth/types/role.type';
+import { UserRole } from '../roles/entities/user-role.entity';
+import { Warehouse } from '../manager/entities/warehouse.entity';
 
 @Injectable()
 export class OwnerService {
   constructor(
-    @InjectRepository(Shop)
-    private readonly shopRepository: Repository<Shop>,
+    @InjectRepository(Warehouse)
+    private readonly warehouseRepository: Repository<Warehouse>,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
     @InjectRepository(Invite)
@@ -32,7 +32,7 @@ export class OwnerService {
       case RoleType.CASHIER:
         return 'Кассир';
       default:
-        return 'Неизвестная роль';
+        return role;
     }
   }
 
@@ -40,32 +40,29 @@ export class OwnerService {
     createInviteDto: CreateOwnerInviteDto,
     ownerId: string
   ): Promise<Invite> {
-    // Проверяем роль
-    if (![RoleType.MANAGER, RoleType.CASHIER].includes(createInviteDto.role)) {
-      throw new ForbiddenException(
-        'Владелец может создавать только менеджеров и кассиров'
-      );
-    }
-
-    // Проверяем, что магазин принадлежит владельцу
-    const shop = await this.shopRepository
-      .createQueryBuilder('shop')
-      .innerJoin('shop.userRoles', 'role')
-      .where('shop.id = :shopId', { shopId: createInviteDto.shopId })
+    // Проверяем, что склад принадлежит владельцу
+    const warehouse = await this.warehouseRepository
+      .createQueryBuilder('warehouse')
+      .innerJoin('warehouse.userRoles', 'role')
+      .where('warehouse.id = :warehouseId', {
+        warehouseId: createInviteDto.warehouseId,
+      })
       .andWhere('role.userId = :ownerId', { ownerId })
       .andWhere('role.type = :type', { type: RoleType.OWNER })
       .getOne();
 
-    if (!shop) {
-      throw new ForbiddenException('У вас нет прав для этого магазина');
+    if (!warehouse) {
+      throw new ForbiddenException('У вас нет прав для этого склада');
     }
 
-    // Проверяем, нет ли активной роли для этого номера в этом магазине
+    // Проверяем, нет ли активной роли для этого номера в этом складе
     const existingActiveRole = await this.userRoleRepository
       .createQueryBuilder('role')
       .innerJoin('role.user', 'user')
       .where('user.phone = :phone', { phone: createInviteDto.phone })
-      .andWhere('role.shopId = :shopId', { shopId: createInviteDto.shopId })
+      .andWhere('role.warehouseId = :warehouseId', {
+        warehouseId: createInviteDto.warehouseId,
+      })
       .andWhere('role.type = :type', { type: createInviteDto.role })
       .andWhere('role.isActive = :isActive', { isActive: true })
       .getOne();
@@ -74,7 +71,7 @@ export class OwnerService {
       throw new BadRequestException(
         `У пользователя уже есть активная роль "${this.getRoleName(
           createInviteDto.role
-        )}" в этом магазине`
+        )}" в этом складе`
       );
     }
 
@@ -83,7 +80,7 @@ export class OwnerService {
       where: {
         phone: createInviteDto.phone,
         role: createInviteDto.role,
-        shopId: createInviteDto.shopId,
+        warehouseId: createInviteDto.warehouseId,
         status: InviteStatus.PENDING,
       },
     });
@@ -105,23 +102,23 @@ export class OwnerService {
   }
 
   async getOwnerInvites(ownerId: string): Promise<Invite[]> {
-    // Получаем все магазины владельца
-    const ownerShops = await this.shopRepository
-      .createQueryBuilder('shop')
-      .innerJoin('shop.userRoles', 'role')
+    // Получаем все склады владельца
+    const ownerWarehouses = await this.warehouseRepository
+      .createQueryBuilder('warehouse')
+      .innerJoin('warehouse.userRoles', 'role')
       .where('role.userId = :ownerId', { ownerId })
       .andWhere('role.type = :type', { type: RoleType.OWNER })
       .getMany();
 
-    const shopIds = ownerShops.map((shop) => shop.id);
+    const warehouseIds = ownerWarehouses.map((warehouse) => warehouse.id);
 
-    // Получаем все приглашения для магазинов владельца
+    // Получаем все приглашения для складов владельца
     return this.inviteRepository
       .createQueryBuilder('invite')
-      .leftJoinAndSelect('invite.shop', 'shop')
+      .leftJoinAndSelect('invite.warehouse', 'warehouse')
       .leftJoinAndSelect('invite.createdBy', 'createdBy')
       .leftJoinAndSelect('invite.invitedUser', 'invitedUser')
-      .where('invite.shopId IN (:...shopIds)', { shopIds })
+      .where('invite.warehouseId IN (:...warehouseIds)', { warehouseIds })
       .orderBy('invite.createdAt', 'DESC')
       .getMany();
   }
@@ -129,8 +126,8 @@ export class OwnerService {
   async cancelInvite(ownerId: string, inviteId: string): Promise<void> {
     const invite = await this.inviteRepository
       .createQueryBuilder('invite')
-      .leftJoinAndSelect('invite.shop', 'shop')
-      .leftJoin('shop.userRoles', 'role')
+      .leftJoinAndSelect('invite.warehouse', 'warehouse')
+      .leftJoin('warehouse.userRoles', 'role')
       .where('invite.id = :inviteId', { inviteId })
       .andWhere('role.userId = :ownerId', { ownerId })
       .andWhere('role.type = :type', { type: RoleType.OWNER })
@@ -150,42 +147,45 @@ export class OwnerService {
     await this.inviteRepository.save(invite);
   }
 
-  async getShopStaff(ownerId: string, shopId: string): Promise<UserRole[]> {
-    // Проверяем, что магазин принадлежит владельцу
-    const shop = await this.shopRepository
-      .createQueryBuilder('shop')
-      .innerJoin('shop.userRoles', 'ownerRole')
-      .where('shop.id = :shopId', { shopId })
+  async getWarehouseStaff(
+    ownerId: string,
+    warehouseId: string
+  ): Promise<UserRole[]> {
+    // Проверяем, что склад принадлежит владельцу
+    const warehouse = await this.warehouseRepository
+      .createQueryBuilder('warehouse')
+      .innerJoin('warehouse.userRoles', 'ownerRole')
+      .where('warehouse.id = :warehouseId', { warehouseId })
       .andWhere('ownerRole.userId = :ownerId', { ownerId })
       .andWhere('ownerRole.type = :type', { type: RoleType.OWNER })
       .getOne();
 
-    if (!shop) {
-      throw new ForbiddenException('У вас нет прав для этого магазина');
+    if (!warehouse) {
+      throw new ForbiddenException('У вас нет прав для этого склада');
     }
 
     // Получаем все роли сотрудников (активные и неактивные)
     return this.userRoleRepository
       .createQueryBuilder('role')
       .leftJoinAndSelect('role.user', 'user')
-      .leftJoinAndSelect('role.shop', 'shop')
+      .leftJoinAndSelect('role.warehouse', 'warehouse')
       .select([
         'role.id',
         'role.type',
         'role.isActive',
         'role.createdAt',
         'role.deactivatedAt',
-        'role.shopId',
+        'role.warehouseId',
         'user.id',
         'user.firstName',
         'user.lastName',
         'user.phone',
-        'shop.id',
-        'shop.name',
-        'shop.type',
-        'shop.address',
+        'warehouse.id',
+        'warehouse.name',
+        'warehouse.type',
+        'warehouse.address',
       ])
-      .where('role.shopId = :shopId', { shopId })
+      .where('role.warehouseId = :warehouseId', { warehouseId })
       .andWhere('role.type IN (:...types)', {
         types: [RoleType.OWNER, RoleType.MANAGER, RoleType.CASHIER],
       })
@@ -197,8 +197,8 @@ export class OwnerService {
   async removeStaffMember(ownerId: string, staffId: string): Promise<void> {
     const staffRole = await this.userRoleRepository
       .createQueryBuilder('role')
-      .leftJoinAndSelect('role.shop', 'shop')
-      .leftJoin('shop.userRoles', 'ownerRole')
+      .leftJoinAndSelect('role.warehouse', 'warehouse')
+      .leftJoin('warehouse.userRoles', 'ownerRole')
       .where('role.id = :staffId', { staffId })
       .andWhere('ownerRole.userId = :ownerId', { ownerId })
       .andWhere('ownerRole.type = :type', { type: RoleType.OWNER })
@@ -219,27 +219,30 @@ export class OwnerService {
     await this.userRoleRepository.save(staffRole);
   }
 
-  async getShopInvites(ownerId: string, shopId: string): Promise<Invite[]> {
-    // Проверяем, что магазин принадлежит владельцу
-    const shop = await this.shopRepository
-      .createQueryBuilder('shop')
-      .innerJoin('shop.userRoles', 'role')
-      .where('shop.id = :shopId', { shopId })
+  async getWarehouseInvites(
+    ownerId: string,
+    warehouseId: string
+  ): Promise<Invite[]> {
+    // Проверяем, что склад принадлежит владельцу
+    const warehouse = await this.warehouseRepository
+      .createQueryBuilder('warehouse')
+      .innerJoin('warehouse.userRoles', 'role')
+      .where('warehouse.id = :warehouseId', { warehouseId })
       .andWhere('role.userId = :ownerId', { ownerId })
       .andWhere('role.type = :type', { type: RoleType.OWNER })
       .getOne();
 
-    if (!shop) {
-      throw new ForbiddenException('У вас нет прав для этого магазина');
+    if (!warehouse) {
+      throw new ForbiddenException('У вас нет прав для этого склада');
     }
 
-    // Получаем все приглашения для конкретного магазина
+    // Получаем все приглашения для конкретного склада
     return this.inviteRepository
       .createQueryBuilder('invite')
-      .leftJoinAndSelect('invite.shop', 'shop')
+      .leftJoinAndSelect('invite.warehouse', 'warehouse')
       .leftJoinAndSelect('invite.createdBy', 'createdBy')
       .leftJoinAndSelect('invite.invitedUser', 'invitedUser')
-      .where('invite.shopId = :shopId', { shopId })
+      .where('invite.warehouseId = :warehouseId', { warehouseId })
       .orderBy('invite.createdAt', 'DESC')
       .getMany();
   }

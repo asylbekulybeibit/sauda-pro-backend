@@ -14,8 +14,9 @@ import {
   PaymentMethodSource,
   PaymentMethodStatus,
 } from '../entities/register-payment-method.entity';
-import { CreateCashRegisterDto } from '../dto/cash-registers/create-cash-register.dto';
+import { PaymentMethodType } from '../entities/cash-operation.entity';
 import { PaymentMethodDto } from '../dto/payment-methods/payment-method.dto';
+import { CreateCashRegisterDto } from '../dto/cash-registers/create-cash-register.dto';
 
 @Injectable()
 export class CashRegistersService {
@@ -51,17 +52,24 @@ export class CashRegistersService {
     console.log('Saved cash register:', savedRegister);
 
     // Создаем методы оплаты для кассы
-    const paymentMethods = createCashRegisterDto.paymentMethods.map((method) =>
-      this.paymentMethodRepository.create({
-        cashRegisterId: cashRegister.id,
-        source: method.source,
-        systemType: method.systemType,
-        name: method.name,
-        code: method.code,
-        description: method.description,
-        isActive: method.isActive ?? true,
-        status: method.status ?? PaymentMethodStatus.ACTIVE,
-      })
+    const paymentMethods = createCashRegisterDto.paymentMethods.map(
+      (method) => {
+        const paymentMethod = new RegisterPaymentMethod();
+        paymentMethod.cashRegisterId = cashRegister.id;
+        paymentMethod.source = method.source;
+
+        if (method.systemType) {
+          paymentMethod.systemType = method.systemType;
+        }
+
+        paymentMethod.name = method.name;
+        paymentMethod.code = method.code;
+        paymentMethod.description = method.description;
+        paymentMethod.isActive = method.isActive ?? true;
+        paymentMethod.status = method.status ?? PaymentMethodStatus.ACTIVE;
+
+        return paymentMethod;
+      }
     );
 
     await this.paymentMethodRepository.save(paymentMethods);

@@ -32,44 +32,44 @@ export class SuppliersController {
     return this.suppliersService.create(req.user.id, createSupplierDto);
   }
 
-  @Get('shop/:shopId')
+  @Get('warehouse/:warehouseId')
   findAll(
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ): Promise<Supplier[]> {
-    return this.suppliersService.findAll(req.user.id, shopId);
+    return this.suppliersService.findAll(req.user.id, warehouseId);
   }
 
-  @Get('shop/:shopId/supplier/:id')
+  @Get('warehouse/:warehouseId/supplier/:id')
   findOne(
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Param('id', ParseUUIDPipe) id: string
   ): Promise<Supplier> {
-    return this.suppliersService.findOne(req.user.id, shopId, id);
+    return this.suppliersService.findOne(req.user.id, warehouseId, id);
   }
 
-  @Patch('shop/:shopId/supplier/:id')
+  @Patch('warehouse/:warehouseId/supplier/:id')
   update(
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateSupplierDto: Partial<CreateSupplierDto>
   ): Promise<Supplier> {
     return this.suppliersService.update(
       req.user.id,
-      shopId,
+      warehouseId,
       id,
       updateSupplierDto
     );
   }
 
-  @Delete('shop/:shopId/supplier/:id')
+  @Delete('warehouse/:warehouseId/supplier/:id')
   remove(
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Param('id', ParseUUIDPipe) id: string
   ): Promise<void> {
-    return this.suppliersService.remove(req.user.id, shopId, id);
+    return this.suppliersService.remove(req.user.id, warehouseId, id);
   }
 }

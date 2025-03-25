@@ -10,10 +10,10 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Category } from './category.entity';
-import { Shop } from '../../shops/entities/shop.entity';
 import { User } from '../../users/entities/user.entity';
 import { Warehouse } from './warehouse.entity';
 import { WarehouseProduct } from './warehouse-product.entity';
+import { Barcode } from './barcode.entity';
 
 export enum PromotionType {
   PERCENTAGE = 'percentage', // Скидка в процентах
@@ -78,18 +78,15 @@ export class Promotion {
   @JoinTable()
   categories: Category[];
 
-  @ManyToOne(() => Shop)
-  @JoinColumn({ name: 'shopId' })
-  shop: Shop;
+  @ManyToMany(() => Barcode)
+  @JoinTable()
+  barcodes: Barcode[];
 
-  @Column()
-  shopId: string;
-
-  @ManyToOne(() => Warehouse, { nullable: true })
+  @ManyToOne(() => Warehouse)
   @JoinColumn({ name: 'warehouseId' })
   warehouse: Warehouse;
 
-  @Column({ nullable: true })
+  @Column()
   warehouseId: string;
 
   @ManyToOne(() => User)

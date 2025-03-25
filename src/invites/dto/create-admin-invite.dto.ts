@@ -1,18 +1,21 @@
-import { IsString, IsEnum, IsUUID } from 'class-validator';
+import { IsString, IsEnum, IsUUID, IsOptional } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { RoleType } from '../../auth/types/role.type';
 import { IsPhoneNumber } from '../../common/decorators/phone.decorator';
 import { normalizePhoneNumber } from '../../common/utils/phone.util';
 
-export class CreateOwnerInviteDto {
+export class CreateAdminInviteDto {
   @IsPhoneNumber()
   @Transform(({ value }) => normalizePhoneNumber(value))
   phone: string;
 
   @IsEnum(RoleType, {
-    message: 'Владелец может создавать только менеджеров и кассиров',
+    message: 'Администратор может создавать только владельцев',
   })
-  role: Extract<RoleType, 'manager' | 'cashier'>;
+  role: Extract<RoleType, 'owner'>;
+
+  @IsUUID()
+  shopId: string;
 
   @IsUUID()
   warehouseId: string;

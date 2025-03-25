@@ -23,9 +23,8 @@ export enum ReportType {
   FINANCIAL = 'FINANCIAL',
 
   // Summary reports
-  SHOP_SUMMARY = 'SHOP_SUMMARY',
-  NETWORK_SUMMARY = 'NETWORK_SUMMARY',
   WAREHOUSE_SUMMARY = 'WAREHOUSE_SUMMARY',
+  NETWORK_SUMMARY = 'NETWORK_SUMMARY',
 }
 
 export enum ReportPeriod {
@@ -103,18 +102,18 @@ export class Report {
   @Column({ nullable: true })
   fileUrl: string;
 
-  @ManyToOne(() => Shop)
+  @ManyToOne(() => Shop, { nullable: true })
   @JoinColumn({ name: 'shopId' })
   shop: Shop;
 
-  @Column()
+  @Column({ nullable: true })
   shopId: string;
 
-  @ManyToOne(() => Warehouse, { nullable: true })
+  @ManyToOne(() => Warehouse)
   @JoinColumn({ name: 'warehouseId' })
   warehouse: Warehouse;
 
-  @Column({ nullable: true })
+  @Column()
   warehouseId: string;
 
   @ManyToOne(() => User)

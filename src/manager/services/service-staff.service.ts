@@ -25,32 +25,34 @@ export class ServiceStaffService {
     private readonly userRoleRepository: Repository<UserRole>
   ) {}
 
-  private async validateManagerAccess(userId: string, shopId: string) {
+  private async validateManagerAccess(userId: string, warehouseId: string) {
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
-        shopId,
+        warehouseId,
         type: RoleType.MANAGER,
         isActive: true,
       },
-      relations: ['shop'],
+      relations: ['warehouse'],
     });
 
     if (!managerRole) {
-      throw new ForbiddenException(
-        'У вас нет прав менеджера для этого магазина'
-      );
+      throw new ForbiddenException('У вас нет прав менеджера для этого склада');
     }
 
     return managerRole;
   }
 
-  async findAllByService(serviceId: string, userId: string, shopId: string) {
-    await this.validateManagerAccess(userId, shopId);
+  async findAllByService(
+    serviceId: string,
+    userId: string,
+    warehouseId: string
+  ) {
+    await this.validateManagerAccess(userId, warehouseId);
 
-    // Проверяем, что услуга существует и принадлежит этому магазину
+    // Проверяем, что услуга существует и принадлежит этому складу
     const service = await this.serviceRepository.findOne({
-      where: { id: serviceId, shopId },
+      where: { id: serviceId, warehouseId },
     });
 
     if (!service) {
@@ -64,8 +66,8 @@ export class ServiceStaffService {
     });
   }
 
-  async findOne(id: string, userId: string, shopId: string) {
-    await this.validateManagerAccess(userId, shopId);
+  async findOne(id: string, userId: string, warehouseId: string) {
+    await this.validateManagerAccess(userId, warehouseId);
 
     const serviceStaff = await this.serviceStaffRepository.findOne({
       where: { id },
@@ -76,9 +78,9 @@ export class ServiceStaffService {
       throw new NotFoundException('Запись о сотруднике услуги не найдена');
     }
 
-    // Проверяем, что услуга принадлежит этому магазину
+    // Проверяем, что услуга принадлежит этому складу
     const service = await this.serviceRepository.findOne({
-      where: { id: serviceStaff.serviceId, shopId },
+      where: { id: serviceStaff.serviceId, warehouseId },
     });
 
     if (!service) {
@@ -88,10 +90,10 @@ export class ServiceStaffService {
     return serviceStaff;
   }
 
-  async startWork(id: string, userId: string, shopId: string) {
-    await this.validateManagerAccess(userId, shopId);
+  async startWork(id: string, userId: string, warehouseId: string) {
+    await this.validateManagerAccess(userId, warehouseId);
 
-    const serviceStaff = await this.findOne(id, userId, shopId);
+    const serviceStaff = await this.findOne(id, userId, warehouseId);
 
     // Проверяем, что услуга активна
     const service = await this.serviceRepository.findOne({
@@ -115,10 +117,10 @@ export class ServiceStaffService {
     return this.serviceStaffRepository.save(serviceStaff);
   }
 
-  async completeWork(id: string, userId: string, shopId: string) {
-    await this.validateManagerAccess(userId, shopId);
+  async completeWork(id: string, userId: string, warehouseId: string) {
+    await this.validateManagerAccess(userId, warehouseId);
 
-    const serviceStaff = await this.findOne(id, userId, shopId);
+    const serviceStaff = await this.findOne(id, userId, warehouseId);
 
     // Проверяем, что услуга активна
     const service = await this.serviceRepository.findOne({
@@ -151,13 +153,13 @@ export class ServiceStaffService {
   async checkAllStaffCompleted(
     serviceId: string,
     userId: string,
-    shopId: string
+    warehouseId: string
   ) {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
-    // Проверяем, что услуга существует и принадлежит этому магазину
+    // Проверяем, что услуга существует и принадлежит этому складу
     const service = await this.serviceRepository.findOne({
-      where: { id: serviceId, shopId },
+      where: { id: serviceId, warehouseId },
     });
 
     if (!service) {

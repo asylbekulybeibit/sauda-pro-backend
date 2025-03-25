@@ -36,14 +36,8 @@ export class PromotionsController {
     return this.promotionsService.create(req.user.id, createPromotionDto);
   }
 
-  @Post('create-with-discount')
+  @Post('discount')
   createWithDiscount(@Request() req, @Body() data: any): Promise<Promotion> {
-    console.log(
-      'PromotionsController.createWithDiscount called with data:',
-      JSON.stringify(data, null, 2)
-    );
-
-    // Преобразуем данные в правильный формат CreatePromotionDto
     const createPromotionDto: CreatePromotionDto = {
       name: data.name,
       description: data.description,
@@ -53,7 +47,7 @@ export class PromotionsController {
       discount: Number(data.discount || data.value), // Используем discount или value
       startDate: new Date(data.startDate),
       endDate: new Date(data.endDate),
-      shopId: data.shopId,
+      warehouseId: data.warehouseId,
       productIds: Array.isArray(data.productIds) ? data.productIds : [],
       categoryIds: Array.isArray(data.categoryIds) ? data.categoryIds : [],
     };
@@ -68,27 +62,27 @@ export class PromotionsController {
     return this.promotionsService.create(req.user.id, createPromotionDto);
   }
 
-  @Get('shop/:shopId')
+  @Get('warehouse/:warehouseId')
   findAll(
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ): Promise<Promotion[]> {
-    return this.promotionsService.findAll(req.user.id, shopId);
+    return this.promotionsService.findAll(req.user.id, warehouseId);
   }
 
-  @Get('shop/:shopId/promotion/:id')
+  @Get('warehouse/:warehouseId/promotion/:id')
   findOne(
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Param('id', ParseUUIDPipe) id: string
   ): Promise<Promotion> {
-    return this.promotionsService.findOne(req.user.id, shopId, id);
+    return this.promotionsService.findOne(req.user.id, warehouseId, id);
   }
 
-  @Patch('shop/:shopId/promotion/:id')
+  @Patch('warehouse/:warehouseId/promotion/:id')
   update(
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updatePromotionDto: Partial<CreatePromotionDto>
   ): Promise<Promotion> {
@@ -98,18 +92,18 @@ export class PromotionsController {
     );
     return this.promotionsService.update(
       req.user.id,
-      shopId,
+      warehouseId,
       id,
       updatePromotionDto
     );
   }
 
-  @Delete('shop/:shopId/promotion/:id')
+  @Delete('warehouse/:warehouseId/promotion/:id')
   remove(
     @Request() req,
-    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Param('id', ParseUUIDPipe) id: string
   ): Promise<void> {
-    return this.promotionsService.remove(req.user.id, shopId, id);
+    return this.promotionsService.remove(req.user.id, warehouseId, id);
   }
 }

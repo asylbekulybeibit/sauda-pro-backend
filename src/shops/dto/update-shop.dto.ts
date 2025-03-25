@@ -1,5 +1,4 @@
 import { IsString, IsEnum, IsOptional, IsBoolean } from 'class-validator';
-import { ShopType } from '../entities/shop.entity';
 
 export class UpdateShopDto {
   @IsString()
@@ -14,9 +13,7 @@ export class UpdateShopDto {
   @IsOptional()
   phone?: string;
 
-  @IsEnum(ShopType)
-  @IsOptional()
-  type?: ShopType;
+ 
 
   @IsBoolean()
   @IsOptional()

@@ -51,9 +51,9 @@ export class InvitesService {
 
     if (existingUser) {
       // Проверяем, есть ли у пользователя уже такая роль в этом проекте
-      const existingRoles = await this.rolesService.findByUserAndShop(
+      const existingRoles = await this.rolesService.findByUserAndWarehouse(
         existingUser.id,
-        createInviteDto.shopId
+        createInviteDto.warehouseId
       );
 
       this.logger.debug(
@@ -89,7 +89,6 @@ export class InvitesService {
     const duplicateInvite = existingInvites.find(
       (invite) =>
         invite.role === createInviteDto.role &&
-        invite.shopId === createInviteDto.shopId &&
         invite.warehouseId === createInviteDto.warehouseId
     );
 
@@ -104,8 +103,8 @@ export class InvitesService {
     const invite = this.invitesRepository.create({
       phone: normalizedPhone,
       role: createInviteDto.role,
-      shopId: createInviteDto.shopId,
       warehouseId: createInviteDto.warehouseId,
+      shopId: createInviteDto.shopId,
       createdById: creator.id,
       status: InviteStatus.PENDING,
     });
@@ -116,16 +115,84 @@ export class InvitesService {
     return invite;
   }
 
+  async createAdminInvite(createAdminInviteDto: any, createdById: string) {
+    const creator = await this.usersService.findOne(createdById);
+    if (!creator.isSuperAdmin) {
+      throw new ForbiddenException(
+        'Только администратор может создавать инвайты владельцев'
+      );
+    }
+
+    const normalizedPhone = normalizePhoneNumber(createAdminInviteDto.phone);
+
+    // Проверяем, существует ли пользователь с таким номером
+    const existingUser = await this.usersService.findByPhone(normalizedPhone);
+
+    if (existingUser) {
+      // Проверяем, есть ли у пользователя уже роль владельца в этом магазине
+      const existingRoles = await this.rolesService.findByUserAndWarehouse(
+        existingUser.id,
+        createAdminInviteDto.warehouseId
+      );
+
+      const hasActiveRole = existingRoles.some(
+        (role) => role.type === RoleType.OWNER && role.isActive
+      );
+
+      if (hasActiveRole) {
+        throw new BadRequestException(
+          `У пользователя уже есть роль "Владелец" в этом складе`
+        );
+      }
+    }
+
+    // Проверяем, нет ли уже активного инвайта для этого номера на роль владельца в этом магазине
+    const existingInvites = await this.invitesRepository.find({
+      where: {
+        phone: normalizedPhone,
+        status: InviteStatus.PENDING,
+      },
+    });
+
+    const duplicateInvite = existingInvites.find(
+      (invite) =>
+        invite.role === RoleType.OWNER &&
+        invite.shopId === createAdminInviteDto.shopId
+    );
+
+    if (duplicateInvite) {
+      throw new BadRequestException(
+        `Активный инвайт на роль "Владелец" в этом магазине уже существует для номера ${normalizedPhone}`
+      );
+    }
+
+    const invite = this.invitesRepository.create({
+      phone: normalizedPhone,
+      role: RoleType.OWNER,
+      shopId: createAdminInviteDto.shopId,
+      warehouseId: createAdminInviteDto.warehouseId,
+      createdById: creator.id,
+      status: InviteStatus.PENDING,
+    });
+
+    await this.invitesRepository.save(invite);
+    this.logger.debug(
+      `Отправка инвайта владельца на WhatsApp: ${normalizedPhone}`
+    );
+
+    return invite;
+  }
+
   async findAll(): Promise<Invite[]> {
     return this.invitesRepository.find({
-      relations: ['createdBy', 'invitedUser', 'shop', 'warehouse'],
+      relations: ['createdBy', 'invitedUser', 'warehouse', 'shop'],
     });
   }
 
   async findOne(id: string): Promise<Invite> {
     const invite = await this.invitesRepository.findOne({
       where: { id },
-      relations: ['createdBy', 'invitedUser', 'shop', 'warehouse'],
+      relations: ['createdBy', 'invitedUser', 'warehouse', 'shop'],
     });
 
     if (!invite) {
@@ -139,7 +206,7 @@ export class InvitesService {
     const normalizedPhone = normalizePhoneNumber(phone);
     return this.invitesRepository.findOne({
       where: { phone: normalizedPhone, status: InviteStatus.PENDING },
-      relations: ['createdBy', 'shop', 'warehouse'],
+      relations: ['createdBy', 'warehouse', 'shop'],
     });
   }
 
@@ -150,7 +217,7 @@ export class InvitesService {
         phone: normalizedPhone,
         status: InviteStatus.PENDING,
       },
-      relations: ['createdBy', 'shop', 'warehouse'],
+      relations: ['createdBy', 'warehouse', 'shop'],
     });
   }
 
@@ -159,7 +226,7 @@ export class InvitesService {
       where: {
         status: InviteStatus.REJECTED,
       },
-      relations: ['createdBy', 'invitedUser', 'shop', 'warehouse'],
+      relations: ['createdBy', 'invitedUser', 'warehouse', 'shop'],
       order: {
         statusChangedAt: 'DESC',
       },
@@ -187,17 +254,34 @@ export class InvitesService {
       );
     }
 
-    // Проверяем, нет ли у пользователя активной роли такого типа в этом магазине
-    const existingRoles = await this.rolesService.findByUserAndShop(
-      user.id,
-      invite.shopId
-    );
+    // Проверяем, нет ли у пользователя активной роли такого типа
+    let existingRoles;
 
-    this.logger.debug(
-      `Найдены роли для пользователя при принятии инвайта: ${JSON.stringify(
-        existingRoles
-      )}`
-    );
+    if (invite.role === RoleType.OWNER && invite.shopId) {
+      // Для владельцев проверяем по магазину
+      existingRoles = await this.rolesService.findByUserAndWarehouse(
+        user.id,
+        invite.warehouseId
+      );
+
+      this.logger.debug(
+        `Найдены роли для пользователя-владельца при принятии инвайта: ${JSON.stringify(
+          existingRoles
+        )}`
+      );
+    } else {
+      // Для остальных проверяем по складу
+      existingRoles = await this.rolesService.findByUserAndWarehouse(
+        user.id,
+        invite.warehouseId
+      );
+
+      this.logger.debug(
+        `Найдены роли для пользователя при принятии инвайта: ${JSON.stringify(
+          existingRoles
+        )}`
+      );
+    }
 
     // Проверяем только действительно активные роли
     const hasActiveRole = existingRoles.some(
@@ -220,16 +304,16 @@ export class InvitesService {
       throw new BadRequestException(
         `У пользователя уже есть активная роль "${this.getRoleName(
           invite.role
-        )}" в этом магазине`
+        )}" в этом ${invite.role === RoleType.OWNER ? 'магазине' : 'складе'}`
       );
     }
 
     // Создаем новую роль для пользователя
     await this.rolesService.create({
       userId: user.id,
-      shopId: invite.shopId,
-      type: invite.role,
       warehouseId: invite.warehouseId,
+      type: invite.role,
+      shopId: invite.shopId, // Передаем shopId, если он есть (для владельцев)
     });
 
     // Обновляем статус инвайта
@@ -296,7 +380,7 @@ export class InvitesService {
 
   async findAllForAdmin(): Promise<Invite[]> {
     return this.invitesRepository.find({
-      relations: ['createdBy', 'invitedUser', 'shop'],
+      relations: ['createdBy', 'invitedUser', 'warehouse', 'shop'],
       order: {
         createdAt: 'DESC',
       },

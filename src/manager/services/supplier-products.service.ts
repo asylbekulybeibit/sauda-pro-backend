@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SupplierProduct } from '../entities/supplier-product.entity';
-import { Product } from '../entities/product.entity';
+import { Barcode } from '../entities/barcode.entity';
 import { Supplier } from '../entities/supplier.entity';
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
@@ -18,8 +18,8 @@ export class SupplierProductsService {
   constructor(
     @InjectRepository(SupplierProduct)
     private supplierProductRepository: Repository<SupplierProduct>,
-    @InjectRepository(Product)
-    private productRepository: Repository<Product>,
+    @InjectRepository(Barcode)
+    private barcodeRepository: Repository<Barcode>,
     @InjectRepository(Supplier)
     private supplierRepository: Repository<Supplier>,
     @InjectRepository(UserRole)
@@ -28,27 +28,27 @@ export class SupplierProductsService {
 
   private async validateManagerAccess(
     userId: string,
-    shopId: string
+    warehouseId: string
   ): Promise<void> {
     const hasAccess = await this.userRoleRepository.findOne({
-      where: { userId, shopId, type: RoleType.MANAGER, isActive: true },
+      where: { userId, warehouseId, type: RoleType.MANAGER, isActive: true },
     });
 
     if (!hasAccess) {
-      throw new ForbiddenException('No access to this shop');
+      throw new ForbiddenException('No access to this warehouse');
     }
   }
 
   async getSupplierProducts(
     userId: string,
     supplierId: string,
-    shopId: string
-  ): Promise<Product[]> {
-    await this.validateManagerAccess(userId, shopId);
+    warehouseId: string
+  ): Promise<any[]> {
+    await this.validateManagerAccess(userId, warehouseId);
 
     // Проверяем, существует ли поставщик
     const supplier = await this.supplierRepository.findOne({
-      where: { id: supplierId, shopId, isActive: true },
+      where: { id: supplierId, warehouseId, isActive: true },
     });
 
     if (!supplier) {
@@ -58,12 +58,12 @@ export class SupplierProductsService {
     // Получаем связи поставщик-товар
     const supplierProducts = await this.supplierProductRepository.find({
       where: { supplierId },
-      relations: ['product'],
+      relations: ['barcode'],
     });
 
     // Извлекаем товары из связей
     const products = supplierProducts.map((sp) => {
-      const product = sp.product;
+      const barcode = sp.barcode;
       // Добавляем цену и минимальный заказ от поставщика к товару
       // Убедимся, что цена - это число
       const price =
@@ -74,7 +74,7 @@ export class SupplierProductsService {
           : 0;
 
       return {
-        ...product,
+        ...barcode,
         price: price,
         minimumOrder: sp.minimumOrder,
       };
@@ -86,15 +86,15 @@ export class SupplierProductsService {
   async addProductToSupplier(
     userId: string,
     supplierId: string,
-    productId: string,
-    shopId: string,
+    barcodeId: string,
+    warehouseId: string,
     data: { price: number; minimumOrder?: number }
   ): Promise<SupplierProduct> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     // Проверяем, существует ли поставщик
     const supplier = await this.supplierRepository.findOne({
-      where: { id: supplierId, shopId, isActive: true },
+      where: { id: supplierId, warehouseId, isActive: true },
     });
 
     if (!supplier) {
@@ -102,17 +102,17 @@ export class SupplierProductsService {
     }
 
     // Проверяем, существует ли товар
-    const product = await this.productRepository.findOne({
-      where: { id: productId, shopId, isActive: true },
+    const barcode = await this.barcodeRepository.findOne({
+      where: { id: barcodeId, isActive: true },
     });
 
-    if (!product) {
+    if (!barcode) {
       throw new NotFoundException('Product not found');
     }
 
     // Проверяем, не добавлен ли уже этот товар к поставщику
     const existingRelation = await this.supplierProductRepository.findOne({
-      where: { supplierId, productId },
+      where: { supplierId, barcodeId },
     });
 
     if (existingRelation) {
@@ -122,7 +122,7 @@ export class SupplierProductsService {
     // Создаем связь поставщик-товар
     const supplierProduct = this.supplierProductRepository.create({
       supplierId,
-      productId,
+      barcodeId,
       price: data.price,
       minimumOrder: data.minimumOrder,
     });
@@ -133,14 +133,14 @@ export class SupplierProductsService {
   async removeProductFromSupplier(
     userId: string,
     supplierId: string,
-    productId: string,
-    shopId: string
+    barcodeId: string,
+    warehouseId: string
   ): Promise<void> {
-    await this.validateManagerAccess(userId, shopId);
+    await this.validateManagerAccess(userId, warehouseId);
 
     // Проверяем, существует ли поставщик
     const supplier = await this.supplierRepository.findOne({
-      where: { id: supplierId, shopId, isActive: true },
+      where: { id: supplierId, warehouseId, isActive: true },
     });
 
     if (!supplier) {
@@ -148,17 +148,17 @@ export class SupplierProductsService {
     }
 
     // Проверяем, существует ли товар
-    const product = await this.productRepository.findOne({
-      where: { id: productId, shopId, isActive: true },
+    const barcode = await this.barcodeRepository.findOne({
+      where: { id: barcodeId, isActive: true },
     });
 
-    if (!product) {
+    if (!barcode) {
       throw new NotFoundException('Product not found');
     }
 
     // Проверяем, существует ли связь поставщик-товар
     const supplierProduct = await this.supplierProductRepository.findOne({
-      where: { supplierId, productId },
+      where: { supplierId, barcodeId },
     });
 
     if (!supplierProduct) {

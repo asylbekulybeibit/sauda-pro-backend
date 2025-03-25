@@ -15,19 +15,28 @@ import { RoleType } from '../../auth/types/role.type';
 import { TransfersService } from '../services/transfers.service';
 import { CreateTransferDto } from '../dto/transfers/create-transfer.dto';
 
-@Controller('manager/transfers')
+@Controller('manager/:warehouseId/transfers')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(RoleType.MANAGER)
 export class TransfersController {
   constructor(private readonly transfersService: TransfersService) {}
 
   @Post()
-  create(@Body() createTransferDto: CreateTransferDto, @Request() req) {
+  create(
+    @Body() createTransferDto: CreateTransferDto,
+    @Request() req,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
+  ) {
+    // Убедимся, что fromWarehouseId соответствует warehouseId из URL
+    createTransferDto.fromWarehouseId = warehouseId;
     return this.transfersService.create(createTransferDto, req.user.id);
   }
 
-  @Get(':shopId')
-  findAll(@Param('shopId', ParseUUIDPipe) shopId: string, @Request() req) {
-    return this.transfersService.findAll(shopId, req.user.id);
+  @Get()
+  findAll(
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
+    @Request() req
+  ) {
+    return this.transfersService.findAll(warehouseId, req.user.id);
   }
 }

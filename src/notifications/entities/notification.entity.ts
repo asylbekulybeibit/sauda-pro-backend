@@ -7,7 +7,6 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { Shop } from '../../shops/entities/shop.entity';
 import { User } from '../../users/entities/user.entity';
 import { Warehouse } from '../../manager/entities/warehouse.entity';
 
@@ -71,18 +70,11 @@ export class Notification {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  @ManyToOne(() => Shop)
-  @JoinColumn({ name: 'shopId' })
-  shop: Shop;
-
-  @Column()
-  shopId: string;
-
-  @ManyToOne(() => Warehouse, { nullable: true })
+  @ManyToOne(() => Warehouse)
   @JoinColumn({ name: 'warehouseId' })
   warehouse: Warehouse;
 
-  @Column({ nullable: true })
+  @Column()
   warehouseId: string;
 
   @ManyToOne(() => User, { nullable: true })

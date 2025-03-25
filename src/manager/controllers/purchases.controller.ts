@@ -88,30 +88,30 @@ export class PurchasesController {
     }
   }
 
-  @Get(':shopId')
+  @Get(':warehouseId')
   async getPurchases(
-    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Request() req
   ): Promise<PurchaseWithItems[]> {
-    return this.purchasesService.findAll(req.user.id, shopId);
+    return this.purchasesService.findAll(req.user.id, warehouseId);
   }
 
-  @Get(':shopId/:id')
+  @Get(':warehouseId/:id')
   async getPurchase(
-    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req
   ): Promise<PurchaseWithItems> {
-    return this.purchasesService.findOne(id, shopId);
+    return this.purchasesService.findOne(id, warehouseId);
   }
 
-  @Delete(':shopId/:id')
+  @Delete(':warehouseId/:id')
   async deletePurchase(
-    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req
   ): Promise<{ success: boolean }> {
-    await this.purchasesService.deletePurchase(req.user.id, id, shopId);
+    await this.purchasesService.deletePurchase(req.user.id, id, warehouseId);
     return { success: true };
   }
 }

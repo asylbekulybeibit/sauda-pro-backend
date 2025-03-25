@@ -6,9 +6,10 @@ import {
   OneToMany,
   CreateDateColumn,
   UpdateDateColumn,
+  JoinColumn,
 } from 'typeorm';
-import { Shop } from '../../shops/entities/shop.entity';
 import { Barcode } from './barcode.entity';
+import { Warehouse } from './warehouse.entity';
 
 @Entity()
 export class Category {
@@ -24,11 +25,12 @@ export class Category {
   @Column({ default: true })
   isActive: boolean;
 
-  @ManyToOne(() => Shop)
-  shop: Shop;
+  @ManyToOne(() => Warehouse)
+  @JoinColumn({ name: 'warehouseId' })
+  warehouse: Warehouse;
 
   @Column()
-  shopId: string;
+  warehouseId: string;
 
   @ManyToOne(() => Category, { nullable: true })
   parent: Category;

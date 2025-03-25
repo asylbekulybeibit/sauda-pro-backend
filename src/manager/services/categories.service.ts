@@ -19,11 +19,11 @@ export class CategoriesService {
     private readonly userRoleRepository: Repository<UserRole>
   ) {}
 
-  private async validateManagerAccess(userId: string, shopId: string) {
+  private async validateManagerAccess(userId: string, warehouseId: string) {
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
-        shopId,
+        warehouseId,
         type: RoleType.MANAGER,
         isActive: true,
       },
@@ -31,15 +31,15 @@ export class CategoriesService {
 
     if (!managerRole) {
       throw new ForbiddenException(
-        'У вас нет прав для управления этим магазином'
+        'У вас нет прав для управления этим складом'
       );
     }
   }
 
   async create(createCategoryDto: CreateCategoryDto, userId: string) {
-    await this.validateManagerAccess(userId, createCategoryDto.shopId);
+    await this.validateManagerAccess(userId, createCategoryDto.warehouseId);
 
-    // Если указана родительская категория, проверяем её существование и принадлежность к тому же магазину
+    // Если указана родительская категория, проверяем её существование и принадлежность к тому же складу
     if (createCategoryDto.parentId) {
       const parentCategory = await this.categoryRepository.findOne({
         where: { id: createCategoryDto.parentId },
@@ -49,9 +49,9 @@ export class CategoriesService {
         throw new NotFoundException('Родительская категория не найдена');
       }
 
-      if (parentCategory.shopId !== createCategoryDto.shopId) {
+      if (parentCategory.warehouseId !== createCategoryDto.warehouseId) {
         throw new ForbiddenException(
-          'Родительская категория принадлежит другому магазину'
+          'Родительская категория принадлежит другому складу'
         );
       }
     }
@@ -60,12 +60,12 @@ export class CategoriesService {
     return this.categoryRepository.save(category);
   }
 
-  async findByShop(shopId: string, userId: string) {
-    await this.validateManagerAccess(userId, shopId);
+  async findByWarehouse(warehouseId: string, userId: string) {
+    await this.validateManagerAccess(userId, warehouseId);
 
     return this.categoryRepository.find({
       where: {
-        shopId,
+        warehouseId,
         isActive: true,
       },
       relations: ['parent', 'children'],
@@ -90,7 +90,7 @@ export class CategoriesService {
 
     return this.categoryRepository.find({
       where: {
-        shopId: managerRole.shopId,
+        warehouseId: managerRole.warehouseId,
         isActive: true,
       },
       relations: ['parent', 'children'],
@@ -100,14 +100,14 @@ export class CategoriesService {
   async findOne(id: string, userId: string) {
     const category = await this.categoryRepository.findOne({
       where: { id },
-      relations: ['parent', 'children', 'products'],
+      relations: ['parent', 'children', 'barcodes'],
     });
 
     if (!category) {
       throw new NotFoundException('Категория не найдена');
     }
 
-    await this.validateManagerAccess(userId, category.shopId);
+    await this.validateManagerAccess(userId, category.warehouseId);
 
     return category;
   }
@@ -120,10 +120,10 @@ export class CategoriesService {
     const category = await this.findOne(id, userId);
 
     if (
-      updateCategoryDto.shopId &&
-      updateCategoryDto.shopId !== category.shopId
+      updateCategoryDto.warehouseId &&
+      updateCategoryDto.warehouseId !== category.warehouseId
     ) {
-      throw new ForbiddenException('Нельзя изменить магазин категории');
+      throw new ForbiddenException('Нельзя изменить склад категории');
     }
 
     // Проверяем новую родительскую категорию
@@ -139,9 +139,9 @@ export class CategoriesService {
         throw new NotFoundException('Родительская категория не найдена');
       }
 
-      if (newParent.shopId !== category.shopId) {
+      if (newParent.warehouseId !== category.warehouseId) {
         throw new ForbiddenException(
-          'Родительская категория принадлежит другому магазину'
+          'Родительская категория принадлежит другому складу'
         );
       }
 

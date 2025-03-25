@@ -130,6 +130,7 @@ export class ServiceService {
       clientId: createServiceDto.clientId,
       vehicleId: createServiceDto.vehicleId,
       shopId,
+      warehouseId: createServiceDto.warehouseId,
       status: createServiceDto.status || ServiceStatus.PENDING,
       originalPrice: serviceType.price,
       finalPrice: serviceType.price * (1 - client.discountPercent / 100),

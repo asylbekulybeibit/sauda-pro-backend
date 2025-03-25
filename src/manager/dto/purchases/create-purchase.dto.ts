@@ -98,7 +98,7 @@ export class UpdatePurchaseItemDto {
 export class CreatePurchaseDto {
   @IsUUID()
   @IsOptional()
-  shopId: string;
+  warehouseId: string;
 
   @IsUUID()
   @IsOptional()
@@ -156,7 +156,7 @@ export class CreatePurchaseDto {
 export class UpdatePurchaseDto {
   @IsUUID()
   @IsOptional()
-  shopId?: string;
+  warehouseId?: string;
 
   @IsUUID()
   @IsOptional()

@@ -10,6 +10,9 @@ import {
 } from 'typeorm';
 import { Shop } from '../../shops/entities/shop.entity';
 
+/**
+ * Service types are common for the entire shop (shared across all warehouses)
+ */
 @Entity('service_types')
 export class ServiceType {
   @PrimaryGeneratedColumn('uuid')

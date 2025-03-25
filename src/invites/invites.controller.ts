@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { InvitesService } from './invites.service';
 import { CreateInviteDto } from './dto/create-invite.dto';
+import { CreateAdminInviteDto } from './dto/create-admin-invite.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -25,6 +26,18 @@ export class InvitesController {
   @Roles(RoleType.OWNER, RoleType.MANAGER)
   async create(@Body() createInviteDto: CreateInviteDto, @Request() req) {
     return this.invitesService.create(createInviteDto, req.user.id);
+  }
+
+  @Post('admin/owner')
+  @Roles(RoleType.SUPERADMIN)
+  async createOwnerInvite(
+    @Body() createAdminInviteDto: CreateAdminInviteDto,
+    @Request() req
+  ) {
+    return this.invitesService.createAdminInvite(
+      createAdminInviteDto,
+      req.user.id
+    );
   }
 
   @Get()

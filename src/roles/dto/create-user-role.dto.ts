@@ -6,12 +6,12 @@ export class CreateUserRoleDto {
   userId: string;
 
   @IsUUID()
-  shopId: string;
+  warehouseId: string;
 
   @IsEnum(RoleType)
   type: RoleType;
 
   @IsOptional()
   @IsUUID()
-  warehouseId?: string;
+  shopId?: string;
 }
