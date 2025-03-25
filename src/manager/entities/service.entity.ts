@@ -8,12 +8,13 @@ import {
   UpdateDateColumn,
   JoinColumn,
 } from 'typeorm';
-import { Shop } from '../../shops/entities/shop.entity';
+import { Warehouse } from './warehouse.entity';
 import { ServiceType } from './service-type.entity';
 import { Client } from './client.entity';
 import { Vehicle } from './vehicle.entity';
 import { User } from '../../users/entities/user.entity';
 import { CashShift } from './cash-shift.entity';
+import { Shop } from '../../shops/entities/shop.entity';
 
 export enum ServiceStatus {
   PENDING = 'pending',
@@ -33,6 +34,13 @@ export class Service {
   @ManyToOne(() => Shop, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'shopId' })
   shop: Shop;
+
+  @Column()
+  warehouseId: string;
+
+  @ManyToOne(() => Warehouse, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'warehouseId' })
+  warehouse: Warehouse;
 
   @Column()
   serviceTypeId: string;

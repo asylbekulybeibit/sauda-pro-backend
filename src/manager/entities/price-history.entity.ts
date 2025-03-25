@@ -6,7 +6,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Product } from './product.entity';
+import { WarehouseProduct } from './warehouse-product.entity';
 import { User } from '../../users/entities/user.entity';
 
 export enum PriceType {
@@ -35,11 +35,14 @@ export class PriceHistory {
   })
   priceType: PriceType;
 
-  @ManyToOne(() => Product)
-  product: Product;
+  @ManyToOne(
+    () => WarehouseProduct,
+    (warehouseProduct) => warehouseProduct.priceHistory
+  )
+  warehouseProduct: WarehouseProduct;
 
   @Column()
-  productId: string;
+  warehouseProductId: string;
 
   @ManyToOne(() => User)
   changedBy: User;

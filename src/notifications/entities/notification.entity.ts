@@ -8,28 +8,29 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Shop } from '../../shops/entities/shop.entity';
+import { User } from '../../users/entities/user.entity';
+import { Warehouse } from '../../manager/entities/warehouse.entity';
 
 export enum NotificationType {
-  LOW_STOCK = 'LOW_STOCK',
-  TRANSFER_INITIATED = 'TRANSFER_INITIATED',
-  TRANSFER_COMPLETED = 'TRANSFER_COMPLETED',
-  SYSTEM = 'SYSTEM',
+  SYSTEM = 'system',
+  INFO = 'info',
+  WARNING = 'warning',
+  ERROR = 'error',
+  SUCCESS = 'success',
 }
 
 export enum NotificationPriority {
   LOW = 'low',
   MEDIUM = 'medium',
   HIGH = 'high',
-  URGENT = 'urgent',
 }
 
 export enum NotificationStatus {
-  UNREAD = 'unread',
   READ = 'read',
-  ARCHIVED = 'archived',
+  UNREAD = 'unread',
 }
 
-@Entity()
+@Entity('notifications')
 export class Notification {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -37,13 +38,14 @@ export class Notification {
   @Column({
     type: 'enum',
     enum: NotificationType,
+    default: NotificationType.INFO,
   })
   type: NotificationType;
 
   @Column()
   title: string;
 
-  @Column()
+  @Column({ type: 'text' })
   message: string;
 
   @Column({
@@ -63,8 +65,11 @@ export class Notification {
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, any>;
 
-  @Column({ default: false })
-  isRead: boolean;
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 
   @ManyToOne(() => Shop)
   @JoinColumn({ name: 'shopId' })
@@ -73,9 +78,17 @@ export class Notification {
   @Column()
   shopId: string;
 
-  @CreateDateColumn()
-  createdAt: Date;
+  @ManyToOne(() => Warehouse, { nullable: true })
+  @JoinColumn({ name: 'warehouseId' })
+  warehouse: Warehouse;
 
-  @UpdateDateColumn()
-  updatedAt: Date;
+  @Column({ nullable: true })
+  warehouseId: string;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'userId' })
+  user: User;
+
+  @Column({ nullable: true })
+  userId: string;
 }

@@ -8,7 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Shop } from '../../shops/entities/shop.entity';
-import { Product } from './product.entity';
+import { Barcode } from './barcode.entity';
 
 @Entity()
 export class Category {
@@ -39,8 +39,8 @@ export class Category {
   @OneToMany(() => Category, (category) => category.parent)
   children: Category[];
 
-  @OneToMany(() => Product, (product) => product.category)
-  products: Product[];
+  @OneToMany(() => Barcode, (barcode) => barcode.category)
+  barcodes: Barcode[];
 
   @CreateDateColumn()
   createdAt: Date;

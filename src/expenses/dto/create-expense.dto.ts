@@ -30,5 +30,5 @@ export class CreateExpenseDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsUUID()
-  shopId: string;
+  warehouseId: string;
 }

@@ -11,6 +11,14 @@ import { ServiceStatus } from '../../entities/service.entity';
 export class CreateServiceDto {
   @IsUUID()
   @IsNotEmpty()
+  shopId: string;
+
+  @IsUUID()
+  @IsNotEmpty()
+  warehouseId: string;
+
+  @IsUUID()
+  @IsNotEmpty()
   serviceTypeId: string;
 
   @IsUUID()

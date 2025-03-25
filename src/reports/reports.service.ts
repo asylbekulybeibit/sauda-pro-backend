@@ -8,7 +8,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, In } from 'typeorm';
 import { Report, ReportType } from './entities/report.entity';
 import { CreateReportDto } from './dto/create-report.dto';
-import { Product } from '../manager/entities/product.entity';
+import { Barcode } from '../manager/entities/barcode.entity';
+import { WarehouseProduct } from '../manager/entities/warehouse-product.entity';
+import { Warehouse } from '../manager/entities/warehouse.entity';
 import { Category } from '../manager/entities/category.entity';
 import {
   InventoryTransaction,
@@ -28,8 +30,12 @@ export class ReportsService {
   constructor(
     @InjectRepository(Report)
     private readonly reportRepository: Repository<Report>,
-    @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>,
+    @InjectRepository(Barcode)
+    private readonly barcodeRepository: Repository<Barcode>,
+    @InjectRepository(WarehouseProduct)
+    private readonly warehouseProductRepository: Repository<WarehouseProduct>,
+    @InjectRepository(Warehouse)
+    private readonly warehouseRepository: Repository<Warehouse>,
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>,
     @InjectRepository(InventoryTransaction)
@@ -143,11 +149,11 @@ export class ReportsService {
   private async generateSalesReport(report: CreateReportDto) {
     const transactions = await this.transactionRepository.find({
       where: {
-        shopId: report.shopId,
+        warehouseId: report.warehouseId,
         type: TransactionType.SALE,
         createdAt: Between(report.startDate, report.endDate),
       },
-      relations: ['product'],
+      relations: ['warehouseProduct', 'warehouseProduct.barcode'],
     });
 
     const totalSales = transactions.reduce(
@@ -155,7 +161,9 @@ export class ReportsService {
       0
     );
     const totalItems = transactions.reduce((sum, t) => sum + t.quantity, 0);
-    const uniqueProducts = new Set(transactions.map((t) => t.productId)).size;
+    const uniqueProducts = new Set(
+      transactions.map((t) => t.warehouseProductId)
+    ).size;
 
     const salesByProduct = this.aggregateByProduct(transactions);
     const salesByDate = this.aggregateByDate(transactions);
@@ -169,7 +177,7 @@ export class ReportsService {
       },
       details: transactions.map((t) => ({
         date: t.createdAt,
-        product: t.product.name,
+        product: t.warehouseProduct.barcode.productName,
         quantity: t.quantity,
         price: t.price,
         total: t.quantity * t.price,
@@ -182,37 +190,46 @@ export class ReportsService {
   }
 
   private async generateInventoryReport(report: CreateReportDto) {
-    const products = await this.productRepository.find({
+    // Находим склад по магазину
+    const warehouses = await this.warehouseRepository.find({
       where: { shopId: report.shopId },
-      relations: ['category'],
+    });
+
+    const warehouseIds = warehouses.map((w) => w.id);
+
+    const warehouseProducts = await this.warehouseProductRepository.find({
+      where: { warehouseId: In(warehouseIds) },
+      relations: ['barcode', 'barcode.category', 'warehouse'],
     });
 
     const transactions = await this.transactionRepository.find({
       where: {
-        shopId: report.shopId,
+        warehouseId: In(warehouseIds),
         createdAt: Between(report.startDate, report.endDate),
       },
-      relations: ['product'],
+      relations: ['warehouseProduct', 'warehouseProduct.barcode'],
     });
 
-    const lowStockProducts = products.filter(
+    const lowStockProducts = warehouseProducts.filter(
       (p) => p.quantity > 0 && p.quantity <= p.minQuantity
     );
-    const outOfStockProducts = products.filter((p) => p.quantity === 0);
+    const outOfStockProducts = warehouseProducts.filter(
+      (p) => p.quantity === 0
+    );
 
     return {
       summary: {
-        totalProducts: products.length,
+        totalProducts: warehouseProducts.length,
         lowStockProducts: lowStockProducts.length,
         outOfStockProducts: outOfStockProducts.length,
-        totalValue: products.reduce(
+        totalValue: warehouseProducts.reduce(
           (sum, p) => sum + p.quantity * p.sellingPrice,
           0
         ),
       },
-      details: products.map((p) => ({
-        name: p.name,
-        category: p.category?.name || 'Без категории',
+      details: warehouseProducts.map((p) => ({
+        name: p.barcode.productName,
+        category: p.barcode.category?.name || 'Без категории',
         quantity: p.quantity,
         minQuantity: p.minQuantity,
         price: p.sellingPrice,
@@ -225,7 +242,7 @@ export class ReportsService {
             : 'IN_STOCK',
       })),
       charts: {
-        stockByCategory: this.aggregateByCategory(products),
+        stockByCategory: this.aggregateByCategory(warehouseProducts),
         transactionsByType: this.aggregateByTransactionType(transactions),
       },
     };
@@ -467,7 +484,7 @@ export class ReportsService {
   private aggregateByProduct(transactions: InventoryTransaction[]) {
     const aggregated = {};
     transactions.forEach((t) => {
-      const key = t.product.name;
+      const key = t.warehouseProduct.barcode.productName;
       if (!aggregated[key]) {
         aggregated[key] = 0;
       }
@@ -488,10 +505,10 @@ export class ReportsService {
     return aggregated;
   }
 
-  private aggregateByCategory(products: Product[]) {
+  private aggregateByCategory(products: WarehouseProduct[]) {
     const aggregated = {};
     products.forEach((p) => {
-      const key = p.category?.name || 'Без категории';
+      const key = p.barcode.category?.name || 'Без категории';
       if (!aggregated[key]) {
         aggregated[key] = 0;
       }

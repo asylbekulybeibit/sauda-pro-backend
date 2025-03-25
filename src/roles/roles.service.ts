@@ -18,13 +18,20 @@ export class RolesService {
 
   async create(createUserRoleDto: CreateUserRoleDto): Promise<UserRole> {
     // Проверяем, нет ли уже активной роли у пользователя в этом магазине
+    const whereCondition: any = {
+      userId: createUserRoleDto.userId,
+      shopId: createUserRoleDto.shopId,
+      type: createUserRoleDto.type,
+      isActive: true,
+    };
+
+    // Если указан склад, добавляем его в условие поиска
+    if (createUserRoleDto.warehouseId) {
+      whereCondition.warehouseId = createUserRoleDto.warehouseId;
+    }
+
     const existingRole = await this.userRoleRepository.findOne({
-      where: {
-        userId: createUserRoleDto.userId,
-        shopId: createUserRoleDto.shopId,
-        type: createUserRoleDto.type,
-        isActive: true,
-      },
+      where: whereCondition,
     });
 
     if (existingRole) {
@@ -66,17 +73,27 @@ export class RolesService {
         userId,
         isActive: true,
       },
-      relations: ['shop'],
+      relations: ['shop', 'warehouse'],
       order: {
         createdAt: 'DESC',
       },
     });
   }
 
-  async findByUserAndShop(userId: string, shopId: string): Promise<UserRole[]> {
+  async findByUserAndShop(
+    userId: string,
+    shopId: string,
+    warehouseId?: string
+  ): Promise<UserRole[]> {
+    const whereCondition: any = { userId, shopId };
+
+    if (warehouseId) {
+      whereCondition.warehouseId = warehouseId;
+    }
+
     return this.userRoleRepository.find({
-      where: { userId, shopId },
-      relations: ['shop'],
+      where: whereCondition,
+      relations: ['shop', 'warehouse'],
     });
   }
 
@@ -88,9 +105,15 @@ export class RolesService {
   async hasRole(
     userId: string,
     shopId: string,
-    roles: RoleType[]
+    roles: RoleType[],
+    warehouseId?: string
   ): Promise<boolean> {
-    const userRoles = await this.findByUserAndShop(userId, shopId);
-    return userRoles.some((userRole) => roles.includes(userRole.type));
+    const userRoles = await this.findByUserAndShop(userId, shopId, warehouseId);
+    return userRoles.some(
+      (userRole) =>
+        roles.includes(userRole.type) &&
+        userRole.isActive &&
+        (!warehouseId || userRole.warehouseId === warehouseId)
+    );
   }
 }

@@ -5,6 +5,7 @@ import {
   IsEmail,
   ValidateNested,
   IsArray,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -73,4 +74,12 @@ export class CreateSupplierDto {
 
   @IsUUID()
   shopId: string;
+
+  @IsUUID()
+  @IsOptional()
+  warehouseId?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isWarehouseSpecific?: boolean;
 }

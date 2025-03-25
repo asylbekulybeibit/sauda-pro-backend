@@ -7,11 +7,13 @@ import {
   JoinTable,
   CreateDateColumn,
   UpdateDateColumn,
+  JoinColumn,
 } from 'typeorm';
-import { Product } from './product.entity';
 import { Category } from './category.entity';
 import { Shop } from '../../shops/entities/shop.entity';
 import { User } from '../../users/entities/user.entity';
+import { Warehouse } from './warehouse.entity';
+import { WarehouseProduct } from './warehouse-product.entity';
 
 export enum PromotionType {
   PERCENTAGE = 'percentage', // Скидка в процентах
@@ -68,19 +70,27 @@ export class Promotion {
   @Column({ default: true })
   isActive: boolean;
 
-  @ManyToMany(() => Product)
+  @ManyToMany(() => WarehouseProduct)
   @JoinTable()
-  products: Product[];
+  products: WarehouseProduct[];
 
   @ManyToMany(() => Category)
   @JoinTable()
   categories: Category[];
 
   @ManyToOne(() => Shop)
+  @JoinColumn({ name: 'shopId' })
   shop: Shop;
 
   @Column()
   shopId: string;
+
+  @ManyToOne(() => Warehouse, { nullable: true })
+  @JoinColumn({ name: 'warehouseId' })
+  warehouse: Warehouse;
+
+  @Column({ nullable: true })
+  warehouseId: string;
 
   @ManyToOne(() => User)
   createdBy: User;

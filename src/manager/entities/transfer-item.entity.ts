@@ -6,7 +6,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Transfer } from './transfer.entity';
-import { Product } from './product.entity';
+import { WarehouseProduct } from './warehouse-product.entity';
 
 @Entity('transfer_items')
 export class TransferItem {
@@ -17,7 +17,7 @@ export class TransferItem {
   transferId: string;
 
   @Column()
-  productId: string;
+  warehouseProductId: string;
 
   @Column('int')
   quantity: number;
@@ -31,7 +31,7 @@ export class TransferItem {
   @JoinColumn({ name: 'transferId' })
   transfer: Transfer;
 
-  @ManyToOne(() => Product)
-  @JoinColumn({ name: 'productId' })
-  product: Product;
+  @ManyToOne(() => WarehouseProduct)
+  @JoinColumn({ name: 'warehouseProductId' })
+  warehouseProduct: WarehouseProduct;
 }

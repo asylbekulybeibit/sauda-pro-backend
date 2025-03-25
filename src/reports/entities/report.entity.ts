@@ -5,9 +5,11 @@ import {
   ManyToOne,
   CreateDateColumn,
   UpdateDateColumn,
+  JoinColumn,
 } from 'typeorm';
 import { Shop } from '../../shops/entities/shop.entity';
 import { User } from '../../users/entities/user.entity';
+import { Warehouse } from '../../manager/entities/warehouse.entity';
 
 export enum ReportType {
   // Operational reports
@@ -23,6 +25,7 @@ export enum ReportType {
   // Summary reports
   SHOP_SUMMARY = 'SHOP_SUMMARY',
   NETWORK_SUMMARY = 'NETWORK_SUMMARY',
+  WAREHOUSE_SUMMARY = 'WAREHOUSE_SUMMARY',
 }
 
 export enum ReportPeriod {
@@ -101,12 +104,21 @@ export class Report {
   fileUrl: string;
 
   @ManyToOne(() => Shop)
+  @JoinColumn({ name: 'shopId' })
   shop: Shop;
 
   @Column()
   shopId: string;
 
+  @ManyToOne(() => Warehouse, { nullable: true })
+  @JoinColumn({ name: 'warehouseId' })
+  warehouse: Warehouse;
+
+  @Column({ nullable: true })
+  warehouseId: string;
+
   @ManyToOne(() => User)
+  @JoinColumn({ name: 'createdById' })
   createdBy: User;
 
   @Column()

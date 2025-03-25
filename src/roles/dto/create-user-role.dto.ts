@@ -1,4 +1,4 @@
-import { IsUUID, IsEnum } from 'class-validator';
+import { IsUUID, IsEnum, IsOptional } from 'class-validator';
 import { RoleType } from '../../auth/types/role.type';
 
 export class CreateUserRoleDto {
@@ -10,4 +10,8 @@ export class CreateUserRoleDto {
 
   @IsEnum(RoleType)
   type: RoleType;
+
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
 }

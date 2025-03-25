@@ -8,9 +8,9 @@ import {
   UpdateDateColumn,
   JoinColumn,
 } from 'typeorm';
-import { Shop } from '../../shops/entities/shop.entity';
 import { User } from '../../users/entities/user.entity';
 import { TransferItem } from './transfer-item.entity';
+import { Warehouse } from './warehouse.entity';
 
 export enum TransferStatus {
   PENDING = 'PENDING',
@@ -24,18 +24,18 @@ export class Transfer {
   id: string;
 
   @Column()
-  fromShopId: string;
+  fromWarehouseId: string;
 
   @Column()
-  toShopId: string;
+  toWarehouseId: string;
 
-  @ManyToOne(() => Shop)
-  @JoinColumn({ name: 'fromShopId' })
-  fromShop: Shop;
+  @ManyToOne(() => Warehouse)
+  @JoinColumn({ name: 'fromWarehouseId' })
+  fromWarehouse: Warehouse;
 
-  @ManyToOne(() => Shop)
-  @JoinColumn({ name: 'toShopId' })
-  toShop: Shop;
+  @ManyToOne(() => Warehouse)
+  @JoinColumn({ name: 'toWarehouseId' })
+  toWarehouse: Warehouse;
 
   @Column({ type: 'timestamp' })
   date: Date;

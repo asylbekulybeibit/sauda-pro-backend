@@ -6,8 +6,8 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Product } from './product.entity';
-import { Shop } from '../../shops/entities/shop.entity';
+import { Warehouse } from './warehouse.entity';
+import { WarehouseProduct } from './warehouse-product.entity';
 import { User } from '../../users/entities/user.entity';
 import { Purchase } from './purchase.entity';
 
@@ -16,7 +16,7 @@ export enum TransactionType {
   SALE = 'SALE', // Продажа
   ADJUSTMENT = 'ADJUSTMENT', // Корректировка (инвентаризация)
   WRITE_OFF = 'WRITE_OFF', // Списание
-  TRANSFER = 'TRANSFER', // Перемещение между магазинами
+  TRANSFER = 'TRANSFER', // Перемещение между складами
   RETURN = 'RETURN', // Возврат товара
 }
 
@@ -52,17 +52,20 @@ export class InventoryTransaction {
   @Column({ default: true })
   isActive: boolean;
 
-  @ManyToOne(() => Product)
-  product: Product;
+  @ManyToOne(
+    () => WarehouseProduct,
+    (warehouseProduct) => warehouseProduct.inventoryTransactions
+  )
+  warehouseProduct: WarehouseProduct;
 
   @Column()
-  productId: string;
+  warehouseProductId: string;
 
-  @ManyToOne(() => Shop)
-  shop: Shop;
+  @ManyToOne(() => Warehouse)
+  warehouse: Warehouse;
 
   @Column()
-  shopId: string;
+  warehouseId: string;
 
   @ManyToOne(() => User)
   createdBy: User;

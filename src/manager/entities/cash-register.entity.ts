@@ -7,7 +7,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Shop } from '../../shops/entities/shop.entity';
+import { Warehouse } from './warehouse.entity';
 import { CashShift } from './cash-shift.entity';
 import { CashOperation } from './cash-operation.entity';
 import { RegisterPaymentMethod } from './register-payment-method.entity';
@@ -30,11 +30,11 @@ export class CashRegister {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Shop, (shop) => shop.cashRegisters)
-  shop: Shop;
+  @ManyToOne(() => Warehouse, (warehouse) => warehouse.cashRegisters)
+  warehouse: Warehouse;
 
   @Column()
-  shopId: string;
+  warehouseId: string;
 
   @Column()
   name: string;

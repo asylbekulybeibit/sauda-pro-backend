@@ -24,7 +24,9 @@ import { CashRegistersController } from './controllers/cash-registers.controller
 import { CashRegistersService } from './services/cash-registers.service';
 import { PurchasesController } from './controllers/purchases.controller';
 import { PurchasesService } from './services/purchases.service';
-import { Product } from './entities/product.entity';
+import { Barcode } from './entities/barcode.entity';
+import { WarehouseProduct } from './entities/warehouse-product.entity';
+import { Warehouse } from './entities/warehouse.entity';
 import { Category } from './entities/category.entity';
 import { InventoryTransaction } from './entities/inventory-transaction.entity';
 import { PriceHistory } from './entities/price-history.entity';
@@ -57,10 +59,6 @@ import { Service } from './entities/service.entity';
 import { ServiceStaff } from './entities/service-staff.entity';
 
 // Импорты новых сущностей для чеков
-import { SalesReceipt } from './entities/sales-receipt.entity';
-import { SalesReceiptItem } from './entities/sales-receipt-item.entity';
-import { ServiceReceipt } from './entities/service-receipt.entity';
-import { ServiceReceiptDetail } from './entities/service-receipt-detail.entity';
 import { ReceiptAction } from './entities/receipt-action.entity';
 
 // Импорты новых контроллеров и сервисов для услуг
@@ -105,7 +103,9 @@ import { User } from '../users/entities/user.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      Product,
+      Barcode,
+      WarehouseProduct,
+      Warehouse,
       Category,
       Shop,
       UserRole,
@@ -130,10 +130,7 @@ import { User } from '../users/entities/user.entity';
       Service,
       ServiceStaff,
       // Добавляем новые сущности для чеков
-      SalesReceipt,
-      SalesReceiptItem,
-      ServiceReceipt,
-      ServiceReceiptDetail,
+
       ReceiptAction,
       // Добавляем сущности для кассовых смен и операций
       CashShift,

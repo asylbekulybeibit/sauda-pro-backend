@@ -13,6 +13,11 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { CacheModule } from './common/cache.module';
+import { Barcode } from './manager/entities/barcode.entity';
+import { Warehouse } from './manager/entities/warehouse.entity';
+import { WarehouseProduct } from './manager/entities/warehouse-product.entity';
+import { Receipt } from './manager/entities/receipt.entity';
+import { ReceiptItem } from './manager/entities/receipt-item.entity';
 
 @Module({
   imports: [

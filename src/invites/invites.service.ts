@@ -89,7 +89,8 @@ export class InvitesService {
     const duplicateInvite = existingInvites.find(
       (invite) =>
         invite.role === createInviteDto.role &&
-        invite.shopId === createInviteDto.shopId
+        invite.shopId === createInviteDto.shopId &&
+        invite.warehouseId === createInviteDto.warehouseId
     );
 
     if (duplicateInvite) {
@@ -104,6 +105,7 @@ export class InvitesService {
       phone: normalizedPhone,
       role: createInviteDto.role,
       shopId: createInviteDto.shopId,
+      warehouseId: createInviteDto.warehouseId,
       createdById: creator.id,
       status: InviteStatus.PENDING,
     });
@@ -116,14 +118,14 @@ export class InvitesService {
 
   async findAll(): Promise<Invite[]> {
     return this.invitesRepository.find({
-      relations: ['createdBy', 'invitedUser', 'shop'],
+      relations: ['createdBy', 'invitedUser', 'shop', 'warehouse'],
     });
   }
 
   async findOne(id: string): Promise<Invite> {
     const invite = await this.invitesRepository.findOne({
       where: { id },
-      relations: ['createdBy', 'invitedUser', 'shop'],
+      relations: ['createdBy', 'invitedUser', 'shop', 'warehouse'],
     });
 
     if (!invite) {
@@ -137,7 +139,7 @@ export class InvitesService {
     const normalizedPhone = normalizePhoneNumber(phone);
     return this.invitesRepository.findOne({
       where: { phone: normalizedPhone, status: InviteStatus.PENDING },
-      relations: ['createdBy', 'shop'],
+      relations: ['createdBy', 'shop', 'warehouse'],
     });
   }
 
@@ -148,7 +150,7 @@ export class InvitesService {
         phone: normalizedPhone,
         status: InviteStatus.PENDING,
       },
-      relations: ['createdBy', 'shop'],
+      relations: ['createdBy', 'shop', 'warehouse'],
     });
   }
 
@@ -157,7 +159,7 @@ export class InvitesService {
       where: {
         status: InviteStatus.REJECTED,
       },
-      relations: ['createdBy', 'invitedUser', 'shop'],
+      relations: ['createdBy', 'invitedUser', 'shop', 'warehouse'],
       order: {
         statusChangedAt: 'DESC',
       },
@@ -227,6 +229,7 @@ export class InvitesService {
       userId: user.id,
       shopId: invite.shopId,
       type: invite.role,
+      warehouseId: invite.warehouseId,
     });
 
     // Обновляем статус инвайта

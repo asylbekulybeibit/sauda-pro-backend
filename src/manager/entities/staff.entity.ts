@@ -9,6 +9,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Shop } from '../../shops/entities/shop.entity';
+import { Warehouse } from './warehouse.entity';
 
 @Entity('staff')
 export class Staff {
@@ -21,6 +22,16 @@ export class Staff {
   @ManyToOne(() => Shop, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'shopId' })
   shop: Shop;
+
+  @Column()
+  warehouseId: string;
+
+  @ManyToOne(() => Warehouse, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'warehouseId' })
+  warehouse: Warehouse;
+
+  @Column({ default: true })
+  isWarehouseSpecific: boolean;
 
   @Column()
   firstName: string;

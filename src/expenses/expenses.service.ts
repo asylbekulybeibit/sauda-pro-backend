@@ -17,21 +17,21 @@ export class ExpensesService {
     return this.expenseRepository.save(expense);
   }
 
-  async findAll(shopId: string): Promise<Expense[]> {
+  async findAll(warehouseId: string): Promise<Expense[]> {
     return this.expenseRepository.find({
-      where: { shopId },
+      where: { warehouseId },
       order: { date: 'DESC' },
     });
   }
 
   async findByDateRange(
-    shopId: string,
+    warehouseId: string,
     startDate: Date,
     endDate: Date
   ): Promise<Expense[]> {
     return this.expenseRepository.find({
       where: {
-        shopId,
+        warehouseId,
         date: Between(startDate, endDate),
       },
       order: { date: 'DESC' },
@@ -67,11 +67,15 @@ export class ExpensesService {
   }
 
   async getExpensesByCategory(
-    shopId: string,
+    warehouseId: string,
     startDate: Date,
     endDate: Date
   ): Promise<{ category: string; total: number }[]> {
-    const expenses = await this.findByDateRange(shopId, startDate, endDate);
+    const expenses = await this.findByDateRange(
+      warehouseId,
+      startDate,
+      endDate
+    );
     const expensesByCategory = new Map<string, number>();
 
     expenses.forEach((expense) => {
@@ -88,11 +92,15 @@ export class ExpensesService {
   }
 
   async getTotalExpenses(
-    shopId: string,
+    warehouseId: string,
     startDate: Date,
     endDate: Date
   ): Promise<number> {
-    const expenses = await this.findByDateRange(shopId, startDate, endDate);
+    const expenses = await this.findByDateRange(
+      warehouseId,
+      startDate,
+      endDate
+    );
     return expenses.reduce((total, expense) => total + expense.amount, 0);
   }
 }

@@ -33,23 +33,23 @@ export class ExpensesController {
 
   @Get()
   @ApiOperation({ summary: 'Get all expenses' })
-  @ApiQuery({ name: 'shopId', required: true })
-  findAll(@Query('shopId') shopId: string) {
-    return this.expensesService.findAll(shopId);
+  @ApiQuery({ name: 'warehouseId', required: true })
+  findAll(@Query('warehouseId') warehouseId: string) {
+    return this.expensesService.findAll(warehouseId);
   }
 
   @Get('by-date-range')
   @ApiOperation({ summary: 'Get expenses by date range' })
-  @ApiQuery({ name: 'shopId', required: true })
+  @ApiQuery({ name: 'warehouseId', required: true })
   @ApiQuery({ name: 'startDate', required: true })
   @ApiQuery({ name: 'endDate', required: true })
   findByDateRange(
-    @Query('shopId') shopId: string,
+    @Query('warehouseId') warehouseId: string,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string
   ) {
     return this.expensesService.findByDateRange(
-      shopId,
+      warehouseId,
       new Date(startDate),
       new Date(endDate)
     );
@@ -57,16 +57,16 @@ export class ExpensesController {
 
   @Get('by-category')
   @ApiOperation({ summary: 'Get expenses by category' })
-  @ApiQuery({ name: 'shopId', required: true })
+  @ApiQuery({ name: 'warehouseId', required: true })
   @ApiQuery({ name: 'startDate', required: true })
   @ApiQuery({ name: 'endDate', required: true })
   getExpensesByCategory(
-    @Query('shopId') shopId: string,
+    @Query('warehouseId') warehouseId: string,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string
   ) {
     return this.expensesService.getExpensesByCategory(
-      shopId,
+      warehouseId,
       new Date(startDate),
       new Date(endDate)
     );
@@ -74,16 +74,16 @@ export class ExpensesController {
 
   @Get('total')
   @ApiOperation({ summary: 'Get total expenses' })
-  @ApiQuery({ name: 'shopId', required: true })
+  @ApiQuery({ name: 'warehouseId', required: true })
   @ApiQuery({ name: 'startDate', required: true })
   @ApiQuery({ name: 'endDate', required: true })
   getTotalExpenses(
-    @Query('shopId') shopId: string,
+    @Query('warehouseId') warehouseId: string,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string
   ) {
     return this.expensesService.getTotalExpenses(
-      shopId,
+      warehouseId,
       new Date(startDate),
       new Date(endDate)
     );

@@ -8,7 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Supplier } from './supplier.entity';
-import { Product } from './product.entity';
+import { Barcode } from './barcode.entity';
 
 @Entity('supplier_products')
 export class SupplierProduct {
@@ -19,7 +19,7 @@ export class SupplierProduct {
   supplierId: string;
 
   @Column()
-  productId: string;
+  barcodeId: string;
 
   @Column('decimal', { precision: 10, scale: 2 })
   price: number;
@@ -34,9 +34,9 @@ export class SupplierProduct {
   @JoinColumn({ name: 'supplierId' })
   supplier: Supplier;
 
-  @ManyToOne(() => Product, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'productId' })
-  product: Product;
+  @ManyToOne(() => Barcode, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'barcodeId' })
+  barcode: Barcode;
 
   @CreateDateColumn()
   createdAt: Date;

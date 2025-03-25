@@ -5,32 +5,41 @@ import {
   ManyToOne,
   OneToMany,
   CreateDateColumn,
+  UpdateDateColumn,
   JoinColumn,
 } from 'typeorm';
-import { Shop } from '../../shops/entities/shop.entity';
+import { Warehouse } from './warehouse.entity';
 import { User } from '../../users/entities/user.entity';
-import { CashShift } from './cash-shift.entity';
 import { Client } from './client.entity';
+import { CashShift } from './cash-shift.entity';
+import { CashRegister } from './cash-register.entity';
 import { CashOperation } from './cash-operation.entity';
 
-export enum SalesReceiptStatus {
+export enum ReceiptStatus {
   CREATED = 'created',
   PAID = 'paid',
   CANCELLED = 'cancelled',
   REFUNDED = 'refunded',
 }
 
-@Entity('sales_receipts')
-export class SalesReceipt {
+export enum PaymentMethod {
+  CASH = 'cash',
+  CARD = 'card',
+  TRANSFER = 'transfer',
+  MIXED = 'mixed',
+}
+
+@Entity('receipts')
+export class Receipt {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column()
-  shopId: string;
+  warehouseId: string;
 
-  @ManyToOne(() => Shop, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'shopId' })
-  shop: Shop;
+  @ManyToOne(() => Warehouse, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'warehouseId' })
+  warehouse: Warehouse;
 
   @Column()
   cashShiftId: string;
@@ -38,6 +47,13 @@ export class SalesReceipt {
   @ManyToOne(() => CashShift, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'cashShiftId' })
   cashShift: CashShift;
+
+  @Column()
+  cashRegisterId: string;
+
+  @ManyToOne(() => CashRegister, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'cashRegisterId' })
+  cashRegister: CashRegister;
 
   @Column()
   cashierId: string;
@@ -53,6 +69,12 @@ export class SalesReceipt {
   @JoinColumn({ name: 'clientId' })
   client: Client;
 
+  @Column()
+  receiptNumber: string;
+
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  date: Date;
+
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   totalAmount: number;
 
@@ -62,18 +84,19 @@ export class SalesReceipt {
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   finalAmount: number;
 
-  @Column()
-  paymentMethod: string;
-
-  @Column()
-  receiptNumber: string;
+  @Column({
+    type: 'enum',
+    enum: PaymentMethod,
+    default: PaymentMethod.CASH,
+  })
+  paymentMethod: PaymentMethod;
 
   @Column({
     type: 'enum',
-    enum: SalesReceiptStatus,
-    default: SalesReceiptStatus.CREATED,
+    enum: ReceiptStatus,
+    default: ReceiptStatus.CREATED,
   })
-  status: SalesReceiptStatus;
+  status: ReceiptStatus;
 
   @Column({ nullable: true })
   cashOperationId: string;
@@ -82,9 +105,17 @@ export class SalesReceipt {
   @JoinColumn({ name: 'cashOperationId' })
   cashOperation: CashOperation;
 
-  @OneToMany('SalesReceiptItem', 'salesReceipt')
+  @Column({ type: 'text', nullable: true })
+  comment: string;
+
+  @OneToMany('ReceiptItem', 'receipt', {
+    cascade: true,
+  })
   items: any[];
 
   @CreateDateColumn()
   createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 }

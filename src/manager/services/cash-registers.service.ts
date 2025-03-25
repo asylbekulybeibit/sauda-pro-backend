@@ -28,11 +28,11 @@ export class CashRegistersService {
 
   async create(
     createCashRegisterDto: CreateCashRegisterDto,
-    shopId: string
+    warehouseId: string
   ): Promise<CashRegister> {
     console.log('Creating cash register with data:', {
       dto: createCashRegisterDto,
-      shopId: shopId,
+      warehouseId: warehouseId,
     });
 
     // Создаем кассу
@@ -40,7 +40,7 @@ export class CashRegistersService {
       name: createCashRegisterDto.name,
       type: createCashRegisterDto.type,
       location: createCashRegisterDto.location,
-      shopId: shopId,
+      warehouseId: warehouseId,
       status: CashRegisterStatus.ACTIVE,
       isActive: true,
     });
@@ -66,19 +66,19 @@ export class CashRegistersService {
 
     await this.paymentMethodRepository.save(paymentMethods);
 
-    return this.findOne(cashRegister.id, shopId);
+    return this.findOne(cashRegister.id, warehouseId);
   }
 
-  async findAllByShop(shopId: string): Promise<CashRegister[]> {
+  async findAllByWarehouse(warehouseId: string): Promise<CashRegister[]> {
     return this.cashRegisterRepository.find({
-      where: { shopId, isActive: true },
+      where: { warehouseId, isActive: true },
       relations: ['paymentMethods'],
     });
   }
 
-  async findOne(id: string, shopId: string): Promise<CashRegister> {
+  async findOne(id: string, warehouseId: string): Promise<CashRegister> {
     const cashRegister = await this.cashRegisterRepository.findOne({
-      where: { id, shopId, isActive: true },
+      where: { id, warehouseId, isActive: true },
       relations: ['paymentMethods'],
     });
 
@@ -92,9 +92,9 @@ export class CashRegistersService {
   async updateStatus(
     id: string,
     status: string,
-    shopId: string
+    warehouseId: string
   ): Promise<CashRegister> {
-    const cashRegister = await this.findOne(id, shopId);
+    const cashRegister = await this.findOne(id, warehouseId);
 
     if (
       !Object.values(CashRegisterStatus).includes(status as CashRegisterStatus)
@@ -106,8 +106,8 @@ export class CashRegistersService {
     return this.cashRegisterRepository.save(cashRegister);
   }
 
-  async remove(id: string, shopId: string): Promise<void> {
-    const cashRegister = await this.findOne(id, shopId);
+  async remove(id: string, warehouseId: string): Promise<void> {
+    const cashRegister = await this.findOne(id, warehouseId);
     cashRegister.isActive = false;
     await this.cashRegisterRepository.save(cashRegister);
   }
@@ -115,9 +115,9 @@ export class CashRegistersService {
   async updatePaymentMethods(
     id: string,
     paymentMethods: PaymentMethodDto[],
-    shopId: string
+    warehouseId: string
   ): Promise<CashRegister> {
-    const register = await this.findOne(id, shopId);
+    const register = await this.findOne(id, warehouseId);
 
     // Получаем все существующие методы оплаты
     const existingMethods = await this.paymentMethodRepository.find({
@@ -170,7 +170,7 @@ export class CashRegistersService {
       ...methodsToDeactivate,
     ]);
 
-    return this.findOne(id, shopId);
+    return this.findOne(id, warehouseId);
   }
 
   // Вспомогательный метод для создания уникального ключа метода оплаты

@@ -10,6 +10,7 @@ import {
 import { User } from '../../users/entities/user.entity';
 import { Shop } from '../../shops/entities/shop.entity';
 import { RoleType } from '../../auth/types/role.type';
+import { Warehouse } from '../../manager/entities/warehouse.entity';
 
 @Entity('user_roles')
 export class UserRole {
@@ -21,6 +22,9 @@ export class UserRole {
 
   @Column('uuid')
   shopId: string;
+
+  @Column('uuid', { nullable: true })
+  warehouseId: string;
 
   @Column({
     type: 'enum',
@@ -47,4 +51,8 @@ export class UserRole {
   @ManyToOne(() => Shop, (shop) => shop.userRoles)
   @JoinColumn({ name: 'shopId' })
   shop: Shop;
+
+  @ManyToOne(() => Warehouse, { nullable: true })
+  @JoinColumn({ name: 'warehouseId' })
+  warehouse: Warehouse;
 }

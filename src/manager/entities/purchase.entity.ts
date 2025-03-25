@@ -7,7 +7,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Shop } from '../../shops/entities/shop.entity';
+import { Warehouse } from './warehouse.entity';
 import { User } from '../../users/entities/user.entity';
 import { Supplier } from './supplier.entity';
 import { InventoryTransaction } from './inventory-transaction.entity';
@@ -24,10 +24,10 @@ export class Purchase {
   id: string;
 
   @Column()
-  shopId: string;
+  warehouseId: string;
 
-  @ManyToOne(() => Shop)
-  shop: Shop;
+  @ManyToOne(() => Warehouse)
+  warehouse: Warehouse;
 
   @Column({ nullable: true })
   supplierId: string;

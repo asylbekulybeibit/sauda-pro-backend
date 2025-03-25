@@ -4,7 +4,11 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
+import { Warehouse } from './warehouse.entity';
+import { Shop } from '../../shops/entities/shop.entity';
 
 @Entity()
 export class Supplier {
@@ -16,6 +20,20 @@ export class Supplier {
 
   @Column()
   shopId: string;
+
+  @ManyToOne(() => Shop)
+  @JoinColumn({ name: 'shopId' })
+  shop: Shop;
+
+  @Column({ nullable: true })
+  warehouseId: string;
+
+  @ManyToOne(() => Warehouse, { nullable: true })
+  @JoinColumn({ name: 'warehouseId' })
+  warehouse: Warehouse;
+
+  @Column({ default: false })
+  isGlobal: boolean;
 
   @Column({ default: true })
   isActive: boolean;

@@ -13,6 +13,7 @@ import { User } from '../../users/entities/user.entity';
 import { Shop } from '../../shops/entities/shop.entity';
 import { RoleType } from '../../auth/types/role.type';
 import { normalizePhoneNumber } from '../../common/utils/phone.util';
+import { Warehouse } from '../../manager/entities/warehouse.entity';
 
 export enum InviteStatus {
   PENDING = 'pending',
@@ -81,6 +82,13 @@ export class Invite {
 
   @Column()
   shopId: string;
+
+  @ManyToOne(() => Warehouse, { nullable: true })
+  @JoinColumn({ name: 'warehouseId' })
+  warehouse: Warehouse;
+
+  @Column({ nullable: true })
+  warehouseId: string;
 
   @BeforeInsert()
   @BeforeUpdate()

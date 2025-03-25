@@ -7,15 +7,7 @@ import {
   OneToMany,
 } from 'typeorm';
 import { UserRole } from '../../roles/entities/user-role.entity';
-import { Product } from '../../manager/entities/product.entity';
-import { InventoryTransaction } from '../../manager/entities/inventory-transaction.entity';
-import { CashRegister } from '../../manager/entities/cash-register.entity';
-
-export enum ShopType {
-  SHOP = 'shop',
-  WAREHOUSE = 'warehouse',
-  POINT_OF_SALE = 'point_of_sale',
-}
+import { Warehouse } from '../../manager/entities/warehouse.entity';
 
 @Entity('shops')
 export class Shop {
@@ -37,13 +29,6 @@ export class Shop {
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({
-    type: 'enum',
-    enum: ShopType,
-    default: ShopType.SHOP,
-  })
-  type: ShopType;
-
   @CreateDateColumn()
   createdAt: Date;
 
@@ -53,12 +38,6 @@ export class Shop {
   @OneToMany(() => UserRole, (userRole) => userRole.shop)
   userRoles: UserRole[];
 
-  @OneToMany(() => Product, (product) => product.shop)
-  products: Product[];
-
-  @OneToMany(() => InventoryTransaction, (transaction) => transaction.shop)
-  transactions: InventoryTransaction[];
-
-  @OneToMany(() => CashRegister, (register) => register.shop)
-  cashRegisters: CashRegister[];
+  @OneToMany(() => Warehouse, (warehouse) => warehouse.shop)
+  warehouses: Warehouse[];
 }

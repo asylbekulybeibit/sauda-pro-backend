@@ -4,6 +4,14 @@ import { ServiceStatus } from '../../entities/service.entity';
 export class UpdateServiceDto {
   @IsUUID()
   @IsOptional()
+  shopId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  warehouseId?: string;
+
+  @IsUUID()
+  @IsOptional()
   serviceTypeId?: string;
 
   @IsUUID()

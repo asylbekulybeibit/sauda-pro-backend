@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsUUID } from 'class-validator';
+import { IsString, IsEnum, IsUUID, IsOptional } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { RoleType } from '../../auth/types/role.type';
 import { IsPhoneNumber } from '../../common/decorators/phone.decorator';
@@ -14,4 +14,8 @@ export class CreateInviteDto {
 
   @IsUUID()
   shopId: string;
+
+  @IsOptional()
+  @IsUUID()
+  warehouseId?: string;
 }

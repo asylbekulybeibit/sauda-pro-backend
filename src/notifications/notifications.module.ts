@@ -4,11 +4,14 @@ import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsGateway } from './notifications.gateway';
 import { Notification } from './entities/notification.entity';
-import { Product } from '../manager/entities/product.entity';
+import { WarehouseProduct } from '../manager/entities/warehouse-product.entity';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Notification, Product]), AuthModule],
+  imports: [
+    TypeOrmModule.forFeature([Notification, WarehouseProduct]),
+    AuthModule,
+  ],
   controllers: [NotificationsController],
   providers: [NotificationsService, NotificationsGateway],
   exports: [NotificationsService],

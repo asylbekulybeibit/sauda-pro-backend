@@ -10,9 +10,9 @@ import {
   NotificationStatus,
 } from './entities/notification.entity';
 import { CreateNotificationDto } from './dto/create-notification.dto';
-import { Product } from '../manager/entities/product.entity';
 import { InventoryTransaction } from '../manager/entities/inventory-transaction.entity';
 import { Promotion } from '../manager/entities/promotion.entity';
+import { WarehouseProduct } from '../manager/entities/warehouse-product.entity';
 
 @Injectable()
 @WebSocketGateway({
@@ -29,36 +29,46 @@ export class NotificationsService {
   constructor(
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
-    @InjectRepository(Product)
-    private readonly productRepository: Repository<Product>
+    @InjectRepository(WarehouseProduct)
+    private readonly warehouseProductRepository: Repository<WarehouseProduct>
   ) {}
 
   async create(createNotificationDto: CreateNotificationDto) {
     const notification = this.notificationRepository.create({
       ...createNotificationDto,
       status: NotificationStatus.UNREAD,
-      isRead: false,
     });
 
     const savedNotification =
       await this.notificationRepository.save(notification);
+
+    // Эмитим событие в комнату магазина
     this.server
       ?.to(`shop:${createNotificationDto.shopId}`)
       .emit('notification', savedNotification);
+
+    // Если указан склад, эмитим событие ещё и в комнату склада
+    if (createNotificationDto.warehouseId) {
+      this.server
+        ?.to(`warehouse:${createNotificationDto.warehouseId}`)
+        .emit('notification', savedNotification);
+    }
+
     return savedNotification;
   }
 
-  async notifyLowStock(product: Product): Promise<void> {
+  async notifyLowStock(warehouseProduct: WarehouseProduct): Promise<void> {
     await this.create({
-      type: NotificationType.LOW_STOCK,
+      type: NotificationType.SYSTEM,
       title: 'Низкий остаток товара',
-      message: `Товар "${product.name}" заканчивается (осталось ${product.quantity} шт.)`,
+      message: `Товар заканчивается (осталось ${warehouseProduct.quantity} шт.)`,
       priority: NotificationPriority.HIGH,
       metadata: {
-        productId: product.id,
-        quantity: product.quantity,
+        warehouseProductId: warehouseProduct.id,
+        quantity: warehouseProduct.quantity,
       },
-      shopId: product.shopId,
+      shopId: warehouseProduct.warehouse.shopId,
+      warehouseId: warehouseProduct.warehouseId,
     });
   }
 
@@ -66,60 +76,97 @@ export class NotificationsService {
     transaction: InventoryTransaction,
     type: 'initiated' | 'completed'
   ): Promise<void> {
-    const product = await this.productRepository.findOne({
-      where: { id: transaction.productId },
+    const warehouseProduct = await this.warehouseProductRepository.findOne({
+      where: { id: transaction.warehouseProductId },
+      relations: ['barcode', 'warehouse'],
     });
 
+    if (!warehouseProduct) return;
+
     await this.create({
-      type:
-        type === 'initiated'
-          ? NotificationType.TRANSFER_INITIATED
-          : NotificationType.TRANSFER_COMPLETED,
+      type: NotificationType.SYSTEM,
       title:
         type === 'initiated'
           ? 'Начато перемещение товара'
           : 'Завершено перемещение товара',
       message: `${
         type === 'initiated' ? 'Начато' : 'Завершено'
-      } перемещение товара "${product.name}" (${transaction.quantity} шт.)`,
+      } перемещение товара "${warehouseProduct.barcode.productName}" (${
+        transaction.quantity
+      } шт.)`,
       priority: NotificationPriority.MEDIUM,
       metadata: {
-        productId: product.id,
+        warehouseProductId: warehouseProduct.id,
         quantity: transaction.quantity,
-        fromShopId: transaction.shopId,
-        toShopId: transaction.metadata?.targetShopId,
+        fromWarehouseId: transaction.warehouseId,
+        toWarehouseId: transaction.metadata?.targetWarehouseId,
       },
-      shopId: transaction.shopId,
+      shopId: warehouseProduct.warehouse.shopId,
+      warehouseId: transaction.warehouseId,
     });
   }
 
-  async findAll(shopId: string): Promise<Notification[]> {
+  async findAll(shopId: string, warehouseId?: string): Promise<Notification[]> {
+    const whereCondition: any = { shopId };
+
+    if (warehouseId) {
+      whereCondition.warehouseId = warehouseId;
+    }
+
     return this.notificationRepository.find({
-      where: { shopId },
+      where: whereCondition,
       order: { createdAt: 'DESC' },
     });
   }
 
-  async markAsRead(id: string, shopId: string): Promise<void> {
-    await this.notificationRepository.update(
-      { id, shopId },
-      { status: NotificationStatus.READ, isRead: true }
-    );
+  async markAsRead(
+    id: string,
+    shopId: string,
+    warehouseId?: string
+  ): Promise<void> {
+    const whereCondition: any = { id, shopId };
+
+    if (warehouseId) {
+      whereCondition.warehouseId = warehouseId;
+    }
+
+    await this.notificationRepository.update(whereCondition, {
+      status: NotificationStatus.READ,
+    });
   }
 
-  async archive(id: string, shopId: string): Promise<void> {
-    await this.notificationRepository.update(
-      { id, shopId },
-      { status: NotificationStatus.ARCHIVED }
-    );
+  async archive(
+    id: string,
+    shopId: string,
+    warehouseId?: string
+  ): Promise<void> {
+    const whereCondition: any = { id, shopId };
+
+    if (warehouseId) {
+      whereCondition.warehouseId = warehouseId;
+    }
+
+    // Архивацию пока заменим на отметку как прочитанное
+    await this.notificationRepository.update(whereCondition, {
+      status: NotificationStatus.READ,
+    });
   }
 
-  async getUnreadNotifications(shopId: string): Promise<Notification[]> {
+  async getUnreadNotifications(
+    shopId: string,
+    warehouseId?: string
+  ): Promise<Notification[]> {
+    const whereCondition: any = {
+      shopId,
+      status: NotificationStatus.UNREAD,
+    };
+
+    if (warehouseId) {
+      whereCondition.warehouseId = warehouseId;
+    }
+
     return this.notificationRepository.find({
-      where: {
-        shopId,
-        status: NotificationStatus.UNREAD,
-      },
+      where: whereCondition,
       order: { createdAt: 'DESC' },
     });
   }
@@ -127,10 +174,11 @@ export class NotificationsService {
   async createLowStockNotification(
     shopId: string,
     productName: string,
-    currentStock: number
+    currentStock: number,
+    warehouseId?: string
   ) {
     return await this.create({
-      type: NotificationType.LOW_STOCK,
+      type: NotificationType.SYSTEM,
       title: 'Низкий остаток товара',
       message: `Товар "${productName}" заканчивается (осталось ${currentStock} шт.)`,
       priority: NotificationPriority.HIGH,
@@ -139,6 +187,7 @@ export class NotificationsService {
         currentQuantity: currentStock,
       },
       shopId,
+      warehouseId,
     });
   }
 
@@ -147,10 +196,12 @@ export class NotificationsService {
     transferId: string,
     productName: string,
     quantity: number,
-    targetShopName: string
+    targetShopName: string,
+    warehouseId?: string,
+    targetWarehouseId?: string
   ) {
     return await this.create({
-      type: NotificationType.TRANSFER_INITIATED,
+      type: NotificationType.SYSTEM,
       title: 'Начато перемещение товара',
       message: `Начато перемещение ${quantity} шт. товара "${productName}" в магазин ${targetShopName}`,
       priority: NotificationPriority.MEDIUM,
@@ -159,8 +210,10 @@ export class NotificationsService {
         productId: productName,
         quantity,
         targetShopId: targetShopName,
+        targetWarehouseId,
       },
       shopId,
+      warehouseId,
     });
   }
 
@@ -169,10 +222,12 @@ export class NotificationsService {
     transferId: string,
     productName: string,
     quantity: number,
-    sourceShopName: string
+    sourceShopName: string,
+    warehouseId?: string,
+    sourceWarehouseId?: string
   ) {
     return await this.create({
-      type: NotificationType.TRANSFER_COMPLETED,
+      type: NotificationType.SYSTEM,
       title: 'Завершено перемещение товара',
       message: `Получено ${quantity} шт. товара "${productName}" из магазина ${sourceShopName}`,
       priority: NotificationPriority.MEDIUM,
@@ -181,8 +236,10 @@ export class NotificationsService {
         productId: productName,
         quantity,
         sourceShopId: sourceShopName,
+        sourceWarehouseId,
       },
       shopId,
+      warehouseId,
     });
   }
 
@@ -202,6 +259,7 @@ export class NotificationsService {
           endDate: promotion.endDate,
         },
         shopId: promotion.shopId,
+        warehouseId: promotion.warehouseId,
       });
     }
   }
@@ -212,7 +270,7 @@ export class NotificationsService {
 
     await this.notificationRepository.delete({
       createdAt: LessThan(thirtyDaysAgo),
-      status: NotificationStatus.ARCHIVED,
+      status: NotificationStatus.READ, // Удаляем только прочитанные уведомления
     });
   }
 }
