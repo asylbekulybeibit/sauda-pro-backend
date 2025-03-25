@@ -25,35 +25,35 @@ export class ShopsController {
   constructor(private readonly shopsService: ShopsService) {}
 
   @Post()
-  @Roles(RoleType.SUPERADMIN)
+  @Roles(RoleType.SUPERADMIN, RoleType.OWNER)
   async create(@Body() createShopDto: CreateShopDto) {
     this.logger.debug('Создание нового магазина:', createShopDto);
     return this.shopsService.create(createShopDto);
   }
 
   @Get()
-  @Roles(RoleType.SUPERADMIN)
+  @Roles(RoleType.SUPERADMIN, RoleType.OWNER)
   async findAll() {
     this.logger.debug('Получение списка всех магазинов');
     return this.shopsService.findAll();
   }
 
   @Get(':id')
-  @Roles(RoleType.SUPERADMIN)
+  @Roles(RoleType.SUPERADMIN, RoleType.OWNER)
   async findOne(@Param('id') id: string) {
     this.logger.debug(`Получение магазина по ID: ${id}`);
     return this.shopsService.findOne(id);
   }
 
   @Patch(':id')
-  @Roles(RoleType.SUPERADMIN)
+  @Roles(RoleType.SUPERADMIN, RoleType.OWNER)
   async update(@Param('id') id: string, @Body() updateShopDto: UpdateShopDto) {
     this.logger.debug(`Обновление магазина ${id}:`, updateShopDto);
     return this.shopsService.update(id, updateShopDto);
   }
 
   @Delete(':id')
-  @Roles(RoleType.SUPERADMIN)
+  @Roles(RoleType.SUPERADMIN, RoleType.OWNER)
   async remove(@Param('id') id: string) {
     try {
       await this.shopsService.remove(id);

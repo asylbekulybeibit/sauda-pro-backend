@@ -12,10 +12,13 @@ export class CreateInviteDto {
   @IsEnum(RoleType)
   role: RoleType;
 
+  @IsOptional()
   @IsUUID()
-  warehouseId: string;
+  @Transform(({ value }) => (value === '' ? undefined : value))
+  warehouseId?: string;
 
   @IsOptional()
   @IsUUID()
+  @Transform(({ value }) => (value === '' ? undefined : value))
   shopId?: string;
 }

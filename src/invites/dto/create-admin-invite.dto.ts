@@ -10,13 +10,15 @@ export class CreateAdminInviteDto {
   phone: string;
 
   @IsEnum(RoleType, {
-    message: 'Администратор может создавать только владельцев',
+    message: 'Администратор может создавать только владельцев магазинов',
   })
   role: Extract<RoleType, 'owner'>;
 
   @IsUUID()
   shopId: string;
 
+  @IsOptional()
   @IsUUID()
-  warehouseId: string;
+  @Transform(({ value }) => (value === '' ? undefined : value))
+  warehouseId?: string;
 }

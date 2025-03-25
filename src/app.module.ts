@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { InvitesModule } from './invites/invites.module';
 import { ShopsModule } from './shops/shops.module';
+import { WarehousesModule } from './warehouses/warehouses.module';
 import { RolesModule } from './roles/roles.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { OwnerModule } from './owner/owner.module';
@@ -45,6 +46,7 @@ import { ReceiptItem } from './manager/entities/receipt-item.entity';
     UsersModule,
     InvitesModule,
     ShopsModule,
+    WarehousesModule,
     RolesModule,
     DashboardModule,
     OwnerModule,

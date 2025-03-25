@@ -87,7 +87,7 @@ export class Invite {
   @JoinColumn({ name: 'warehouseId' })
   warehouse: Warehouse;
 
-  @Column()
+  @Column({ nullable: true })
   warehouseId: string;
 
   @BeforeInsert()

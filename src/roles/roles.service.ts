@@ -17,13 +17,22 @@ export class RolesService {
   ) {}
 
   async create(createUserRoleDto: CreateUserRoleDto): Promise<UserRole> {
-    // Проверяем, нет ли уже активной роли у пользователя в этом складе
+    // Проверяем, нет ли уже активной роли у пользователя в этом складе или магазине
     const whereCondition: any = {
       userId: createUserRoleDto.userId,
-      warehouseId: createUserRoleDto.warehouseId,
       type: createUserRoleDto.type,
       isActive: true,
     };
+
+    // Добавляем условие поиска по warehouseId только если он указан
+    if (createUserRoleDto.warehouseId) {
+      whereCondition.warehouseId = createUserRoleDto.warehouseId;
+    }
+
+    // Добавляем условие поиска по shopId только если он указан
+    if (createUserRoleDto.shopId) {
+      whereCondition.shopId = createUserRoleDto.shopId;
+    }
 
     const existingRole = await this.userRoleRepository.findOne({
       where: whereCondition,
@@ -31,7 +40,7 @@ export class RolesService {
 
     if (existingRole) {
       throw new BadRequestException(
-        'Пользователь уже имеет активную роль в этом складе'
+        'Пользователь уже имеет активную роль в этом проекте'
       );
     }
 
@@ -77,10 +86,14 @@ export class RolesService {
 
   async findByUserAndWarehouse(
     userId: string,
-    warehouseId: string,
+    warehouseId?: string,
     shopId?: string
   ): Promise<UserRole[]> {
-    const whereCondition: any = { userId, warehouseId };
+    const whereCondition: any = { userId };
+
+    if (warehouseId) {
+      whereCondition.warehouseId = warehouseId;
+    }
 
     if (shopId) {
       whereCondition.shopId = shopId;
@@ -99,6 +112,17 @@ export class RolesService {
     });
   }
 
+  // Метод для поиска ролей только по shopId (без учета warehouseId)
+  async findByUserAndShopOnly(
+    userId: string,
+    shopId: string
+  ): Promise<UserRole[]> {
+    return this.userRoleRepository.find({
+      where: { userId, shopId },
+      relations: ['warehouse', 'shop'],
+    });
+  }
+
   async remove(id: string): Promise<void> {
     const userRole = await this.findOne(id);
     await this.userRoleRepository.remove(userRole);
@@ -106,12 +130,30 @@ export class RolesService {
 
   async hasRole(
     userId: string,
-    warehouseId: string,
-    roles: RoleType[]
+    warehouseId: string | null,
+    roles: RoleType[],
+    shopId?: string
   ): Promise<boolean> {
-    const userRoles = await this.findByUserAndWarehouse(userId, warehouseId);
-    return userRoles.some(
-      (userRole) => roles.includes(userRole.type) && userRole.isActive
-    );
+    // Если указан warehouseId, проверяем по нему
+    if (warehouseId) {
+      const userRoles = await this.findByUserAndWarehouse(
+        userId,
+        warehouseId,
+        shopId
+      );
+      return userRoles.some(
+        (userRole) => roles.includes(userRole.type) && userRole.isActive
+      );
+    }
+    // Если указан только shopId, проверяем по нему
+    else if (shopId) {
+      const userRoles = await this.findByUserAndShopOnly(userId, shopId);
+      return userRoles.some(
+        (userRole) => roles.includes(userRole.type) && userRole.isActive
+      );
+    }
+
+    // Если не указаны ни warehouseId, ни shopId, возвращаем false
+    return false;
   }
 }

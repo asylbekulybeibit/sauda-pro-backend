@@ -20,7 +20,7 @@ export class UserRole {
   @Column('uuid')
   userId: string;
 
-  @Column('uuid')
+  @Column('uuid', { nullable: true })
   warehouseId: string;
 
   @Column('uuid', { nullable: true })

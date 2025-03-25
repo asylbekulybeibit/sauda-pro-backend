@@ -24,14 +24,12 @@ export class ShopsService {
   async findAll(): Promise<Shop[]> {
     return this.shopsRepository.find({
       where: { isActive: true },
-      relations: ['userRoles', 'userRoles.user'],
     });
   }
 
   async findOne(id: string): Promise<Shop> {
     const shop = await this.shopsRepository.findOne({
       where: { id },
-      relations: ['userRoles', 'userRoles.user'],
     });
 
     if (!shop) {
@@ -62,8 +60,6 @@ export class ShopsService {
       where: { isActive: true },
     });
 
-    
-
     // Получаем количество магазинов за последний месяц
     const lastMonth = new Date();
     lastMonth.setMonth(lastMonth.getMonth() - 1);
@@ -80,7 +76,7 @@ export class ShopsService {
     return {
       total,
       active: shops.length,
-     
+
       growth,
     };
   }

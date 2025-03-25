@@ -37,15 +37,11 @@ export class CashShift {
   @Column()
   cashRegisterId: string;
 
-  @ManyToOne(() => User)
-  @JoinColumn({ name: 'userId' })
-  user: User;
-
   @Column()
-  userId: string;
+  openedById: string;
 
   @ManyToOne(() => User)
-  @JoinColumn({ name: 'userId' })
+  @JoinColumn({ name: 'openedById' })
   openedBy: User;
 
   @Column({ nullable: true })

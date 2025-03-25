@@ -5,9 +5,12 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 import { WarehouseProduct } from './warehouse-product.entity';
 import { CashRegister } from './cash-register.entity';
+import { Shop } from '../../shops/entities/shop.entity';
 
 @Entity('warehouses')
 export class Warehouse {
@@ -31,6 +34,13 @@ export class Warehouse {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ type: 'uuid', nullable: true })
+  shopId: string;
+
+  @ManyToOne(() => Shop)
+  @JoinColumn({ name: 'shopId' })
+  shop: Shop;
 
   @OneToMany(
     () => WarehouseProduct,
