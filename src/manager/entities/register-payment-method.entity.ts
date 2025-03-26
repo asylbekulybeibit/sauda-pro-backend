@@ -4,9 +4,11 @@ import {
   Column,
   ManyToOne,
   CreateDateColumn,
+  OneToMany,
 } from 'typeorm';
 import { CashRegister } from './cash-register.entity';
 import { PaymentMethodType } from './cash-operation.entity';
+import { PaymentMethodTransaction } from './payment-method-transaction.entity';
 
 export enum PaymentMethodSource {
   SYSTEM = 'system',
@@ -62,6 +64,29 @@ export class RegisterPaymentMethod {
     default: PaymentMethodStatus.ACTIVE,
   })
   status: PaymentMethodStatus;
+
+  // Новые поля для отслеживания баланса
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string | number) => Number(value),
+    },
+  })
+  currentBalance: number;
+
+  @Column({ nullable: true })
+  accountDetails: string;
+
+  // Связь с транзакциями
+  @OneToMany(
+    () => PaymentMethodTransaction,
+    (transaction) => transaction.paymentMethod
+  )
+  transactions: PaymentMethodTransaction[];
 
   @CreateDateColumn()
   createdAt: Date;

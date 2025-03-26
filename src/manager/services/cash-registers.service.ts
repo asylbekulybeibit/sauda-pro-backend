@@ -32,77 +32,36 @@ export class CashRegistersService {
     warehouseId: string
   ): Promise<CashRegister> {
     console.log('Creating cash register with data:', {
-      dto: createCashRegisterDto,
-      warehouseId: warehouseId,
+      createCashRegisterDto,
+      warehouseId,
     });
 
-    // Создаем кассу
-    const cashRegister = this.cashRegisterRepository.create({
-      name: createCashRegisterDto.name,
-      type: createCashRegisterDto.type,
-      location: createCashRegisterDto.location,
-      warehouseId: warehouseId,
-      status: CashRegisterStatus.ACTIVE,
-      isActive: true,
-    });
+    // Создаем кассовый аппарат
+    const cashRegister = new CashRegister();
+    cashRegister.name = createCashRegisterDto.name;
+    cashRegister.type = createCashRegisterDto.type;
+    cashRegister.warehouseId = warehouseId;
+    cashRegister.location = createCashRegisterDto.location;
+    cashRegister.status = CashRegisterStatus.ACTIVE;
 
-    console.log('Created cash register entity:', cashRegister);
+    try {
+      // Сначала сохраняем сам кассовый аппарат
+      const savedRegister =
+        await this.cashRegisterRepository.save(cashRegister);
+      console.log('Saved cash register:', savedRegister);
 
-    const savedRegister = await this.cashRegisterRepository.save(cashRegister);
-    console.log('Saved cash register:', savedRegister);
+      // Инициализируем методы оплаты
+      const paymentMethods = createCashRegisterDto.paymentMethods.map(
+        (method) => this.initializeEmptyPaymentMethod(method, savedRegister.id)
+      );
 
-    // Создаем методы оплаты для кассы
-    const paymentMethods = createCashRegisterDto.paymentMethods.map(
-      (method) => {
-        const paymentMethod = new RegisterPaymentMethod();
-        paymentMethod.cashRegisterId = cashRegister.id;
-        paymentMethod.source = method.source;
+      await this.paymentMethodRepository.save(paymentMethods);
 
-        if (method.systemType) {
-          paymentMethod.systemType = method.systemType;
-
-          // Для системных методов оплаты можем использовать systemType для создания имени,
-          // если имя не передано явно
-          if (!method.name) {
-            // Определение имени метода на основе systemType
-            switch (method.systemType) {
-              case PaymentMethodType.CASH:
-                paymentMethod.name = 'Наличные';
-                break;
-              case PaymentMethodType.CARD:
-                paymentMethod.name = 'Банковская карта';
-                break;
-              case PaymentMethodType.QR:
-                paymentMethod.name = 'QR-код';
-                break;
-              default:
-                paymentMethod.name = method.systemType; // Используем systemType как имя по умолчанию
-            }
-          } else {
-            paymentMethod.name = method.name;
-          }
-        } else {
-          // Для кастомных методов имя обязательно
-          if (!method.name && method.source === PaymentMethodSource.CUSTOM) {
-            throw new BadRequestException(
-              'Custom payment method must have a name'
-            );
-          }
-          paymentMethod.name = method.name;
-        }
-
-        paymentMethod.code = method.code;
-        paymentMethod.description = method.description;
-        paymentMethod.isActive = method.isActive ?? true;
-        paymentMethod.status = method.status ?? PaymentMethodStatus.ACTIVE;
-
-        return paymentMethod;
-      }
-    );
-
-    await this.paymentMethodRepository.save(paymentMethods);
-
-    return this.findOne(cashRegister.id, warehouseId);
+      return this.findOne(savedRegister.id, warehouseId);
+    } catch (error) {
+      console.error('Error creating cash register:', error);
+      throw error;
+    }
   }
 
   async findAllByWarehouse(warehouseId: string): Promise<CashRegister[]> {
@@ -155,77 +114,59 @@ export class CashRegistersService {
   ): Promise<CashRegister> {
     const register = await this.findOne(id, warehouseId);
 
-    // Получаем все существующие методы оплаты
+    if (!register) {
+      throw new NotFoundException('Касса не найдена');
+    }
+
+    // Загружаем текущие методы оплаты для этой кассы
     const existingMethods = await this.paymentMethodRepository.find({
       where: { cashRegisterId: id },
     });
 
-    // Создаем Map существующих методов для быстрого поиска
+    // Создаем маппинги для быстрого поиска
     const existingMethodsMap = new Map(
       existingMethods.map((method) => [this.getMethodKey(method), method])
     );
 
-    // Подготавливаем новые методы и обновляем существующие
-    const methodsToSave = paymentMethods.map((method) => {
-      const key = this.getMethodKey(method);
-      const existingMethod = existingMethodsMap.get(key);
+    const methodsToSave = [];
+    const methodsToDeactivate = [];
 
-      if (existingMethod) {
-        // Обновляем существующий метод
-        existingMethod.isActive = method.isActive;
-        existingMethod.status = method.status;
-        existingMethodsMap.delete(key); // Удаляем из мапы, чтобы отследить неиспользуемые методы
-        return existingMethod;
-      } else {
-        // Создаем новый метод
-        const paymentMethod = new RegisterPaymentMethod();
-        paymentMethod.cashRegisterId = id;
-        paymentMethod.source = method.source;
-        paymentMethod.systemType = method.systemType;
+    // Обрабатываем переданные методы оплаты
+    for (const method of paymentMethods) {
+      const methodKey = this.getMethodKey(method);
 
-        // Обработка имени метода оплаты
-        if (method.name) {
-          paymentMethod.name = method.name;
-        } else if (
-          method.source === PaymentMethodSource.SYSTEM &&
-          method.systemType
-        ) {
-          // Для системных методов оплаты можем использовать systemType для создания имени
-          switch (method.systemType) {
-            case PaymentMethodType.CASH:
-              paymentMethod.name = 'Наличные';
-              break;
-            case PaymentMethodType.CARD:
-              paymentMethod.name = 'Банковская карта';
-              break;
-            case PaymentMethodType.QR:
-              paymentMethod.name = 'QR-код';
-              break;
-            default:
-              paymentMethod.name = method.systemType; // Используем systemType как имя по умолчанию
-          }
-        } else if (method.source === PaymentMethodSource.CUSTOM) {
-          throw new BadRequestException(
-            'Custom payment method must have a name'
-          );
+      if (!methodKey) {
+        throw new BadRequestException('Invalid payment method data');
+      }
+
+      // Проверяем, существует ли этот метод оплаты
+      if (existingMethodsMap.has(methodKey)) {
+        // Обновляем существующий
+        const existingMethod = existingMethodsMap.get(methodKey);
+        existingMethod.isActive = method.isActive ?? true;
+        existingMethod.status = method.status || PaymentMethodStatus.ACTIVE;
+
+        // Если указано описание, обновляем его и accountDetails
+        if (method.description) {
+          existingMethod.description = method.description;
+          existingMethod.accountDetails = method.description;
         }
 
-        paymentMethod.code = method.code;
-        paymentMethod.description = method.description;
-        paymentMethod.isActive = method.isActive;
-        paymentMethod.status = method.status;
-        return paymentMethod;
+        methodsToSave.push(existingMethod);
+        existingMethodsMap.delete(methodKey); // Удаляем, чтобы пометить как обработанный
+      } else {
+        // Создаем новый метод оплаты
+        const newMethod = this.initializeEmptyPaymentMethod(method, id);
+        methodsToSave.push(newMethod);
       }
-    });
+    }
 
-    // Все оставшиеся в мапе методы помечаем как неактивные
-    const methodsToDeactivate = Array.from(existingMethodsMap.values()).map(
-      (method) => {
-        method.isActive = false;
-        method.status = PaymentMethodStatus.INACTIVE;
-        return method;
-      }
-    );
+    // Оставшиеся методы оплаты нужно деактивировать
+    for (const [_, method] of existingMethodsMap.entries()) {
+      method.isActive = false;
+      method.status = PaymentMethodStatus.INACTIVE;
+      methodsToDeactivate.push(method);
+    }
 
     // Сохраняем все изменения
     await this.paymentMethodRepository.save([
@@ -243,11 +184,38 @@ export class CashRegistersService {
     code?: string;
   }): string {
     if (method.source === PaymentMethodSource.SYSTEM && method.systemType) {
-      return `${method.source}_${method.systemType}`;
+      return `system-${method.systemType}`;
+    } else if (method.source === PaymentMethodSource.CUSTOM && method.code) {
+      return `custom-${method.code}`;
     }
-    if (method.source === PaymentMethodSource.CUSTOM && method.code) {
-      return `${method.source}_${method.code}`;
-    }
-    throw new BadRequestException('Invalid payment method data');
+    return '';
+  }
+
+  // Инициализирует пустые методы оплаты с правильным балансом
+  private initializeEmptyPaymentMethod(
+    method: {
+      source: PaymentMethodSource;
+      systemType?: PaymentMethodType;
+      name?: string;
+      code?: string;
+      isActive?: boolean;
+      status?: PaymentMethodStatus;
+      description?: string;
+    },
+    registerId: string
+  ): RegisterPaymentMethod {
+    const newMethod = new RegisterPaymentMethod();
+    newMethod.cashRegisterId = registerId;
+    newMethod.source = method.source;
+    newMethod.systemType = method.systemType;
+    newMethod.name = method.name;
+    newMethod.code = method.code;
+    newMethod.isActive = method.isActive ?? true;
+    newMethod.status = method.status || PaymentMethodStatus.ACTIVE;
+    newMethod.description = method.description || '';
+    newMethod.currentBalance = 0; // Инициализируем с нулевым числовым балансом
+    newMethod.accountDetails = method.description || '';
+
+    return newMethod;
   }
 }

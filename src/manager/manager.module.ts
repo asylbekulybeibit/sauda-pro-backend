@@ -48,7 +48,13 @@ import { BulkOperationsController } from './controllers/bulk-operations.controll
 import { BulkOperationsService } from './services/bulk-operations.service';
 import { WarehouseController } from './controllers/warehouse.controller';
 
-// Новые импорты для сервисных сущностей
+// Новые импорты для учета баланса методов оплаты
+import { PaymentMethodTransaction } from './entities/payment-method-transaction.entity';
+import { PaymentMethodBalance } from './entities/payment-method-balance.entity';
+import { PaymentMethodTransactionsService } from './services/payment-method-transactions.service';
+import { PaymentMethodsController } from './controllers/payment-methods.controller';
+
+// Существующие импорты для сервисных сущностей
 import { Staff } from './entities/staff.entity';
 import { Client } from './entities/client.entity';
 import { Vehicle } from './entities/vehicle.entity';
@@ -102,6 +108,9 @@ import { User } from '../users/entities/user.entity';
       RegisterPaymentMethod,
       SupplierProduct,
       Purchase,
+      // Новые сущности для учета баланса методов оплаты
+      PaymentMethodTransaction,
+      PaymentMethodBalance,
       // Добавляем новые сущности для сферы услуг
       Staff,
       Client,
@@ -134,6 +143,8 @@ import { User } from '../users/entities/user.entity';
     PurchasesController,
     BulkOperationsController,
     WarehouseController,
+    // Новый контроллер для методов оплаты
+    PaymentMethodsController,
     // Новые контроллеры для услуг
     EmployeeController,
     ClientController,
@@ -158,6 +169,8 @@ import { User } from '../users/entities/user.entity';
     SupplierProductsService,
     PurchasesService,
     BulkOperationsService,
+    // Новый сервис для операций с методами оплаты
+    PaymentMethodTransactionsService,
     // Новые сервисы для услуг
     EmployeeService,
     ClientService,
@@ -167,6 +180,12 @@ import { User } from '../users/entities/user.entity';
     // Добавляем недостающие сервисы кассира
     ReceiptActionsService,
   ],
-  exports: [ManagerService, InventoryService, PurchasesService],
+  exports: [
+    ManagerService,
+    InventoryService,
+    PurchasesService,
+    // Экспортируем сервис для использования в других модулях
+    PaymentMethodTransactionsService,
+  ],
 })
 export class ManagerModule {}
