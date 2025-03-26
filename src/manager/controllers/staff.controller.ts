@@ -89,4 +89,59 @@ export class StaffController {
   ): Promise<Invite> {
     return this.staffService.resendInvite(inviteId, req.user.id, shopId);
   }
+
+  @Get('warehouse/:warehouseId/invites')
+  getWarehouseInvites(
+    @Request() req,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
+  ) {
+    return this.staffService.getWarehouseInvites(req.user.id, warehouseId);
+  }
+
+  @Post('warehouse/:warehouseId/invites')
+  createWarehouseInvite(
+    @Body() createStaffInviteDto: CreateStaffInviteDto,
+    @Request() req,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
+  ) {
+    return this.staffService.createWarehouseInvite(
+      createStaffInviteDto,
+      req.user.id,
+      warehouseId
+    );
+  }
+
+  @Get('warehouse/:warehouseId/invites/stats')
+  getWarehouseInviteStats(
+    @Request() req,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
+  ): Promise<InviteStatsDto> {
+    return this.staffService.getWarehouseInviteStats(req.user.id, warehouseId);
+  }
+
+  @Post('warehouse/:warehouseId/invites/:inviteId/cancel')
+  cancelWarehouseInvite(
+    @Request() req,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
+    @Param('inviteId', ParseUUIDPipe) inviteId: string
+  ): Promise<Invite> {
+    return this.staffService.cancelWarehouseInvite(
+      inviteId,
+      req.user.id,
+      warehouseId
+    );
+  }
+
+  @Post('warehouse/:warehouseId/invites/:inviteId/resend')
+  resendWarehouseInvite(
+    @Request() req,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
+    @Param('inviteId', ParseUUIDPipe) inviteId: string
+  ): Promise<Invite> {
+    return this.staffService.resendWarehouseInvite(
+      inviteId,
+      req.user.id,
+      warehouseId
+    );
+  }
 }

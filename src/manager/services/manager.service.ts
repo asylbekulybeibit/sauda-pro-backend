@@ -65,7 +65,11 @@ export class ManagerService {
       throw new ForbiddenException('У вас нет прав менеджера');
     }
 
-    // Базовая информация для дашборда
+    if (!managerRole.warehouse) {
+      throw new NotFoundException('У менеджера нет привязки к складу');
+    }
+
+    // Базовая информация для дашборда, только о складе
     return {
       warehouse: managerRole.warehouse,
       stats: {

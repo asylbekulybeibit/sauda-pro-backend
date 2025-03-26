@@ -13,8 +13,9 @@ export class CreateStaffInviteDto {
   @IsString()
   email?: string;
 
+  @IsOptional()
   @IsEnum(RoleType, {
     message: 'Менеджер может создавать только кассиров',
   })
-  role: Extract<RoleType, 'cashier'>;
+  role?: RoleType;
 }

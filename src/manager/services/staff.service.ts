@@ -78,6 +78,14 @@ export class StaffService {
   ) {
     await this.validateManagerAccess(userId, warehouseId);
 
+    // Если роль не указана или не является CASHIER, принудительно устанавливаем CASHIER
+    if (
+      !createStaffInviteDto.role ||
+      createStaffInviteDto.role !== RoleType.CASHIER
+    ) {
+      createStaffInviteDto.role = RoleType.CASHIER;
+    }
+
     const existingInvite = await this.inviteRepository.findOne({
       where: {
         phone: createStaffInviteDto.phone,
@@ -92,18 +100,19 @@ export class StaffService {
       );
     }
 
-    const existingRole = await this.userRoleRepository
+    // Проверяем только наличие роли кассира для данного пользователя на этом складе
+    const existingCashierRole = await this.userRoleRepository
       .createQueryBuilder('role')
       .innerJoin('role.user', 'user')
       .where('user.phone = :phone', { phone: createStaffInviteDto.phone })
       .andWhere('role.warehouseId = :warehouseId', { warehouseId })
       .andWhere('role.type = :roleType', {
-        roleType: createStaffInviteDto.role,
+        roleType: RoleType.CASHIER,
       })
       .andWhere('role.isActive = :isActive', { isActive: true })
       .getOne();
 
-    if (existingRole) {
+    if (existingCashierRole) {
       throw new ForbiddenException(
         'Этот номер телефона уже зарегистрирован как кассир в вашем складе'
       );
@@ -114,6 +123,7 @@ export class StaffService {
       warehouseId,
       createdById: userId,
       status: InviteStatus.PENDING,
+      role: RoleType.CASHIER, // Явно устанавливаем роль CASHIER
     });
 
     return this.inviteRepository.save(invite);
@@ -288,5 +298,203 @@ export class StaffService {
       relations: ['invitedUser', 'createdBy'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  // Новые методы для работы с приглашениями на склад
+
+  async getWarehouseInvites(userId: string, warehouseId: string) {
+    await this.validateManagerAccess(userId, warehouseId);
+
+    return this.inviteRepository.find({
+      where: { warehouseId },
+      relations: ['invitedUser', 'createdBy', 'warehouse'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async createWarehouseInvite(
+    createStaffInviteDto: CreateStaffInviteDto,
+    userId: string,
+    warehouseId: string
+  ) {
+    const managerRole = await this.validateManagerAccess(userId, warehouseId);
+
+    // Если роль не указана или не является CASHIER, принудительно устанавливаем CASHIER
+    if (
+      !createStaffInviteDto.role ||
+      createStaffInviteDto.role !== RoleType.CASHIER
+    ) {
+      createStaffInviteDto.role = RoleType.CASHIER;
+    }
+
+    const existingInvite = await this.inviteRepository.findOne({
+      where: {
+        phone: createStaffInviteDto.phone,
+        warehouseId,
+        status: InviteStatus.PENDING,
+      },
+    });
+
+    if (existingInvite) {
+      throw new ForbiddenException(
+        'Для этого номера телефона уже есть активное приглашение'
+      );
+    }
+
+    // Проверяем только наличие роли кассира у пользователя
+    // Проверка на роль менеджера удалена, так как пользователь может иметь разные роли
+    const existingCashierRole = await this.userRoleRepository
+      .createQueryBuilder('role')
+      .innerJoin('role.user', 'user')
+      .where('user.phone = :phone', { phone: createStaffInviteDto.phone })
+      .andWhere('role.warehouseId = :warehouseId', { warehouseId })
+      .andWhere('role.type = :roleType', {
+        roleType: RoleType.CASHIER,
+      })
+      .andWhere('role.isActive = :isActive', { isActive: true })
+      .getOne();
+
+    if (existingCashierRole) {
+      throw new ForbiddenException(
+        'Этот номер телефона уже зарегистрирован как кассир в вашем складе'
+      );
+    }
+
+    const invite = this.inviteRepository.create({
+      ...createStaffInviteDto,
+      warehouseId,
+      createdById: userId,
+      status: InviteStatus.PENDING,
+      role: RoleType.CASHIER, // Явно устанавливаем роль CASHIER
+    });
+
+    // Установим shopId из связанного склада
+    if (managerRole.warehouse && managerRole.warehouse.shopId) {
+      invite.shopId = managerRole.warehouse.shopId;
+    }
+
+    return this.inviteRepository.save(invite);
+  }
+
+  async getWarehouseInviteStats(
+    userId: string,
+    warehouseId: string
+  ): Promise<InviteStatsDto> {
+    await this.validateManagerAccess(userId, warehouseId);
+
+    const invites = await this.inviteRepository.find({
+      where: { warehouseId },
+      relations: ['invitedUser'],
+    });
+
+    const stats: InviteStatsDto = {
+      total: invites.length,
+      byStatus: {
+        [InviteStatus.PENDING]: 0,
+        [InviteStatus.ACCEPTED]: 0,
+        [InviteStatus.REJECTED]: 0,
+        [InviteStatus.CANCELLED]: 0,
+      },
+      byRole: {
+        [RoleType.CASHIER]: 0,
+        [RoleType.MANAGER]: 0,
+        [RoleType.OWNER]: 0,
+        [RoleType.SUPERADMIN]: 0,
+      },
+      activeInvites: 0,
+      acceptedInvites: 0,
+      rejectedInvites: 0,
+      cancelledInvites: 0,
+      averageAcceptanceTime: null,
+    };
+
+    let totalAcceptanceTime = 0;
+    let acceptedCount = 0;
+
+    invites.forEach((invite) => {
+      stats.byStatus[invite.status]++;
+      stats.byRole[invite.role]++;
+
+      switch (invite.status) {
+        case InviteStatus.PENDING:
+          stats.activeInvites++;
+          break;
+        case InviteStatus.ACCEPTED:
+          stats.acceptedInvites++;
+          if (invite.statusChangedAt) {
+            const acceptanceTime =
+              invite.statusChangedAt.getTime() - invite.createdAt.getTime();
+            totalAcceptanceTime += acceptanceTime;
+            acceptedCount++;
+          }
+          break;
+        case InviteStatus.REJECTED:
+          stats.rejectedInvites++;
+          break;
+        case InviteStatus.CANCELLED:
+          stats.cancelledInvites++;
+          break;
+      }
+    });
+
+    if (acceptedCount > 0) {
+      stats.averageAcceptanceTime = totalAcceptanceTime / acceptedCount;
+    }
+
+    return stats;
+  }
+
+  async cancelWarehouseInvite(
+    inviteId: string,
+    userId: string,
+    warehouseId: string
+  ): Promise<Invite> {
+    await this.validateManagerAccess(userId, warehouseId);
+
+    const invite = await this.inviteRepository.findOne({
+      where: { id: inviteId, warehouseId },
+    });
+
+    if (!invite) {
+      throw new NotFoundException('Приглашение не найдено');
+    }
+
+    if (invite.status !== InviteStatus.PENDING) {
+      throw new ForbiddenException(
+        'Можно отменить только ожидающие приглашения'
+      );
+    }
+
+    invite.status = InviteStatus.CANCELLED;
+    invite.statusChangedAt = new Date();
+
+    return this.inviteRepository.save(invite);
+  }
+
+  async resendWarehouseInvite(
+    inviteId: string,
+    userId: string,
+    warehouseId: string
+  ): Promise<Invite> {
+    await this.validateManagerAccess(userId, warehouseId);
+
+    const invite = await this.inviteRepository.findOne({
+      where: { id: inviteId, warehouseId },
+    });
+
+    if (!invite) {
+      throw new NotFoundException('Приглашение не найдено');
+    }
+
+    if (invite.status !== InviteStatus.PENDING) {
+      throw new ForbiddenException(
+        'Можно повторно отправить только ожидающие приглашения'
+      );
+    }
+
+    // Обновляем время создания
+    invite.createdAt = new Date();
+
+    return this.inviteRepository.save(invite);
   }
 }

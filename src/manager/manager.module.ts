@@ -46,6 +46,7 @@ import { SupplierProductsService } from './services/supplier-products.service';
 import { SupplierProductsController } from './controllers/supplier-products.controller';
 import { BulkOperationsController } from './controllers/bulk-operations.controller';
 import { BulkOperationsService } from './services/bulk-operations.service';
+import { WarehouseController } from './controllers/warehouse.controller';
 
 // Новые импорты для сервисных сущностей
 import { ServiceType } from './entities/service-type.entity';
@@ -136,6 +137,7 @@ import { User } from '../users/entities/user.entity';
     SupplierProductsController,
     PurchasesController,
     BulkOperationsController,
+    WarehouseController,
     // Новые контроллеры для услуг
     ServiceTypeController,
     EmployeeController,
