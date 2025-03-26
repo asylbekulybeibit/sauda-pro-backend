@@ -350,8 +350,11 @@ export class ReportsService {
   }
 
   private async generateCategoriesReport(report: CreateReportDto) {
+    // Получаем shopId для работы с категориями
+    const shopId = await this.getShopIdByWarehouseId(report.warehouseId);
+
     const categories = await this.categoryRepository.find({
-      where: { warehouseId: report.warehouseId },
+      where: { shopId: shopId },
       relations: ['barcodes'],
     });
 
@@ -546,5 +549,18 @@ export class ReportsService {
       aggregated[type] += t.quantity;
     });
     return aggregated;
+  }
+
+  // Добавляем метод для получения shopId по warehouseId
+  private async getShopIdByWarehouseId(warehouseId: string): Promise<string> {
+    const warehouse = await this.warehouseRepository.findOne({
+      where: { id: warehouseId },
+    });
+
+    if (!warehouse) {
+      throw new NotFoundException(`Warehouse with ID ${warehouseId} not found`);
+    }
+
+    return warehouse.shopId;
   }
 }

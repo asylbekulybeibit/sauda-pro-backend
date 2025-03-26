@@ -16,6 +16,7 @@ import { Category } from '../entities/category.entity';
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
 import { CreatePromotionDto } from '../dto/promotions/create-promotion.dto';
+import { Warehouse } from '../entities/warehouse.entity';
 
 @Injectable()
 export class PromotionsService {
@@ -27,7 +28,9 @@ export class PromotionsService {
     @InjectRepository(Category)
     private categoriesRepository: Repository<Category>,
     @InjectRepository(UserRole)
-    private userRoleRepository: Repository<UserRole>
+    private userRoleRepository: Repository<UserRole>,
+    @InjectRepository(Warehouse)
+    private warehouseRepository: Repository<Warehouse>
   ) {}
 
   private async validateManagerAccess(
@@ -35,12 +38,32 @@ export class PromotionsService {
     warehouseId: string
   ): Promise<void> {
     const hasAccess = await this.userRoleRepository.findOne({
-      where: { userId, warehouseId, type: RoleType.MANAGER, isActive: true },
+      where: {
+        userId,
+        warehouseId,
+        type: RoleType.MANAGER,
+        isActive: true,
+      },
     });
 
     if (!hasAccess) {
-      throw new ForbiddenException('No access to this warehouse');
+      throw new ForbiddenException(
+        'User does not have manager access to this warehouse'
+      );
     }
+  }
+
+  // Метод для получения shopId по warehouseId
+  private async getShopIdByWarehouseId(warehouseId: string): Promise<string> {
+    const warehouse = await this.warehouseRepository.findOne({
+      where: { id: warehouseId },
+    });
+
+    if (!warehouse) {
+      throw new NotFoundException(`Warehouse with ID ${warehouseId} not found`);
+    }
+
+    return warehouse.shopId;
   }
 
   async create(
@@ -49,6 +72,12 @@ export class PromotionsService {
   ): Promise<Promotion> {
     await this.validateManagerAccess(userId, createPromotionDto.warehouseId);
 
+    // Получаем shopId для работы с категориями
+    const shopId = await this.getShopIdByWarehouseId(
+      createPromotionDto.warehouseId
+    );
+
+    // Validate dates
     if (createPromotionDto.startDate > createPromotionDto.endDate) {
       throw new BadRequestException('Start date cannot be after end date');
     }
@@ -83,7 +112,7 @@ export class PromotionsService {
       categories = await this.categoriesRepository.find({
         where: {
           id: In(createPromotionDto.categoryIds),
-          warehouseId: createPromotionDto.warehouseId,
+          shopId: shopId,
           isActive: true,
         },
       });
@@ -163,6 +192,9 @@ export class PromotionsService {
   ): Promise<Promotion> {
     await this.validateManagerAccess(userId, warehouseId);
 
+    // Получаем shopId для работы с категориями
+    const shopId = await this.getShopIdByWarehouseId(warehouseId);
+
     const promotion = await this.findOne(userId, warehouseId, id);
 
     // Validate dates if provided
@@ -213,7 +245,7 @@ export class PromotionsService {
       categories = await this.categoriesRepository.find({
         where: {
           id: In(updatePromotionDto.categoryIds),
-          warehouseId,
+          shopId: shopId,
           isActive: true,
         },
       });

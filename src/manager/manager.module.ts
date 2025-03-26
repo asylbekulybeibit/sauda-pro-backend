@@ -47,6 +47,8 @@ import { SupplierProductsController } from './controllers/supplier-products.cont
 import { BulkOperationsController } from './controllers/bulk-operations.controller';
 import { BulkOperationsService } from './services/bulk-operations.service';
 import { WarehouseController } from './controllers/warehouse.controller';
+import { WarehouseServicesController } from './controllers/warehouse-services.controller';
+import { WarehouseServicesService } from './services/warehouse-services.service';
 
 // Новые импорты для учета баланса методов оплаты
 import { PaymentMethodTransaction } from './entities/payment-method-transaction.entity';
@@ -154,6 +156,7 @@ import { User } from '../users/entities/user.entity';
     // Контроллер для статистики кассиров
     // Новые контроллеры для кассира
     ReceiptActionsController,
+    WarehouseServicesController,
   ],
   providers: [
     ManagerService,
@@ -179,6 +182,7 @@ import { User } from '../users/entities/user.entity';
     // Сервисы для кассовых смен и статистики
     // Добавляем недостающие сервисы кассира
     ReceiptActionsService,
+    WarehouseServicesService,
   ],
   exports: [
     ManagerService,

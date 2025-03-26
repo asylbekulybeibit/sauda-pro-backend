@@ -9,7 +9,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Barcode } from './barcode.entity';
-import { Warehouse } from './warehouse.entity';
+import { Shop } from '../../shops/entities/shop.entity';
 
 @Entity()
 export class Category {
@@ -25,12 +25,12 @@ export class Category {
   @Column({ default: true })
   isActive: boolean;
 
-  @ManyToOne(() => Warehouse)
-  @JoinColumn({ name: 'warehouseId' })
-  warehouse: Warehouse;
+  @ManyToOne(() => Shop)
+  @JoinColumn({ name: 'shopId' })
+  shop: Shop;
 
   @Column()
-  warehouseId: string;
+  shopId: string;
 
   @ManyToOne(() => Category, { nullable: true })
   parent: Category;

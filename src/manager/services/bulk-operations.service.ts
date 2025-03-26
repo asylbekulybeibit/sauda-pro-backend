@@ -90,12 +90,17 @@ export class BulkOperationsService {
     const warehouse = await this.warehouseRepository.findOne({
       where: { id: warehouseId },
     });
+
     if (!warehouse) {
-      throw new NotFoundException(`Warehouse with ID ${warehouseId} not found`);
+      throw new NotFoundException('Склад не найден');
     }
 
+    // Получаем shopId из склада
+    const shopId = warehouse.shopId;
+
+    // Инициализируем результат
     const result: BulkOperationResultDto = {
-      success: true,
+      success: false,
       processed: 0,
       failed: 0,
       errors: [],
@@ -110,7 +115,7 @@ export class BulkOperationsService {
           let categoryId: string | null = null;
           if (product.category) {
             const category = await this.categoryRepository.findOne({
-              where: { name: product.category, warehouseId: warehouseId },
+              where: { name: product.category, shopId: shopId },
             });
             if (category) {
               categoryId = category.id;
@@ -123,6 +128,7 @@ export class BulkOperationsService {
             productName: product.name,
             description: product.description,
             categoryId: categoryId,
+            shopId: shopId, // Используем shopId для привязки товара к магазину
             isActive: true,
           });
 
@@ -156,7 +162,7 @@ export class BulkOperationsService {
           // Обновляем категорию если нужно
           if (product.category) {
             const category = await this.categoryRepository.findOne({
-              where: { name: product.category, warehouseId: warehouseId },
+              where: { name: product.category, shopId: shopId },
             });
             if (category) {
               barcode.categoryId = category.id;

@@ -7,6 +7,7 @@ import {
   NotFoundException,
   ForbiddenException,
   Logger,
+  Query,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -90,5 +91,21 @@ export class ManagerController {
         'Склад не найден или не относится к указанному магазину'
       );
     }
+  }
+
+  @Get('warehouses/shop/:shopId')
+  async getWarehousesByShop(@Param('shopId') shopId: string, @Request() req) {
+    return this.managerService.getWarehousesByShop(shopId, req.user.id);
+  }
+
+  @Get('barcodes/shop/:shopId')
+  async getBarcodes(
+    @Param('shopId') shopId: string,
+    @Request() req,
+    @Query('isService') isService?: string
+  ) {
+    // Преобразуем строковый параметр isService в boolean
+    const isServiceBool = isService === 'true' || isService === '1';
+    return this.managerService.getBarcodes(shopId, req.user.id, isServiceBool);
   }
 }

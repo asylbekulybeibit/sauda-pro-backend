@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Warehouse } from '../entities/warehouse.entity';
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
+import { Barcode } from '../entities/barcode.entity';
 
 @Injectable()
 export class ManagerService {
@@ -15,7 +16,9 @@ export class ManagerService {
     @InjectRepository(Warehouse)
     private readonly warehouseRepository: Repository<Warehouse>,
     @InjectRepository(UserRole)
-    private readonly userRoleRepository: Repository<UserRole>
+    private readonly userRoleRepository: Repository<UserRole>,
+    @InjectRepository(Barcode)
+    private readonly barcodeRepository: Repository<Barcode>
   ) {}
 
   private async validateManagerAccess(
@@ -33,6 +36,31 @@ export class ManagerService {
 
     if (!managerRole) {
       throw new ForbiddenException('У вас нет прав менеджера');
+    }
+  }
+
+  private async validateManagerAccessToShop(
+    userId: string,
+    shopId: string
+  ): Promise<void> {
+    // Получаем роль менеджера для указанного магазина
+    const managerRole = await this.userRoleRepository.findOne({
+      where: {
+        userId,
+        type: RoleType.MANAGER,
+        isActive: true,
+      },
+      relations: ['warehouse'],
+    });
+
+    if (
+      !managerRole ||
+      !managerRole.warehouse ||
+      managerRole.warehouse.shopId !== shopId
+    ) {
+      throw new ForbiddenException(
+        'У вас нет прав менеджера для этого магазина'
+      );
     }
   }
 
@@ -89,5 +117,32 @@ export class ManagerService {
         },
       },
     };
+  }
+
+  async getWarehousesByShop(shopId: string, userId: string) {
+    await this.validateManagerAccessToShop(userId, shopId);
+
+    return this.warehouseRepository.find({
+      where: { shopId, isActive: true },
+      order: { isMain: 'DESC', name: 'ASC' },
+    });
+  }
+
+  async getBarcodes(
+    shopId: string,
+    userId: string,
+    isService: boolean = false
+  ) {
+    await this.validateManagerAccessToShop(userId, shopId);
+
+    // Получаем баркоды фильтруя по shopId и isService
+    return this.barcodeRepository.find({
+      where: {
+        shopId,
+        isService,
+        isActive: true,
+      },
+      order: { productName: 'ASC' },
+    });
   }
 }

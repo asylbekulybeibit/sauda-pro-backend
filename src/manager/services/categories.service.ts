@@ -19,11 +19,11 @@ export class CategoriesService {
     private readonly userRoleRepository: Repository<UserRole>
   ) {}
 
-  private async validateManagerAccess(userId: string, warehouseId: string) {
+  private async validateManagerAccess(userId: string, shopId: string) {
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
-        warehouseId,
+        shopId,
         type: RoleType.MANAGER,
         isActive: true,
       },
@@ -31,15 +31,15 @@ export class CategoriesService {
 
     if (!managerRole) {
       throw new ForbiddenException(
-        'У вас нет прав для управления этим складом'
+        'У вас нет прав для управления этим магазином'
       );
     }
   }
 
   async create(createCategoryDto: CreateCategoryDto, userId: string) {
-    await this.validateManagerAccess(userId, createCategoryDto.warehouseId);
+    await this.validateManagerAccess(userId, createCategoryDto.shopId);
 
-    // Если указана родительская категория, проверяем её существование и принадлежность к тому же складу
+    // Если указана родительская категория, проверяем её существование и принадлежность к тому же магазину
     if (createCategoryDto.parentId) {
       const parentCategory = await this.categoryRepository.findOne({
         where: { id: createCategoryDto.parentId },
@@ -49,9 +49,9 @@ export class CategoriesService {
         throw new NotFoundException('Родительская категория не найдена');
       }
 
-      if (parentCategory.warehouseId !== createCategoryDto.warehouseId) {
+      if (parentCategory.shopId !== createCategoryDto.shopId) {
         throw new ForbiddenException(
-          'Родительская категория принадлежит другому складу'
+          'Родительская категория принадлежит другому магазину'
         );
       }
     }
@@ -60,12 +60,12 @@ export class CategoriesService {
     return this.categoryRepository.save(category);
   }
 
-  async findByWarehouse(warehouseId: string, userId: string) {
-    await this.validateManagerAccess(userId, warehouseId);
+  async findByShop(shopId: string, userId: string) {
+    await this.validateManagerAccess(userId, shopId);
 
     return this.categoryRepository.find({
       where: {
-        warehouseId,
+        shopId,
         isActive: true,
       },
       relations: ['parent', 'children'],
@@ -90,7 +90,7 @@ export class CategoriesService {
 
     return this.categoryRepository.find({
       where: {
-        warehouseId: managerRole.warehouseId,
+        shopId: managerRole.shopId,
         isActive: true,
       },
       relations: ['parent', 'children'],
@@ -107,7 +107,7 @@ export class CategoriesService {
       throw new NotFoundException('Категория не найдена');
     }
 
-    await this.validateManagerAccess(userId, category.warehouseId);
+    await this.validateManagerAccess(userId, category.shopId);
 
     return category;
   }
@@ -120,10 +120,10 @@ export class CategoriesService {
     const category = await this.findOne(id, userId);
 
     if (
-      updateCategoryDto.warehouseId &&
-      updateCategoryDto.warehouseId !== category.warehouseId
+      updateCategoryDto.shopId &&
+      updateCategoryDto.shopId !== category.shopId
     ) {
-      throw new ForbiddenException('Нельзя изменить склад категории');
+      throw new ForbiddenException('Нельзя изменить магазин категории');
     }
 
     // Проверяем новую родительскую категорию
@@ -139,9 +139,9 @@ export class CategoriesService {
         throw new NotFoundException('Родительская категория не найдена');
       }
 
-      if (newParent.warehouseId !== category.warehouseId) {
+      if (newParent.shopId !== category.shopId) {
         throw new ForbiddenException(
-          'Родительская категория принадлежит другому складу'
+          'Родительская категория принадлежит другому магазину'
         );
       }
 
