@@ -16,7 +16,8 @@ import { PaymentMethodType } from '../../entities/cash-operation.entity';
 
 export class PaymentMethodItemDto {
   @IsString()
-  name: string;
+  @IsOptional()
+  name?: string;
 
   @IsEnum(PaymentMethodSource)
   source: PaymentMethodSource;

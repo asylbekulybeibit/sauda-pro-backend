@@ -60,9 +60,37 @@ export class CashRegistersService {
 
         if (method.systemType) {
           paymentMethod.systemType = method.systemType;
+
+          // Для системных методов оплаты можем использовать systemType для создания имени,
+          // если имя не передано явно
+          if (!method.name) {
+            // Определение имени метода на основе systemType
+            switch (method.systemType) {
+              case PaymentMethodType.CASH:
+                paymentMethod.name = 'Наличные';
+                break;
+              case PaymentMethodType.CARD:
+                paymentMethod.name = 'Банковская карта';
+                break;
+              case PaymentMethodType.QR:
+                paymentMethod.name = 'QR-код';
+                break;
+              default:
+                paymentMethod.name = method.systemType; // Используем systemType как имя по умолчанию
+            }
+          } else {
+            paymentMethod.name = method.name;
+          }
+        } else {
+          // Для кастомных методов имя обязательно
+          if (!method.name && method.source === PaymentMethodSource.CUSTOM) {
+            throw new BadRequestException(
+              'Custom payment method must have a name'
+            );
+          }
+          paymentMethod.name = method.name;
         }
 
-        paymentMethod.name = method.name;
         paymentMethod.code = method.code;
         paymentMethod.description = method.description;
         paymentMethod.isActive = method.isActive ?? true;
@@ -154,7 +182,34 @@ export class CashRegistersService {
         paymentMethod.cashRegisterId = id;
         paymentMethod.source = method.source;
         paymentMethod.systemType = method.systemType;
-        paymentMethod.name = method.name;
+
+        // Обработка имени метода оплаты
+        if (method.name) {
+          paymentMethod.name = method.name;
+        } else if (
+          method.source === PaymentMethodSource.SYSTEM &&
+          method.systemType
+        ) {
+          // Для системных методов оплаты можем использовать systemType для создания имени
+          switch (method.systemType) {
+            case PaymentMethodType.CASH:
+              paymentMethod.name = 'Наличные';
+              break;
+            case PaymentMethodType.CARD:
+              paymentMethod.name = 'Банковская карта';
+              break;
+            case PaymentMethodType.QR:
+              paymentMethod.name = 'QR-код';
+              break;
+            default:
+              paymentMethod.name = method.systemType; // Используем systemType как имя по умолчанию
+          }
+        } else if (method.source === PaymentMethodSource.CUSTOM) {
+          throw new BadRequestException(
+            'Custom payment method must have a name'
+          );
+        }
+
         paymentMethod.code = method.code;
         paymentMethod.description = method.description;
         paymentMethod.isActive = method.isActive;
