@@ -9,7 +9,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { Warehouse } from './warehouse.entity';
-import { ServiceType } from './service-type.entity';
+import { Barcode } from './barcode.entity';
 import { Client } from './client.entity';
 import { Vehicle } from './vehicle.entity';
 import { User } from '../../users/entities/user.entity';
@@ -43,13 +43,13 @@ export class Service {
   warehouse: Warehouse;
 
   @Column()
-  serviceTypeId: string;
+  barcodeId: string;
 
-  @ManyToOne(() => ServiceType, 'services', {
+  @ManyToOne(() => Barcode, {
     onDelete: 'CASCADE',
   })
-  @JoinColumn({ name: 'serviceTypeId' })
-  serviceType: ServiceType;
+  @JoinColumn({ name: 'barcodeId' })
+  barcode: Barcode;
 
   @Column()
   clientId: string;

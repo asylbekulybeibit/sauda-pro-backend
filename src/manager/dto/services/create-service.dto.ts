@@ -5,10 +5,28 @@ import {
   IsUUID,
   IsArray,
   IsEnum,
+  IsNumber,
+  Min,
+  Max,
 } from 'class-validator';
 import { ServiceStatus } from '../../entities/service.entity';
 
 export class CreateServiceDto {
+  @IsString()
+  code: string;
+
+  @IsString()
+  name: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  duration?: number;
+
   @IsUUID()
   @IsNotEmpty()
   shopId: string;
@@ -19,7 +37,7 @@ export class CreateServiceDto {
 
   @IsUUID()
   @IsNotEmpty()
-  serviceTypeId: string;
+  barcodeId: string;
 
   @IsUUID()
   @IsNotEmpty()
@@ -40,4 +58,12 @@ export class CreateServiceDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @IsNumber()
+  @Min(0)
+  price: number;
 }

@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Category } from './category.entity';
 import { WarehouseProduct } from './warehouse-product.entity';
+import { Shop } from '../../shops/entities/shop.entity';
 
 @Entity('barcodes')
 export class Barcode {
@@ -27,6 +28,19 @@ export class Barcode {
 
   @Column({ nullable: true })
   categoryId: string;
+
+  @Column({ nullable: true })
+  shopId: string;
+
+  @Column({ default: false })
+  isService: boolean;
+
+  @Column({ nullable: true })
+  duration: number; // Длительность услуги в минутах (только для сервисов)
+
+  @ManyToOne(() => Shop, { nullable: true })
+  @JoinColumn({ name: 'shopId' })
+  shop: Shop;
 
   @ManyToOne(() => Category, { nullable: true })
   @JoinColumn({ name: 'categoryId' })

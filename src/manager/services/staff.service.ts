@@ -23,13 +23,25 @@ export class StaffService {
 
   private async validateManagerAccess(userId: string, warehouseId: string) {
     const managerRole = await this.userRoleRepository.findOne({
-      where: {
-        userId,
-        warehouseId,
-        type: RoleType.MANAGER,
-        isActive: true,
-      },
-      relations: ['warehouse'],
+      where: [
+        {
+          // Прямой доступ к складу
+          userId,
+          warehouseId,
+          type: RoleType.MANAGER,
+          isActive: true,
+        },
+        {
+          // Доступ через магазин (если менеджер магазина)
+          userId,
+          type: RoleType.MANAGER,
+          isActive: true,
+          warehouse: {
+            id: warehouseId,
+          },
+        },
+      ],
+      relations: ['warehouse', 'warehouse.shop'],
     });
 
     if (!managerRole) {
@@ -39,10 +51,61 @@ export class StaffService {
     return managerRole;
   }
 
-  async getStaff(userId: string, warehouseId: string) {
-    await this.validateManagerAccess(userId, warehouseId);
+  async getStaff(userId: string, shopId: string) {
+    // Находим роль менеджера для этого пользователя, связанную с запрашиваемым магазином
+    // Возможен вариант когда менеджер привязан напрямую к магазину или когда привязан к складу магазина
+    const managerRole = await this.userRoleRepository.findOne({
+      where: [
+        {
+          // Вариант 1: Менеджер напрямую связан с этим магазином
+          userId,
+          shopId,
+          type: RoleType.MANAGER,
+          isActive: true,
+        },
+        {
+          // Вариант 2: Менеджер связан со складом, который принадлежит этому магазину
+          userId,
+          type: RoleType.MANAGER,
+          isActive: true,
+          warehouse: {
+            shopId,
+          },
+        },
+      ],
+      relations: ['warehouse', 'warehouse.shop'],
+    });
 
-    // Получаем все роли сотрудников (активные и неактивные)
+    if (!managerRole) {
+      throw new ForbiddenException(
+        'У вас нет прав менеджера для этого магазина'
+      );
+    }
+
+    let warehouseId: string;
+
+    // Определяем warehouseId на основе типа доступа менеджера
+    if (managerRole.warehouseId) {
+      // Если менеджер привязан к складу, используем его warehouseId
+      warehouseId = managerRole.warehouseId;
+    } else {
+      // Если менеджер привязан только к магазину, нужно найти основной склад магазина
+      // или первый доступный склад
+      const mainWarehouse = await this.userRoleRepository.manager
+        .getRepository('warehouses')
+        .findOne({
+          where: [{ shopId, isMain: true }, { shopId }],
+          order: { isMain: 'DESC', createdAt: 'ASC' },
+        });
+
+      if (!mainWarehouse) {
+        throw new NotFoundException('Не найден склад для этого магазина');
+      }
+
+      warehouseId = mainWarehouse.id;
+    }
+
+    // Получаем только системных пользователей для конкретного склада
     return this.userRoleRepository
       .createQueryBuilder('role')
       .leftJoinAndSelect('role.user', 'user')
@@ -62,7 +125,7 @@ export class StaffService {
         'warehouse.name',
         'warehouse.address',
       ])
-      .where('warehouse.id = :warehouseId', { warehouseId })
+      .where('role.warehouseId = :warehouseId', { warehouseId })
       .andWhere('role.type IN (:...types)', {
         types: [RoleType.OWNER, RoleType.MANAGER, RoleType.CASHIER],
       })
@@ -71,12 +134,170 @@ export class StaffService {
       .getMany();
   }
 
+  async getStaffByWarehouse(
+    userId: string,
+    shopId: string,
+    warehouseId: string
+  ) {
+    try {
+      // Проверяем, что у пользователя есть права менеджера для указанного склада и магазина
+      const managerRole = await this.userRoleRepository.findOne({
+        where: [
+          {
+            // Вариант 1: Менеджер напрямую связан с указанным складом
+            userId,
+            warehouseId,
+            type: RoleType.MANAGER,
+            isActive: true,
+          },
+          {
+            // Вариант 2: Менеджер связан с магазином, к которому принадлежит указанный склад
+            userId,
+            shopId,
+            type: RoleType.MANAGER,
+            isActive: true,
+          },
+          {
+            // Вариант 3: Менеджер связан с любым складом этого магазина
+            userId,
+            type: RoleType.MANAGER,
+            isActive: true,
+            warehouse: {
+              shopId,
+            },
+          },
+        ],
+        relations: ['warehouse', 'warehouse.shop'],
+      });
+
+      if (!managerRole) {
+        // Дополнительная проверка - получим информацию о складе
+        const warehouse = await this.userRoleRepository.manager
+          .getRepository('warehouses')
+          .findOne({
+            where: { id: warehouseId },
+            relations: ['shop'],
+          });
+
+        if (warehouse && warehouse.shopId === shopId) {
+          // Проверим, есть ли у пользователя права на магазин склада
+          const shopManagerRole = await this.userRoleRepository.findOne({
+            where: {
+              userId,
+              shopId: warehouse.shopId,
+              type: RoleType.MANAGER,
+              isActive: true,
+            },
+          });
+
+          if (shopManagerRole) {
+            // Пользователь имеет права на магазин, к которому принадлежит склад
+            // Продолжаем выполнение запроса
+          } else {
+            throw new ForbiddenException(
+              'У вас нет прав менеджера для этого склада'
+            );
+          }
+        } else {
+          throw new ForbiddenException(
+            'У вас нет прав менеджера для этого склада'
+          );
+        }
+      }
+
+      // Получаем только системных пользователей для указанного конкретного склада
+      return this.userRoleRepository
+        .createQueryBuilder('role')
+        .leftJoinAndSelect('role.user', 'user')
+        .leftJoinAndSelect('role.warehouse', 'warehouse')
+        .select([
+          'role.id',
+          'role.type',
+          'role.isActive',
+          'role.createdAt',
+          'role.deactivatedAt',
+          'role.warehouseId',
+          'user.id',
+          'user.firstName',
+          'user.lastName',
+          'user.phone',
+          'warehouse.id',
+          'warehouse.name',
+          'warehouse.address',
+        ])
+        .where('role.warehouseId = :warehouseId', { warehouseId })
+        .andWhere('role.type IN (:...types)', {
+          types: [RoleType.OWNER, RoleType.MANAGER, RoleType.CASHIER],
+        })
+        .orderBy('user.id', 'ASC')
+        .addOrderBy('role.createdAt', 'DESC')
+        .getMany();
+    } catch (error) {
+      if (error instanceof ForbiddenException) {
+        throw error;
+      }
+      console.error('Error in getStaffByWarehouse:', error);
+      throw new ForbiddenException('У вас нет прав менеджера для этого склада');
+    }
+  }
+
   async createInvite(
     createStaffInviteDto: CreateStaffInviteDto,
     userId: string,
-    warehouseId: string
+    shopId: string
   ) {
-    await this.validateManagerAccess(userId, warehouseId);
+    // Находим роль менеджера для этого пользователя, связанную с запрашиваемым магазином
+    // Возможен вариант когда менеджер привязан напрямую к магазину или когда привязан к складу магазина
+    const managerRole = await this.userRoleRepository.findOne({
+      where: [
+        {
+          // Вариант 1: Менеджер напрямую связан с этим магазином
+          userId,
+          shopId,
+          type: RoleType.MANAGER,
+          isActive: true,
+        },
+        {
+          // Вариант 2: Менеджер связан со складом, который принадлежит этому магазину
+          userId,
+          type: RoleType.MANAGER,
+          isActive: true,
+          warehouse: {
+            shopId,
+          },
+        },
+      ],
+      relations: ['warehouse', 'warehouse.shop'],
+    });
+
+    if (!managerRole) {
+      throw new ForbiddenException(
+        'У вас нет прав менеджера для этого магазина'
+      );
+    }
+
+    let warehouseId: string;
+
+    // Определяем warehouseId на основе типа доступа менеджера
+    if (managerRole.warehouseId) {
+      // Если менеджер привязан к складу, используем его warehouseId
+      warehouseId = managerRole.warehouseId;
+    } else {
+      // Если менеджер привязан только к магазину, нужно найти основной склад магазина
+      // или первый доступный склад
+      const mainWarehouse = await this.userRoleRepository.manager
+        .getRepository('warehouses')
+        .findOne({
+          where: [{ shopId, isMain: true }, { shopId }],
+          order: { isMain: 'DESC', createdAt: 'ASC' },
+        });
+
+      if (!mainWarehouse) {
+        throw new NotFoundException('Не найден склад для этого магазина');
+      }
+
+      warehouseId = mainWarehouse.id;
+    }
 
     // Если роль не указана или не является CASHIER, принудительно устанавливаем CASHIER
     if (
@@ -125,6 +346,7 @@ export class StaffService {
     const invite = this.inviteRepository.create({
       ...createStaffInviteDto,
       warehouseId,
+      shopId, // Используем переданный shopId
       createdById: userId,
       status: InviteStatus.PENDING,
       role: RoleType.CASHIER, // Явно устанавливаем роль CASHIER
@@ -133,9 +355,61 @@ export class StaffService {
     return this.inviteRepository.save(invite);
   }
 
-  async getInvites(userId: string, warehouseId: string) {
-    await this.validateManagerAccess(userId, warehouseId);
+  async getInvites(userId: string, shopId: string) {
+    // Находим роль менеджера для этого пользователя, связанную с запрашиваемым магазином
+    // Возможен вариант когда менеджер привязан напрямую к магазину или когда привязан к складу магазина
+    const managerRole = await this.userRoleRepository.findOne({
+      where: [
+        {
+          // Вариант 1: Менеджер напрямую связан с этим магазином
+          userId,
+          shopId,
+          type: RoleType.MANAGER,
+          isActive: true,
+        },
+        {
+          // Вариант 2: Менеджер связан со складом, который принадлежит этому магазину
+          userId,
+          type: RoleType.MANAGER,
+          isActive: true,
+          warehouse: {
+            shopId,
+          },
+        },
+      ],
+      relations: ['warehouse', 'warehouse.shop'],
+    });
 
+    if (!managerRole) {
+      throw new ForbiddenException(
+        'У вас нет прав менеджера для этого магазина'
+      );
+    }
+
+    let warehouseId: string;
+
+    // Определяем warehouseId на основе типа доступа менеджера
+    if (managerRole.warehouseId) {
+      // Если менеджер привязан к складу, используем его warehouseId
+      warehouseId = managerRole.warehouseId;
+    } else {
+      // Если менеджер привязан только к магазину, нужно найти основной склад магазина
+      // или первый доступный склад
+      const mainWarehouse = await this.userRoleRepository.manager
+        .getRepository('warehouses')
+        .findOne({
+          where: [{ shopId, isMain: true }, { shopId }],
+          order: { isMain: 'DESC', createdAt: 'ASC' },
+        });
+
+      if (!mainWarehouse) {
+        throw new NotFoundException('Не найден склад для этого магазина');
+      }
+
+      warehouseId = mainWarehouse.id;
+    }
+
+    // Получаем только приглашения для конкретного склада
     return this.inviteRepository.find({
       where: { warehouseId },
       relations: ['invitedUser', 'createdBy'],
@@ -143,9 +417,61 @@ export class StaffService {
     });
   }
 
-  async deactivateStaff(staffId: string, userId: string, warehouseId: string) {
-    await this.validateManagerAccess(userId, warehouseId);
+  async deactivateStaff(staffId: string, userId: string, shopId: string) {
+    // Находим роль менеджера для этого пользователя, связанную с запрашиваемым магазином
+    // Возможен вариант когда менеджер привязан напрямую к магазину или когда привязан к складу магазина
+    const managerRole = await this.userRoleRepository.findOne({
+      where: [
+        {
+          // Вариант 1: Менеджер напрямую связан с этим магазином
+          userId,
+          shopId,
+          type: RoleType.MANAGER,
+          isActive: true,
+        },
+        {
+          // Вариант 2: Менеджер связан со складом, который принадлежит этому магазину
+          userId,
+          type: RoleType.MANAGER,
+          isActive: true,
+          warehouse: {
+            shopId,
+          },
+        },
+      ],
+      relations: ['warehouse', 'warehouse.shop'],
+    });
 
+    if (!managerRole) {
+      throw new ForbiddenException(
+        'У вас нет прав менеджера для этого магазина'
+      );
+    }
+
+    let warehouseId: string;
+
+    // Определяем warehouseId на основе типа доступа менеджера
+    if (managerRole.warehouseId) {
+      // Если менеджер привязан к складу, используем его warehouseId
+      warehouseId = managerRole.warehouseId;
+    } else {
+      // Если менеджер привязан только к магазину, нужно найти основной склад магазина
+      // или первый доступный склад
+      const mainWarehouse = await this.userRoleRepository.manager
+        .getRepository('warehouses')
+        .findOne({
+          where: [{ shopId, isMain: true }, { shopId }],
+          order: { isMain: 'DESC', createdAt: 'ASC' },
+        });
+
+      if (!mainWarehouse) {
+        throw new NotFoundException('Не найден склад для этого магазина');
+      }
+
+      warehouseId = mainWarehouse.id;
+    }
+
+    // Находим сотрудника только для конкретного склада менеджера
     const staffRole = await this.userRoleRepository.findOne({
       where: {
         id: staffId,
@@ -171,9 +497,60 @@ export class StaffService {
 
   async getInviteStats(
     userId: string,
-    warehouseId: string
+    shopId: string
   ): Promise<InviteStatsDto> {
-    await this.validateManagerAccess(userId, warehouseId);
+    // Находим роль менеджера для этого пользователя, связанную с запрашиваемым магазином
+    // Возможен вариант когда менеджер привязан напрямую к магазину или когда привязан к складу магазина
+    const managerRole = await this.userRoleRepository.findOne({
+      where: [
+        {
+          // Вариант 1: Менеджер напрямую связан с этим магазином
+          userId,
+          shopId,
+          type: RoleType.MANAGER,
+          isActive: true,
+        },
+        {
+          // Вариант 2: Менеджер связан со складом, который принадлежит этому магазину
+          userId,
+          type: RoleType.MANAGER,
+          isActive: true,
+          warehouse: {
+            shopId,
+          },
+        },
+      ],
+      relations: ['warehouse', 'warehouse.shop'],
+    });
+
+    if (!managerRole) {
+      throw new ForbiddenException(
+        'У вас нет прав менеджера для этого магазина'
+      );
+    }
+
+    let warehouseId: string;
+
+    // Определяем warehouseId на основе типа доступа менеджера
+    if (managerRole.warehouseId) {
+      // Если менеджер привязан к складу, используем его warehouseId
+      warehouseId = managerRole.warehouseId;
+    } else {
+      // Если менеджер привязан только к магазину, нужно найти основной склад магазина
+      // или первый доступный склад
+      const mainWarehouse = await this.userRoleRepository.manager
+        .getRepository('warehouses')
+        .findOne({
+          where: [{ shopId, isMain: true }, { shopId }],
+          order: { isMain: 'DESC', createdAt: 'ASC' },
+        });
+
+      if (!mainWarehouse) {
+        throw new NotFoundException('Не найден склад для этого магазина');
+      }
+
+      warehouseId = mainWarehouse.id;
+    }
 
     const invites = await this.inviteRepository.find({
       where: { warehouseId },
@@ -240,9 +617,60 @@ export class StaffService {
   async cancelInvite(
     inviteId: string,
     userId: string,
-    warehouseId: string
+    shopId: string
   ): Promise<Invite> {
-    await this.validateManagerAccess(userId, warehouseId);
+    // Находим роль менеджера для этого пользователя, связанную с запрашиваемым магазином
+    // Возможен вариант когда менеджер привязан напрямую к магазину или когда привязан к складу магазина
+    const managerRole = await this.userRoleRepository.findOne({
+      where: [
+        {
+          // Вариант 1: Менеджер напрямую связан с этим магазином
+          userId,
+          shopId,
+          type: RoleType.MANAGER,
+          isActive: true,
+        },
+        {
+          // Вариант 2: Менеджер связан со складом, который принадлежит этому магазину
+          userId,
+          type: RoleType.MANAGER,
+          isActive: true,
+          warehouse: {
+            shopId,
+          },
+        },
+      ],
+      relations: ['warehouse', 'warehouse.shop'],
+    });
+
+    if (!managerRole) {
+      throw new ForbiddenException(
+        'У вас нет прав менеджера для этого магазина'
+      );
+    }
+
+    let warehouseId: string;
+
+    // Определяем warehouseId на основе типа доступа менеджера
+    if (managerRole.warehouseId) {
+      // Если менеджер привязан к складу, используем его warehouseId
+      warehouseId = managerRole.warehouseId;
+    } else {
+      // Если менеджер привязан только к магазину, нужно найти основной склад магазина
+      // или первый доступный склад
+      const mainWarehouse = await this.userRoleRepository.manager
+        .getRepository('warehouses')
+        .findOne({
+          where: [{ shopId, isMain: true }, { shopId }],
+          order: { isMain: 'DESC', createdAt: 'ASC' },
+        });
+
+      if (!mainWarehouse) {
+        throw new NotFoundException('Не найден склад для этого магазина');
+      }
+
+      warehouseId = mainWarehouse.id;
+    }
 
     const invite = await this.inviteRepository.findOne({
       where: { id: inviteId, warehouseId },
@@ -267,9 +695,60 @@ export class StaffService {
   async resendInvite(
     inviteId: string,
     userId: string,
-    warehouseId: string
+    shopId: string
   ): Promise<Invite> {
-    await this.validateManagerAccess(userId, warehouseId);
+    // Находим роль менеджера для этого пользователя, связанную с запрашиваемым магазином
+    // Возможен вариант когда менеджер привязан напрямую к магазину или когда привязан к складу магазина
+    const managerRole = await this.userRoleRepository.findOne({
+      where: [
+        {
+          // Вариант 1: Менеджер напрямую связан с этим магазином
+          userId,
+          shopId,
+          type: RoleType.MANAGER,
+          isActive: true,
+        },
+        {
+          // Вариант 2: Менеджер связан со складом, который принадлежит этому магазину
+          userId,
+          type: RoleType.MANAGER,
+          isActive: true,
+          warehouse: {
+            shopId,
+          },
+        },
+      ],
+      relations: ['warehouse', 'warehouse.shop'],
+    });
+
+    if (!managerRole) {
+      throw new ForbiddenException(
+        'У вас нет прав менеджера для этого магазина'
+      );
+    }
+
+    let warehouseId: string;
+
+    // Определяем warehouseId на основе типа доступа менеджера
+    if (managerRole.warehouseId) {
+      // Если менеджер привязан к складу, используем его warehouseId
+      warehouseId = managerRole.warehouseId;
+    } else {
+      // Если менеджер привязан только к магазину, нужно найти основной склад магазина
+      // или первый доступный склад
+      const mainWarehouse = await this.userRoleRepository.manager
+        .getRepository('warehouses')
+        .findOne({
+          where: [{ shopId, isMain: true }, { shopId }],
+          order: { isMain: 'DESC', createdAt: 'ASC' },
+        });
+
+      if (!mainWarehouse) {
+        throw new NotFoundException('Не найден склад для этого магазина');
+      }
+
+      warehouseId = mainWarehouse.id;
+    }
 
     const invite = await this.inviteRepository.findOne({
       where: { id: inviteId, warehouseId },
@@ -291,11 +770,59 @@ export class StaffService {
     return this.inviteRepository.save(invite);
   }
 
-  async getInviteHistory(
-    userId: string,
-    warehouseId: string
-  ): Promise<Invite[]> {
-    await this.validateManagerAccess(userId, warehouseId);
+  async getInviteHistory(userId: string, shopId: string): Promise<Invite[]> {
+    // Находим роль менеджера для этого пользователя, связанную с запрашиваемым магазином
+    // Возможен вариант когда менеджер привязан напрямую к магазину или когда привязан к складу магазина
+    const managerRole = await this.userRoleRepository.findOne({
+      where: [
+        {
+          // Вариант 1: Менеджер напрямую связан с этим магазином
+          userId,
+          shopId,
+          type: RoleType.MANAGER,
+          isActive: true,
+        },
+        {
+          // Вариант 2: Менеджер связан со складом, который принадлежит этому магазину
+          userId,
+          type: RoleType.MANAGER,
+          isActive: true,
+          warehouse: {
+            shopId,
+          },
+        },
+      ],
+      relations: ['warehouse', 'warehouse.shop'],
+    });
+
+    if (!managerRole) {
+      throw new ForbiddenException(
+        'У вас нет прав менеджера для этого магазина'
+      );
+    }
+
+    let warehouseId: string;
+
+    // Определяем warehouseId на основе типа доступа менеджера
+    if (managerRole.warehouseId) {
+      // Если менеджер привязан к складу, используем его warehouseId
+      warehouseId = managerRole.warehouseId;
+    } else {
+      // Если менеджер привязан только к магазину, нужно найти основной склад магазина
+      // или первый доступный склад
+      const mainWarehouse = await this.userRoleRepository.manager
+        .getRepository('warehouses')
+        .findOne({
+          where: [{ shopId, isMain: true }, { shopId }],
+          order: { isMain: 'DESC', createdAt: 'ASC' },
+        });
+
+      if (!mainWarehouse) {
+        throw new NotFoundException('Не найден склад для этого магазина');
+      }
+
+      warehouseId = mainWarehouse.id;
+    }
 
     return this.inviteRepository.find({
       where: { warehouseId },

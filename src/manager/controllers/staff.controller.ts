@@ -29,6 +29,19 @@ export class StaffController {
     return this.staffService.getStaff(req.user.id, shopId);
   }
 
+  @Get('shop/:shopId/warehouse/:warehouseId')
+  getStaffByWarehouse(
+    @Request() req,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
+  ) {
+    return this.staffService.getStaffByWarehouse(
+      req.user.id,
+      shopId,
+      warehouseId
+    );
+  }
+
   @Post('shop/:shopId/invites')
   createInvite(
     @Body() createStaffInviteDto: CreateStaffInviteDto,

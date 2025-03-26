@@ -49,28 +49,24 @@ import { BulkOperationsService } from './services/bulk-operations.service';
 import { WarehouseController } from './controllers/warehouse.controller';
 
 // Новые импорты для сервисных сущностей
-import { ServiceType } from './entities/service-type.entity';
 import { Staff } from './entities/staff.entity';
 import { Client } from './entities/client.entity';
 import { Vehicle } from './entities/vehicle.entity';
 import { Service } from './entities/service.entity';
 import { ServiceStaff } from './entities/service-staff.entity';
+import { WarehouseService } from './entities/warehouse-service.entity';
 
 // Импорты новых сущностей для чеков
 import { ReceiptAction } from './entities/receipt-action.entity';
 import { Receipt } from './entities/receipt.entity';
 
 // Импорты новых контроллеров и сервисов для услуг
-import { ServiceTypeController } from './controllers/service-type.controller';
-import { ServiceTypeService } from './services/service-type.service';
 import { EmployeeController } from './controllers/employee.controller';
 import { EmployeeService } from './services/employee.service';
 import { ClientController } from './controllers/client.controller';
 import { ClientService } from './services/client.service';
 import { VehicleController } from './controllers/vehicle.controller';
 import { VehicleService } from './services/vehicle.service';
-import { ServiceController } from './controllers/service.controller';
-import { ServiceService } from './services/service.service';
 import { ServiceStaffController } from './controllers/service-staff.controller';
 import { ServiceStaffService } from './services/service-staff.service';
 
@@ -107,12 +103,12 @@ import { User } from '../users/entities/user.entity';
       SupplierProduct,
       Purchase,
       // Добавляем новые сущности для сферы услуг
-      ServiceType,
       Staff,
       Client,
       Vehicle,
       Service,
       ServiceStaff,
+      WarehouseService,
       // Добавляем новые сущности для чеков
       ReceiptAction,
       Receipt,
@@ -139,11 +135,9 @@ import { User } from '../users/entities/user.entity';
     BulkOperationsController,
     WarehouseController,
     // Новые контроллеры для услуг
-    ServiceTypeController,
     EmployeeController,
     ClientController,
     VehicleController,
-    ServiceController,
     ServiceStaffController,
     // Контроллер для кассовых смен
     // Контроллер для статистики кассиров
@@ -165,11 +159,9 @@ import { User } from '../users/entities/user.entity';
     PurchasesService,
     BulkOperationsService,
     // Новые сервисы для услуг
-    ServiceTypeService,
     EmployeeService,
     ClientService,
     VehicleService,
-    ServiceService,
     ServiceStaffService,
     // Сервисы для кассовых смен и статистики
     // Добавляем недостающие сервисы кассира

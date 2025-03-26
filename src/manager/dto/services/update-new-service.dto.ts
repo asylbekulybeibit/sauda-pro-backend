@@ -1,31 +1,31 @@
 import {
-  IsOptional,
   IsString,
   IsNumber,
-  Min,
   IsBoolean,
+  IsOptional,
+  Min,
 } from 'class-validator';
 
-export class UpdateServiceTypeDto {
-  @IsString()
+export class UpdateNewServiceDto {
   @IsOptional()
+  @IsString()
   name?: string;
 
-  @IsString()
   @IsOptional()
+  @IsString()
   description?: string;
 
-  @IsNumber()
   @IsOptional()
+  @IsNumber()
+  @Min(1)
+  duration?: number;
+
+  @IsOptional()
+  @IsNumber()
   @Min(0)
   price?: number;
 
-  @IsNumber()
   @IsOptional()
-  @Min(0)
-  duration?: number;
-
   @IsBoolean()
-  @IsOptional()
   isActive?: boolean;
 }

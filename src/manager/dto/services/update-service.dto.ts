@@ -1,4 +1,13 @@
-import { IsOptional, IsString, IsUUID, IsArray, IsEnum } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsUUID,
+  IsArray,
+  IsEnum,
+  IsNumber,
+  IsBoolean,
+  Min,
+} from 'class-validator';
 import { ServiceStatus } from '../../entities/service.entity';
 
 export class UpdateServiceDto {
@@ -12,7 +21,7 @@ export class UpdateServiceDto {
 
   @IsUUID()
   @IsOptional()
-  serviceTypeId?: string;
+  barcodeId?: string;
 
   @IsUUID()
   @IsOptional()
@@ -34,4 +43,26 @@ export class UpdateServiceDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  duration?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  price?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
