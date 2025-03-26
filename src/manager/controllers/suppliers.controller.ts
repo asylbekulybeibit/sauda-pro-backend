@@ -54,7 +54,7 @@ export class SuppliersController {
       );
 
       try {
-        // Получаем роль менеджера для определения его склада
+        // Получаем любую активную роль менеджера
         const managerRole = await this.userRoleRepository.findOne({
           where: {
             userId: req.user.id,
@@ -75,7 +75,9 @@ export class SuppliersController {
         createSupplierDto.warehouseId = managerRole.warehouse.id;
 
         this.logger.log(
-          `[create] Автоматически установлен склад менеджера: ${createSupplierDto.warehouseId}`
+          `[create] Автоматически установлен склад менеджера: ${
+            createSupplierDto.warehouseId
+          } (${managerRole.warehouse.name || 'Без имени'})`
         );
       } catch (error) {
         this.logger.error(
@@ -91,30 +93,49 @@ export class SuppliersController {
       );
 
       try {
-        // Получаем роль менеджера
+        // Ищем именно роль менеджера для запрашиваемого склада
         const managerRole = await this.userRoleRepository.findOne({
           where: {
             userId: req.user.id,
             type: RoleType.MANAGER,
+            warehouseId: createSupplierDto.warehouseId, // Явно указываем, что нужна роль для конкретного склада
             isActive: true,
           },
           relations: ['warehouse'],
         });
 
+        // Если не нашли роль для этого склада
         if (!managerRole || !managerRole.warehouse) {
-          this.logger.error(
-            `[create] Роль менеджера не найдена для userId=${req.user.id}`
-          );
-          throw new ForbiddenException('У вас нет прав менеджера склада');
-        }
-
-        // Проверяем, что указанный склад совпадает со складом менеджера
-        if (managerRole.warehouse.id !== createSupplierDto.warehouseId) {
           this.logger.warn(
-            `[create] Менеджер пытается создать поставщика для склада ${createSupplierDto.warehouseId}, но имеет доступ только к складу ${managerRole.warehouse.id}`
+            `[create] Менеджер ${req.user.id} не имеет активной роли для склада ${createSupplierDto.warehouseId}`
+          );
+
+          // Проверяем, есть ли у пользователя роль менеджера вообще
+          const anyManagerRole = await this.userRoleRepository.findOne({
+            where: {
+              userId: req.user.id,
+              type: RoleType.MANAGER,
+              isActive: true,
+            },
+            relations: ['warehouse'],
+          });
+
+          if (!anyManagerRole || !anyManagerRole.warehouse) {
+            this.logger.error(
+              `[create] Роль менеджера не найдена для userId=${req.user.id}`
+            );
+            throw new ForbiddenException('У вас нет прав менеджера склада');
+          }
+
+          this.logger.warn(
+            `[create] Менеджер пытается создать поставщика для склада ${createSupplierDto.warehouseId}, но имеет доступ только к складу ${anyManagerRole.warehouse.id}`
           );
           throw new ForbiddenException('У вас нет доступа к указанному складу');
         }
+
+        this.logger.log(
+          `[create] Доступ подтвержден к складу ${createSupplierDto.warehouseId}`
+        );
       } catch (error) {
         this.logger.error(
           `[create] Ошибка при проверке доступа к складу: ${error.message}`,
@@ -211,15 +232,14 @@ export class SuppliersController {
     );
 
     // Получаем роль менеджера для определения его склада
-    const managerRole = await this.userRoleRepository.findOne({
-      where: {
-        userId: req.user.id,
-        shopId, // Проверяем, что менеджер принадлежит к этому магазину
-        type: RoleType.MANAGER,
-        isActive: true,
-      },
-      relations: ['warehouse'],
-    });
+    const managerRole = await this.userRoleRepository
+      .createQueryBuilder('role')
+      .innerJoinAndSelect('role.warehouse', 'warehouse')
+      .where('role.userId = :userId', { userId: req.user.id })
+      .andWhere('role.type = :type', { type: RoleType.MANAGER })
+      .andWhere('role.isActive = :isActive', { isActive: true })
+      .andWhere('warehouse.shopId = :shopId', { shopId })
+      .getOne();
 
     if (!managerRole || !managerRole.warehouse) {
       this.logger.error(
@@ -251,15 +271,14 @@ export class SuppliersController {
     );
 
     // Получаем роль менеджера для определения его склада
-    const managerRole = await this.userRoleRepository.findOne({
-      where: {
-        userId: req.user.id,
-        shopId, // Проверяем, что менеджер принадлежит к этому магазину
-        type: RoleType.MANAGER,
-        isActive: true,
-      },
-      relations: ['warehouse'],
-    });
+    const managerRole = await this.userRoleRepository
+      .createQueryBuilder('role')
+      .innerJoinAndSelect('role.warehouse', 'warehouse')
+      .where('role.userId = :userId', { userId: req.user.id })
+      .andWhere('role.type = :type', { type: RoleType.MANAGER })
+      .andWhere('role.isActive = :isActive', { isActive: true })
+      .andWhere('warehouse.shopId = :shopId', { shopId })
+      .getOne();
 
     if (!managerRole || !managerRole.warehouse) {
       this.logger.error(
@@ -295,15 +314,14 @@ export class SuppliersController {
     );
 
     // Получаем роль менеджера для определения его склада
-    const managerRole = await this.userRoleRepository.findOne({
-      where: {
-        userId: req.user.id,
-        shopId, // Проверяем, что менеджер принадлежит к этому магазину
-        type: RoleType.MANAGER,
-        isActive: true,
-      },
-      relations: ['warehouse'],
-    });
+    const managerRole = await this.userRoleRepository
+      .createQueryBuilder('role')
+      .innerJoinAndSelect('role.warehouse', 'warehouse')
+      .where('role.userId = :userId', { userId: req.user.id })
+      .andWhere('role.type = :type', { type: RoleType.MANAGER })
+      .andWhere('role.isActive = :isActive', { isActive: true })
+      .andWhere('warehouse.shopId = :shopId', { shopId })
+      .getOne();
 
     if (!managerRole || !managerRole.warehouse) {
       this.logger.error(
