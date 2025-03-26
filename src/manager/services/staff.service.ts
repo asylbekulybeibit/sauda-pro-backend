@@ -86,17 +86,21 @@ export class StaffService {
       createStaffInviteDto.role = RoleType.CASHIER;
     }
 
+    // Проверяем, есть ли уже активное приглашение на такую же роль для этого телефона на этом складе
     const existingInvite = await this.inviteRepository.findOne({
       where: {
         phone: createStaffInviteDto.phone,
         warehouseId,
+        role: createStaffInviteDto.role, // Добавляем проверку по роли
         status: InviteStatus.PENDING,
       },
     });
 
     if (existingInvite) {
       throw new ForbiddenException(
-        'Для этого номера телефона уже есть активное приглашение'
+        `Для этого номера телефона уже есть активное приглашение на роль ${this.getRoleName(
+          createStaffInviteDto.role
+        )} в этом складе`
       );
     }
 
@@ -327,17 +331,21 @@ export class StaffService {
       createStaffInviteDto.role = RoleType.CASHIER;
     }
 
+    // Проверяем, есть ли уже активное приглашение на такую же роль для этого телефона на этом складе
     const existingInvite = await this.inviteRepository.findOne({
       where: {
         phone: createStaffInviteDto.phone,
         warehouseId,
+        role: createStaffInviteDto.role, // Добавляем проверку по роли
         status: InviteStatus.PENDING,
       },
     });
 
     if (existingInvite) {
       throw new ForbiddenException(
-        'Для этого номера телефона уже есть активное приглашение'
+        `Для этого номера телефона уже есть активное приглашение на роль ${this.getRoleName(
+          createStaffInviteDto.role
+        )} в этом складе`
       );
     }
 
@@ -374,6 +382,22 @@ export class StaffService {
     }
 
     return this.inviteRepository.save(invite);
+  }
+
+  // Вспомогательный метод для получения русского названия роли
+  private getRoleName(role: RoleType): string {
+    switch (role) {
+      case RoleType.CASHIER:
+        return 'кассир';
+      case RoleType.MANAGER:
+        return 'менеджер';
+      case RoleType.OWNER:
+        return 'владелец';
+      case RoleType.SUPERADMIN:
+        return 'администратор';
+      default:
+        return role;
+    }
   }
 
   async getWarehouseInviteStats(
