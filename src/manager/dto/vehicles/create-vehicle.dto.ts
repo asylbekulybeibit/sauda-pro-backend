@@ -41,4 +41,8 @@ export class CreateVehicleDto {
   @IsString()
   @IsOptional()
   vin?: string;
+
+  @IsString()
+  @IsOptional()
+  registrationCertificate?: string;
 }

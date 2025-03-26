@@ -42,6 +42,10 @@ export class UpdateVehicleDto {
   @IsOptional()
   vin?: string;
 
+  @IsString()
+  @IsOptional()
+  registrationCertificate?: string;
+
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;

@@ -45,6 +45,9 @@ export class Vehicle {
   @Column({ default: false })
   isWarehouseSpecific: boolean;
 
+  @Column({ nullable: true, unique: true })
+  registrationCertificate: string;
+
   @Column()
   make: string;
 

@@ -61,14 +61,34 @@ export class VehicleService {
     shopId: string
   ) {
     await this.validateManagerAccess(userId, shopId);
-    await this.validateClient(createVehicleDto.clientId, shopId);
 
+    // Проверка клиента, если указан
+    if (createVehicleDto.clientId) {
+      await this.validateClient(createVehicleDto.clientId, shopId);
+    }
+
+    // Проверка на уникальность техпаспорта, если он указан
+    if (createVehicleDto.registrationCertificate) {
+      const existingVehicle = await this.vehicleRepository.findOne({
+        where: {
+          registrationCertificate: createVehicleDto.registrationCertificate,
+        },
+      });
+
+      if (existingVehicle) {
+        throw new ForbiddenException(
+          'Автомобиль с таким номером техпаспорта уже существует'
+        );
+      }
+    }
+
+    // Создание записи
     const vehicle = this.vehicleRepository.create({
       ...createVehicleDto,
       shopId,
     });
 
-    return this.vehicleRepository.save(vehicle);
+    return await this.vehicleRepository.save(vehicle);
   }
 
   async findAll(userId: string, shopId: string) {
@@ -124,20 +144,43 @@ export class VehicleService {
   ) {
     await this.validateManagerAccess(userId, shopId);
 
-    const vehicle = await this.findOne(id, userId, shopId);
+    // Находим автомобиль
+    const vehicle = await this.vehicleRepository.findOne({
+      where: { id, shopId },
+    });
 
-    // Если клиент меняется, проверяем его существование
-    if (
-      updateVehicleDto.clientId &&
-      updateVehicleDto.clientId !== vehicle.clientId
-    ) {
+    if (!vehicle) {
+      throw new NotFoundException(`Vehicle not found`);
+    }
+
+    // Проверка клиента, если указан
+    if (updateVehicleDto.clientId) {
       await this.validateClient(updateVehicleDto.clientId, shopId);
     }
 
-    // Обновляем только те поля, которые переданы в DTO
-    Object.assign(vehicle, updateVehicleDto);
+    // Проверка на уникальность техпаспорта, если он изменяется
+    if (
+      updateVehicleDto.registrationCertificate &&
+      updateVehicleDto.registrationCertificate !==
+        vehicle.registrationCertificate
+    ) {
+      const existingVehicle = await this.vehicleRepository.findOne({
+        where: {
+          registrationCertificate: updateVehicleDto.registrationCertificate,
+        },
+      });
 
-    return this.vehicleRepository.save(vehicle);
+      if (existingVehicle && existingVehicle.id !== id) {
+        throw new ForbiddenException(
+          'Автомобиль с таким номером техпаспорта уже существует'
+        );
+      }
+    }
+
+    // Обновление записи
+    await this.vehicleRepository.update(id, updateVehicleDto);
+
+    return this.findOne(id, userId, shopId);
   }
 
   async remove(id: string, userId: string, shopId: string) {
