@@ -5,10 +5,12 @@ import {
   ManyToOne,
   CreateDateColumn,
   OneToMany,
+  JoinColumn,
 } from 'typeorm';
 import { CashRegister } from './cash-register.entity';
 import { PaymentMethodType } from './cash-operation.entity';
 import { PaymentMethodTransaction } from './payment-method-transaction.entity';
+import { Warehouse } from './warehouse.entity';
 
 export enum PaymentMethodSource {
   SYSTEM = 'system',
@@ -25,11 +27,24 @@ export class RegisterPaymentMethod {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => CashRegister, (register) => register.paymentMethods)
+  @ManyToOne(() => CashRegister, (register) => register.paymentMethods, {
+    nullable: true,
+  })
+  @JoinColumn({ name: 'cashRegisterId' })
   cashRegister: CashRegister;
 
-  @Column()
+  @Column({ nullable: true })
   cashRegisterId: string;
+
+  @Column()
+  warehouseId: string;
+
+  @ManyToOne(() => Warehouse)
+  @JoinColumn({ name: 'warehouseId' })
+  warehouse: Warehouse;
+
+  @Column({ default: false })
+  isShared: boolean;
 
   @Column({
     type: 'enum',

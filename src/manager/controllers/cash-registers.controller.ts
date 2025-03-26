@@ -8,6 +8,7 @@ import {
   Delete,
   UseGuards,
   Request,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -16,7 +17,7 @@ import { RoleType } from '../../auth/types/role.type';
 import { CashRegistersService } from '../services/cash-registers.service';
 import { CreateCashRegisterDto } from '../dto/cash-registers/create-cash-register.dto';
 import { CashRegister } from '../entities/cash-register.entity';
-import { PaymentMethodDto } from '../dto/payment-methods/payment-method.dto';
+import { PaymentMethodDto } from '../dto/cash-registers/update-payment-methods.dto';
 
 @Controller('manager/:warehouseId/cash-registers')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -35,6 +36,13 @@ export class CashRegistersController {
   @Get()
   findAll(@Param('warehouseId') warehouseId: string): Promise<CashRegister[]> {
     return this.cashRegistersService.findAllByWarehouse(warehouseId);
+  }
+
+  @Get('shared-payment-methods')
+  async getSharedPaymentMethods(
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
+  ) {
+    return this.cashRegistersService.getSharedPaymentMethods(warehouseId);
   }
 
   @Get(':id')

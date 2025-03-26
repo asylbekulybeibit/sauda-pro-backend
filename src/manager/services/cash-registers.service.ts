@@ -15,7 +15,7 @@ import {
   PaymentMethodStatus,
 } from '../entities/register-payment-method.entity';
 import { PaymentMethodType } from '../entities/cash-operation.entity';
-import { PaymentMethodDto } from '../dto/payment-methods/payment-method.dto';
+import { PaymentMethodDto } from '../dto/cash-registers/update-payment-methods.dto';
 import { CreateCashRegisterDto } from '../dto/cash-registers/create-cash-register.dto';
 
 @Injectable()
@@ -31,47 +31,95 @@ export class CashRegistersService {
     createCashRegisterDto: CreateCashRegisterDto,
     warehouseId: string
   ): Promise<CashRegister> {
-    console.log('Creating cash register with data:', {
-      createCashRegisterDto,
-      warehouseId,
-    });
+    const newRegister = new CashRegister();
+    newRegister.name = createCashRegisterDto.name;
+    newRegister.type = createCashRegisterDto.type;
+    newRegister.location = createCashRegisterDto.location;
+    newRegister.warehouseId = warehouseId;
+    newRegister.status = CashRegisterStatus.ACTIVE;
 
-    // Создаем кассовый аппарат
-    const cashRegister = new CashRegister();
-    cashRegister.name = createCashRegisterDto.name;
-    cashRegister.type = createCashRegisterDto.type;
-    cashRegister.warehouseId = warehouseId;
-    cashRegister.location = createCashRegisterDto.location;
-    cashRegister.status = CashRegisterStatus.ACTIVE;
+    // Сохраняем кассу первым шагом
+    const savedRegister = await this.cashRegisterRepository.save(newRegister);
 
-    try {
-      // Сначала сохраняем сам кассовый аппарат
-      const savedRegister =
-        await this.cashRegisterRepository.save(cashRegister);
-      console.log('Saved cash register:', savedRegister);
+    // Создаем методы оплаты для новой кассы
+    const paymentMethods: RegisterPaymentMethod[] = [];
 
-      // Инициализируем методы оплаты
-      const paymentMethods = createCashRegisterDto.paymentMethods.map(
-        (method) => this.initializeEmptyPaymentMethod(method, savedRegister.id)
-      );
-
-      await this.paymentMethodRepository.save(paymentMethods);
-
-      return this.findOne(savedRegister.id, warehouseId);
-    } catch (error) {
-      console.error('Error creating cash register:', error);
-      throw error;
+    // Убедимся, что у нас есть массив методов оплаты для обработки
+    if (
+      createCashRegisterDto.paymentMethods &&
+      createCashRegisterDto.paymentMethods.length > 0
+    ) {
+      for (const method of createCashRegisterDto.paymentMethods) {
+        // Проверяем, является ли метод общим для склада
+        if (method.isShared) {
+          // Если метод общий, создаем его только на уровне склада
+          const sharedMethod = this.initializeSharedPaymentMethod(
+            method,
+            warehouseId
+          );
+          const savedSharedMethod =
+            await this.paymentMethodRepository.save(sharedMethod);
+          paymentMethods.push(savedSharedMethod);
+        } else {
+          // Если метод не общий, создаем его для конкретной кассы
+          const registerMethod = this.initializeEmptyPaymentMethod(
+            method,
+            savedRegister.id
+          );
+          registerMethod.warehouseId = warehouseId; // Добавляем warehouseId для всех методов
+          const savedRegisterMethod =
+            await this.paymentMethodRepository.save(registerMethod);
+          paymentMethods.push(savedRegisterMethod);
+        }
+      }
     }
+
+    // Получаем обновленную кассу со всеми методами оплаты
+    return this.findOne(savedRegister.id, warehouseId);
   }
 
   async findAllByWarehouse(warehouseId: string): Promise<CashRegister[]> {
-    return this.cashRegisterRepository.find({
+    // Получаем все кассы склада с их прямыми методами оплаты
+    const cashRegisters = await this.cashRegisterRepository.find({
       where: { warehouseId, isActive: true },
       relations: ['paymentMethods'],
     });
+
+    // Если нет касс, возвращаем пустой массив
+    if (cashRegisters.length === 0) {
+      return [];
+    }
+
+    // Загружаем общие методы оплаты для этого склада
+    const sharedPaymentMethods = await this.paymentMethodRepository.find({
+      where: {
+        warehouseId,
+        isShared: true,
+      },
+    });
+
+    // Если есть общие методы оплаты, добавляем их к каждой кассе
+    if (sharedPaymentMethods.length > 0) {
+      for (const register of cashRegisters) {
+        // Создаем множество идентификаторов методов оплаты, которые уже присутствуют
+        const existingMethodIds = new Set(
+          register.paymentMethods.map((method) => method.id)
+        );
+
+        // Добавляем только те методы, которых ещё нет в списке
+        for (const sharedMethod of sharedPaymentMethods) {
+          if (!existingMethodIds.has(sharedMethod.id)) {
+            register.paymentMethods.push(sharedMethod);
+          }
+        }
+      }
+    }
+
+    return cashRegisters;
   }
 
   async findOne(id: string, warehouseId: string): Promise<CashRegister> {
+    // Получаем кассу с её методами оплаты
     const cashRegister = await this.cashRegisterRepository.findOne({
       where: { id, warehouseId, isActive: true },
       relations: ['paymentMethods'],
@@ -79,6 +127,29 @@ export class CashRegistersService {
 
     if (!cashRegister) {
       throw new NotFoundException('Cash register not found');
+    }
+
+    // Дополнительно загружаем общие методы оплаты для этого склада
+    const sharedPaymentMethods = await this.paymentMethodRepository.find({
+      where: {
+        warehouseId,
+        isShared: true,
+      },
+    });
+
+    // Добавляем общие методы в массив методов оплаты кассы, если их там ещё нет
+    if (sharedPaymentMethods.length > 0) {
+      // Создаем множество идентификаторов методов оплаты, которые уже присутствуют
+      const existingMethodIds = new Set(
+        cashRegister.paymentMethods.map((method) => method.id)
+      );
+
+      // Добавляем только те методы, которых ещё нет в списке
+      for (const sharedMethod of sharedPaymentMethods) {
+        if (!existingMethodIds.has(sharedMethod.id)) {
+          cashRegister.paymentMethods.push(sharedMethod);
+        }
+      }
     }
 
     return cashRegister;
@@ -112,69 +183,117 @@ export class CashRegistersService {
     paymentMethods: PaymentMethodDto[],
     warehouseId: string
   ): Promise<CashRegister> {
-    const register = await this.findOne(id, warehouseId);
+    console.log('updatePaymentMethods called with:', { id, warehouseId });
+    console.log('paymentMethods:', JSON.stringify(paymentMethods, null, 2));
 
-    if (!register) {
-      throw new NotFoundException('Касса не найдена');
+    // Получаем кассу
+    const cashRegister = await this.findOne(id, warehouseId);
+    if (!cashRegister) {
+      throw new NotFoundException(`Касса с ID ${id} не найдена`);
     }
 
-    // Загружаем текущие методы оплаты для этой кассы
-    const existingMethods = await this.paymentMethodRepository.find({
-      where: { cashRegisterId: id },
+    // Если paymentMethods не определен или пустой массив, просто возвращаем текущую кассу
+    if (!paymentMethods || paymentMethods.length === 0) {
+      console.log(
+        'No payment methods provided, returning current cash register'
+      );
+      return cashRegister;
+    }
+
+    // Получаем все текущие методы оплаты для этой кассы
+    const currentMethods = await this.paymentMethodRepository.find({
+      where: [
+        { cashRegisterId: id },
+        { warehouseId: warehouseId, isShared: true },
+      ],
     });
+    console.log('Current methods:', currentMethods.length);
 
-    // Создаем маппинги для быстрого поиска
-    const existingMethodsMap = new Map(
-      existingMethods.map((method) => [this.getMethodKey(method), method])
-    );
+    // Получаем ID всех методов, которые должны остаться (будем использовать для удаления неиспользуемых)
+    const methodsMap = new Map<string, RegisterPaymentMethod>();
+    currentMethods.forEach((method) => {
+      const key = this.getMethodKey(method);
+      methodsMap.set(key, method);
+    });
+    console.log('Methods keys in map:', Array.from(methodsMap.keys()));
 
-    const methodsToSave = [];
-    const methodsToDeactivate = [];
+    // Создаем массивы для новых методов и методов, которые будут обновлены
+    const newMethods: RegisterPaymentMethod[] = [];
+    const updatedMethods: RegisterPaymentMethod[] = [];
 
-    // Обрабатываем переданные методы оплаты
-    for (const method of paymentMethods) {
-      const methodKey = this.getMethodKey(method);
+    // Обрабатываем каждый метод из DTO
+    for (const methodDto of paymentMethods) {
+      const key = this.getMethodKey(methodDto);
+      console.log('Processing method:', methodDto, 'with key:', key);
 
-      if (!methodKey) {
-        throw new BadRequestException('Invalid payment method data');
-      }
+      if (methodsMap.has(key)) {
+        // Существующий метод - обновляем его
+        console.log('Updating existing method with key:', key);
+        const existingMethod = methodsMap.get(key)!;
+        existingMethod.isActive = methodDto.isActive ?? existingMethod.isActive;
+        existingMethod.status = methodDto.status ?? existingMethod.status;
+        existingMethod.isShared = methodDto.isShared ?? existingMethod.isShared;
 
-      // Проверяем, существует ли этот метод оплаты
-      if (existingMethodsMap.has(methodKey)) {
-        // Обновляем существующий
-        const existingMethod = existingMethodsMap.get(methodKey);
-        existingMethod.isActive = method.isActive ?? true;
-        existingMethod.status = method.status || PaymentMethodStatus.ACTIVE;
-
-        // Если указано описание, обновляем его и accountDetails
-        if (method.description) {
-          existingMethod.description = method.description;
-          existingMethod.accountDetails = method.description;
+        if (methodDto.source === PaymentMethodSource.CUSTOM) {
+          existingMethod.name = methodDto.name ?? existingMethod.name;
+          existingMethod.code = methodDto.code ?? existingMethod.code;
+          existingMethod.description =
+            methodDto.description ?? existingMethod.description;
         }
 
-        methodsToSave.push(existingMethod);
-        existingMethodsMap.delete(methodKey); // Удаляем, чтобы пометить как обработанный
+        updatedMethods.push(existingMethod);
+        methodsMap.delete(key); // Удаляем из карты, чтобы в конце остались только те, которые нужно удалить
       } else {
-        // Создаем новый метод оплаты
-        const newMethod = this.initializeEmptyPaymentMethod(method, id);
-        methodsToSave.push(newMethod);
+        // Новый метод - создаем его
+        console.log('Creating new method with key:', key);
+        if (methodDto.isShared) {
+          // Если это общий метод, создаем его на уровне склада
+          console.log('Creating shared method');
+          const sharedMethod = this.initializeSharedPaymentMethod(
+            methodDto,
+            warehouseId
+          );
+          newMethods.push(sharedMethod);
+        } else {
+          // Если это обычный метод, создаем его для конкретной кассы
+          console.log('Creating regular method for register:', id);
+          const method = this.initializeEmptyPaymentMethod(methodDto, id);
+          method.warehouseId = warehouseId;
+          newMethods.push(method);
+        }
       }
     }
 
-    // Оставшиеся методы оплаты нужно деактивировать
-    for (const [_, method] of existingMethodsMap.entries()) {
-      method.isActive = false;
-      method.status = PaymentMethodStatus.INACTIVE;
-      methodsToDeactivate.push(method);
+    // Удаляем методы, которых нет в новом списке (но только те, которые принадлежат этой кассе)
+    const methodsToRemove = Array.from(methodsMap.values()).filter(
+      (method) => !method.isShared || method.cashRegisterId === id
+    );
+
+    console.log('Methods to remove:', methodsToRemove.length);
+    if (methodsToRemove.length > 0) {
+      await this.paymentMethodRepository.remove(methodsToRemove);
     }
 
-    // Сохраняем все изменения
-    await this.paymentMethodRepository.save([
-      ...methodsToSave,
-      ...methodsToDeactivate,
-    ]);
+    // Сохраняем обновленные методы
+    console.log('Methods to update:', updatedMethods.length);
+    if (updatedMethods.length > 0) {
+      await this.paymentMethodRepository.save(updatedMethods);
+    }
 
-    return this.findOne(id, warehouseId);
+    // Сохраняем новые методы
+    console.log('New methods to save:', newMethods.length);
+    if (newMethods.length > 0) {
+      await this.paymentMethodRepository.save(newMethods);
+    }
+
+    // Возвращаем обновленную кассу
+    const result = await this.findOne(id, warehouseId);
+    console.log(
+      'Returning updated cash register with',
+      result.paymentMethods.length,
+      'payment methods'
+    );
+    return result;
   }
 
   // Вспомогательный метод для создания уникального ключа метода оплаты
@@ -183,12 +302,21 @@ export class CashRegistersService {
     systemType?: string;
     code?: string;
   }): string {
+    console.log('Getting key for method:', method);
+
     if (method.source === PaymentMethodSource.SYSTEM && method.systemType) {
-      return `system-${method.systemType}`;
+      const key = `system-${method.systemType}`;
+      console.log('Generated system key:', key);
+      return key;
     } else if (method.source === PaymentMethodSource.CUSTOM && method.code) {
-      return `custom-${method.code}`;
+      const key = `custom-${method.code}`;
+      console.log('Generated custom key:', key);
+      return key;
     }
-    return '';
+
+    console.warn('Could not generate a key for method:', method);
+    // Генерируем фейковый ключ для методов без кода, чтобы они не считались одинаковыми
+    return `unknown-${Date.now()}-${Math.random()}`;
   }
 
   // Инициализирует пустые методы оплаты с правильным балансом
@@ -201,21 +329,72 @@ export class CashRegistersService {
       isActive?: boolean;
       status?: PaymentMethodStatus;
       description?: string;
+      isShared?: boolean;
     },
     registerId: string
   ): RegisterPaymentMethod {
-    const newMethod = new RegisterPaymentMethod();
-    newMethod.cashRegisterId = registerId;
-    newMethod.source = method.source;
-    newMethod.systemType = method.systemType;
-    newMethod.name = method.name;
-    newMethod.code = method.code;
-    newMethod.isActive = method.isActive ?? true;
-    newMethod.status = method.status || PaymentMethodStatus.ACTIVE;
-    newMethod.description = method.description || '';
-    newMethod.currentBalance = 0; // Инициализируем с нулевым числовым балансом
-    newMethod.accountDetails = method.description || '';
+    const paymentMethod = new RegisterPaymentMethod();
+    paymentMethod.source = method.source;
+    paymentMethod.cashRegisterId = registerId;
+    paymentMethod.isShared = false; // Метод кассы по умолчанию не общий
 
-    return newMethod;
+    if (method.source === PaymentMethodSource.SYSTEM) {
+      paymentMethod.systemType = method.systemType;
+    } else {
+      paymentMethod.name = method.name;
+      paymentMethod.code = method.code;
+      paymentMethod.description = method.description;
+    }
+
+    paymentMethod.isActive = method.isActive ?? true;
+    paymentMethod.status = method.status ?? PaymentMethodStatus.ACTIVE;
+    paymentMethod.currentBalance = 0;
+
+    return paymentMethod;
+  }
+
+  private initializeSharedPaymentMethod(
+    method: {
+      source: PaymentMethodSource;
+      systemType?: PaymentMethodType;
+      name?: string;
+      code?: string;
+      isActive?: boolean;
+      status?: PaymentMethodStatus;
+      description?: string;
+      isShared?: boolean;
+    },
+    warehouseId: string
+  ): RegisterPaymentMethod {
+    const paymentMethod = new RegisterPaymentMethod();
+    paymentMethod.source = method.source;
+    paymentMethod.warehouseId = warehouseId;
+    paymentMethod.isShared = true; // Это общий метод оплаты для склада
+    paymentMethod.cashRegisterId = null; // Не привязан к конкретной кассе
+
+    if (method.source === PaymentMethodSource.SYSTEM) {
+      paymentMethod.systemType = method.systemType;
+    } else {
+      paymentMethod.name = method.name;
+      paymentMethod.code = method.code;
+      paymentMethod.description = method.description;
+    }
+
+    paymentMethod.isActive = method.isActive ?? true;
+    paymentMethod.status = method.status ?? PaymentMethodStatus.ACTIVE;
+    paymentMethod.currentBalance = 0;
+
+    return paymentMethod;
+  }
+
+  async getSharedPaymentMethods(
+    warehouseId: string
+  ): Promise<RegisterPaymentMethod[]> {
+    return this.paymentMethodRepository.find({
+      where: {
+        warehouseId,
+        isShared: true,
+      },
+    });
   }
 }

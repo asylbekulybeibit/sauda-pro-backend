@@ -11,10 +11,9 @@ import {
   PaymentMethodSource,
   PaymentMethodStatus,
 } from '../../entities/register-payment-method.entity';
-import { CashRegisterType } from '../../entities/cash-register.entity';
 import { PaymentMethodType } from '../../entities/cash-operation.entity';
 
-export class PaymentMethodItemDto {
+export class PaymentMethodDto {
   @IsString()
   @IsOptional()
   name?: string;
@@ -39,28 +38,16 @@ export class PaymentMethodItemDto {
   isActive?: boolean;
 
   @IsEnum(PaymentMethodStatus)
-  @IsOptional()
-  status?: PaymentMethodStatus;
+  status: PaymentMethodStatus;
 
   @IsBoolean()
   @IsOptional()
   isShared?: boolean;
 }
 
-export class CreateCashRegisterDto {
-  @IsString()
-  name: string;
-
-  @IsEnum(CashRegisterType)
-  type: CashRegisterType;
-
-  @IsString()
-  @IsOptional()
-  location?: string;
-
+export class UpdatePaymentMethodsDto {
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => PaymentMethodItemDto)
-  @IsOptional()
-  paymentMethods?: PaymentMethodItemDto[];
+  @Type(() => PaymentMethodDto)
+  paymentMethods: PaymentMethodDto[];
 }
