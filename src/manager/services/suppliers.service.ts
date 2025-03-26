@@ -264,23 +264,49 @@ export class SuppliersService {
     id: string
   ): Promise<Supplier> {
     this.logger.log(
-      `[findOne] Получение поставщика ${id} для склада ${warehouseId}, userId=${userId}`
+      `[findOne] Получение поставщика ${id}${
+        warehouseId ? ` для склада ${warehouseId}` : ''
+      }, userId=${userId}`
     );
 
-    await this.validateManagerAccess(userId, warehouseId);
+    try {
+      // Если указан warehouseId, проверяем доступ менеджера к складу
+      if (warehouseId) {
+        await this.validateManagerAccess(userId, warehouseId);
 
-    const supplier = await this.suppliersRepository.findOne({
-      where: { id, warehouseId, isActive: true },
-    });
+        const supplier = await this.suppliersRepository.findOne({
+          where: { id, warehouseId, isActive: true },
+        });
 
-    if (!supplier) {
-      this.logger.warn(
-        `[findOne] Поставщик ${id} не найден для склада ${warehouseId}`
+        if (!supplier) {
+          this.logger.warn(
+            `[findOne] Поставщик ${id} не найден для склада ${warehouseId}`
+          );
+          throw new NotFoundException('Supplier not found');
+        }
+
+        return supplier;
+      } else {
+        // Если warehouseId не указан, просто находим поставщика по ID
+        // Это используется контроллером для начальной проверки
+        const supplier = await this.suppliersRepository.findOne({
+          where: { id, isActive: true },
+        });
+
+        if (!supplier) {
+          this.logger.warn(`[findOne] Поставщик ${id} не найден`);
+          throw new NotFoundException('Supplier not found');
+        }
+
+        return supplier;
+      }
+    } catch (error) {
+      this.logger.error(
+        `[findOne] Ошибка при получении поставщика: ${error.message}`,
+        error.stack
       );
-      throw new NotFoundException('Supplier not found');
+      throw error;
     }
-
-    return supplier;
   }
 
   async update(
