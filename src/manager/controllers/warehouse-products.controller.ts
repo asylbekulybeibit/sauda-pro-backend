@@ -1,35 +1,30 @@
 import {
   Controller,
   Get,
-  Post,
-  Body,
-  Patch,
-  Param,
-  Delete,
   UseGuards,
   Request,
-  ForbiddenException,
+  Param,
+  Query,
   Logger,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { RoleType } from '../../auth/types/role.type';
-import { WarehouseServicesService } from '../services/warehouse-services.service';
-import { CreateWarehouseServiceDto } from '../dto/warehouse-service/create-warehouse-service.dto';
-// import { UpdateWarehouseServiceDto } from '../dto/warehouse-service/update-warehouse-service.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserRole } from '../../roles/entities/user-role.entity';
+import { WarehouseProductsService } from '../services/warehouse-products.service';
 
-@Controller('manager/warehouse-services')
+@Controller('manager/warehouse-products')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(RoleType.MANAGER)
-export class WarehouseServicesController {
-  private readonly logger = new Logger(WarehouseServicesController.name);
+export class WarehouseProductsController {
+  private readonly logger = new Logger(WarehouseProductsController.name);
 
   constructor(
-    private readonly warehouseServicesService: WarehouseServicesService,
+    private readonly warehouseProductsService: WarehouseProductsService,
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>
   ) {}
@@ -43,9 +38,6 @@ export class WarehouseServicesController {
     );
 
     // Получаем роль менеджера для конкретного склада
-    this.logger.debug(
-      `[validateManagerAccessToWarehouse] Поиск роли менеджера в БД`
-    );
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
@@ -56,8 +48,8 @@ export class WarehouseServicesController {
     });
 
     this.logger.debug(
-      `[validateManagerAccessToWarehouse] Результат запроса роли: ${JSON.stringify(
-        managerRole || 'роль не найдена'
+      `[validateManagerAccessToWarehouse] Найдена роль: ${JSON.stringify(
+        managerRole || 'не найдено'
       )}`
     );
 
@@ -77,9 +69,6 @@ export class WarehouseServicesController {
 
     // Проверяем, принадлежит ли склад менеджера указанному магазину
     this.logger.debug(
-      `[validateManagerAccessToWarehouse] Проверка соответствия склада (${managerRole.warehouse.id}) и магазина (${shopId})`
-    );
-    this.logger.debug(
       `[validateManagerAccessToWarehouse] Склад менеджера: ${JSON.stringify(
         managerRole.warehouse
       )}`
@@ -87,7 +76,7 @@ export class WarehouseServicesController {
 
     if (managerRole.warehouse.shopId !== shopId) {
       this.logger.error(
-        `[validateManagerAccessToWarehouse] Склад менеджера (${managerRole.warehouse.id}) не принадлежит магазину ${shopId}. Склад относится к магазину ${managerRole.warehouse.shopId}`
+        `[validateManagerAccessToWarehouse] Склад менеджера (${managerRole.warehouse.id}) не принадлежит магазину ${shopId}, warehouse.shopId=${managerRole.warehouse.shopId}`
       );
       throw new ForbiddenException(
         'У вас нет прав менеджера склада для этого магазина'
@@ -102,27 +91,21 @@ export class WarehouseServicesController {
     return managerRole.warehouse.id;
   }
 
-  @Post()
-  create(
-    @Body() createWarehouseServiceDto: CreateWarehouseServiceDto,
-    @Request() req
-  ) {
-    this.logger.log(`[create] Создание услуги склада, userId=${req.user.id}`);
-    return this.warehouseServicesService.create(
-      createWarehouseServiceDto,
-      req.user.id
-    );
-  }
-
   @Get('shop/:shopId')
-  async findAllByShop(@Param('shopId') shopId: string, @Request() req) {
+  async getWarehouseProductsByShop(
+    @Param('shopId') shopId: string,
+    @Request() req,
+    @Query('isService') isService?: string
+  ) {
     this.logger.log(
-      `[findAllByShop] Получение услуг склада для магазина ${shopId}, userId=${req.user.id}`
+      `[getWarehouseProductsByShop] Получение товаров склада для магазина ${shopId}, userId=${req.user.id}`
     );
 
     try {
       // Получаем роль менеджера для конкретного склада
-      this.logger.debug(`[findAllByShop] Получение роли менеджера`);
+      this.logger.debug(
+        `[getWarehouseProductsByShop] Получение роли менеджера`
+      );
       const managerRole = await this.userRoleRepository.findOne({
         where: {
           userId: req.user.id,
@@ -134,7 +117,7 @@ export class WarehouseServicesController {
 
       if (!managerRole || !managerRole.warehouse) {
         this.logger.error(
-          `[findAllByShop] Роль менеджера не найдена для userId=${req.user.id}`
+          `[getWarehouseProductsByShop] Роль менеджера не найдена для userId=${req.user.id}`
         );
         throw new ForbiddenException('У вас нет прав менеджера склада');
       }
@@ -143,54 +126,35 @@ export class WarehouseServicesController {
       const actualShopId = managerRole.warehouse.shopId;
 
       this.logger.log(
-        `[findAllByShop] Запрошен магазин: ${shopId}, фактический магазин менеджера: ${actualShopId}, склад: ${warehouseId}`
+        `[getWarehouseProductsByShop] Запрошен магазин: ${shopId}, фактический магазин менеджера: ${actualShopId}, склад: ${warehouseId}`
       );
 
-      // Используем сервис для получения услуг конкретного склада менеджера
+      // Преобразуем строковый параметр isService в boolean, если он предоставлен
+      const isServiceBoolean = isService ? isService === 'true' : undefined;
       this.logger.debug(
-        `[findAllByShop] Запрос услуг для склада ${warehouseId}`
+        `[getWarehouseProductsByShop] Параметр isService=${isService}, преобразован в ${isServiceBoolean}`
       );
-      const services =
-        await this.warehouseServicesService.findByWarehouseId(warehouseId);
+
+      // Используем сервис для получения товаров конкретного склада менеджера
+      this.logger.debug(
+        `[getWarehouseProductsByShop] Запрос товаров для склада ${warehouseId}`
+      );
+      const products =
+        await this.warehouseProductsService.getWarehouseProductsByWarehouseId(
+          warehouseId,
+          isServiceBoolean
+        );
 
       this.logger.log(
-        `[findAllByShop] Успешно получены услуги: ${services.length} шт.`
+        `[getWarehouseProductsByShop] Успешно получены товары: ${products.length} шт.`
       );
-      return services;
+      return products;
     } catch (error) {
       this.logger.error(
-        `[findAllByShop] Ошибка при получении услуг: ${error.message}`,
+        `[getWarehouseProductsByShop] Ошибка при получении товаров: ${error.message}`,
         error.stack
       );
       throw error;
     }
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string, @Request() req) {
-    this.logger.log(
-      `[findOne] Получение услуги по ID ${id}, userId=${req.user.id}`
-    );
-    return this.warehouseServicesService.findOne(id, req.user.id);
-  }
-
-  @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body() updateWarehouseServiceDto: any, // UpdateWarehouseServiceDto
-    @Request() req
-  ) {
-    this.logger.log(`[update] Обновление услуги ${id}, userId=${req.user.id}`);
-    return this.warehouseServicesService.update(
-      id,
-      updateWarehouseServiceDto,
-      req.user.id
-    );
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string, @Request() req) {
-    this.logger.log(`[remove] Удаление услуги ${id}, userId=${req.user.id}`);
-    return this.warehouseServicesService.remove(id, req.user.id);
   }
 }

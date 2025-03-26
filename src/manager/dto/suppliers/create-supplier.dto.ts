@@ -73,7 +73,8 @@ export class CreateSupplierDto {
   paymentInfo?: PaymentInfoDto;
 
   @IsUUID()
-  warehouseId: string;
+  @IsOptional()
+  warehouseId?: string;
 
   @IsBoolean()
   @IsOptional()

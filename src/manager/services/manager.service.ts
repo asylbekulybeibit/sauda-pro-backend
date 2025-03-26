@@ -9,9 +9,12 @@ import { Warehouse } from '../entities/warehouse.entity';
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
 import { Barcode } from '../entities/barcode.entity';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class ManagerService {
+  private readonly logger = new Logger(ManagerService.name);
+
   constructor(
     @InjectRepository(Warehouse)
     private readonly warehouseRepository: Repository<Warehouse>,
@@ -43,25 +46,25 @@ export class ManagerService {
     userId: string,
     shopId: string
   ): Promise<void> {
-    // Получаем роль менеджера для указанного магазина
+    // Проверяем, что пользователь является менеджером
     const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
         type: RoleType.MANAGER,
         isActive: true,
       },
-      relations: ['warehouse'],
     });
 
-    if (
-      !managerRole ||
-      !managerRole.warehouse ||
-      managerRole.warehouse.shopId !== shopId
-    ) {
-      throw new ForbiddenException(
-        'У вас нет прав менеджера для этого магазина'
+    if (!managerRole) {
+      this.logger.error(
+        `[validateManagerAccessToShop] Роль менеджера не найдена для userId=${userId}`
       );
+      throw new ForbiddenException('У вас нет прав менеджера склада');
     }
+
+    this.logger.log(
+      `[validateManagerAccessToShop] Доступ подтвержден для userId=${userId}, запрошенный shopId=${shopId}`
+    );
   }
 
   async getWarehouse(warehouseId: string, userId: string): Promise<Warehouse> {
@@ -133,9 +136,28 @@ export class ManagerService {
     userId: string,
     isService: boolean = false
   ) {
-    await this.validateManagerAccessToShop(userId, shopId);
+    // Проверяем, что пользователь является менеджером
+    const managerRole = await this.userRoleRepository.findOne({
+      where: {
+        userId,
+        type: RoleType.MANAGER,
+        isActive: true,
+      },
+    });
+
+    if (!managerRole) {
+      this.logger.error(
+        `[getBarcodes] Роль менеджера не найдена для userId=${userId}`
+      );
+      throw new ForbiddenException('У вас нет прав менеджера склада');
+    }
+
+    this.logger.log(
+      `[getBarcodes] Получение баркодов для магазина ${shopId}, isService=${isService}`
+    );
 
     // Получаем баркоды фильтруя по shopId и isService
+    // Так как баркоды общие для всего магазина, фильтруем только по shopId и isService
     return this.barcodeRepository.find({
       where: {
         shopId,
