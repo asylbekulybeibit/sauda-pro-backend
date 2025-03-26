@@ -30,7 +30,7 @@ export class UsersService {
   async findOne(id: string): Promise<User> {
     const user = await this.usersRepository.findOne({
       where: { id },
-      relations: ['roles', 'roles.shop'],
+      relations: ['roles', 'roles.shop', 'roles.warehouse'],
       order: {
         roles: {
           createdAt: 'DESC',
@@ -46,7 +46,7 @@ export class UsersService {
   async findByPhone(phone: string): Promise<User | null> {
     return this.usersRepository.findOne({
       where: { phone },
-      relations: ['roles', 'roles.shop'],
+      relations: ['roles', 'roles.shop', 'roles.warehouse'],
       order: {
         roles: {
           createdAt: 'DESC',

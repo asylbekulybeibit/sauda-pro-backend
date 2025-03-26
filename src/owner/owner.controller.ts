@@ -37,6 +37,24 @@ export class OwnerController {
     return this.ownerService.getOwnerInvites(req.user.id);
   }
 
+  @Get('shop-invites/:shopId')
+  @Roles(RoleType.OWNER)
+  async getShopInvites(
+    @Request() req,
+    @Param('shopId') shopId: string
+  ): Promise<Invite[]> {
+    return this.ownerService.getShopInvites(req.user.id, shopId);
+  }
+
+  @Get('invites/:shopId')
+  @Roles(RoleType.OWNER)
+  async getShopInvitesAlternative(
+    @Request() req,
+    @Param('shopId') shopId: string
+  ): Promise<Invite[]> {
+    return this.ownerService.getShopInvites(req.user.id, shopId);
+  }
+
   @Get('invites/:warehouseId')
   @Roles(RoleType.OWNER)
   async getWarehouseInvites(
@@ -61,6 +79,24 @@ export class OwnerController {
     return this.ownerService.getWarehouseStaff(req.user.id, warehouseId);
   }
 
+  @Get('shops/:shopId/staff')
+  @Roles(RoleType.OWNER)
+  async getShopStaff(
+    @Request() req,
+    @Param('shopId') shopId: string
+  ): Promise<UserRole[]> {
+    return this.ownerService.getShopStaff(req.user.id, shopId);
+  }
+
+  @Get(':shopId/staff')
+  @Roles(RoleType.OWNER)
+  async getShopStaffAlternative(
+    @Request() req,
+    @Param('shopId') shopId: string
+  ): Promise<UserRole[]> {
+    return this.ownerService.getShopStaff(req.user.id, shopId);
+  }
+
   @Patch('staff/:id/deactivate')
   @Roles(RoleType.OWNER)
   async removeStaffMember(
@@ -68,5 +104,20 @@ export class OwnerController {
     @Param('id') id: string
   ): Promise<void> {
     await this.ownerService.removeStaffMember(req.user.id, id);
+  }
+
+  @Get('shops/:shopId')
+  @Roles(RoleType.OWNER)
+  async getShopById(@Request() req, @Param('shopId') shopId: string) {
+    return this.ownerService.getShopById(req.user.id, shopId);
+  }
+
+  @Get(':shopId')
+  @Roles(RoleType.OWNER)
+  async getShopByIdAlternative(
+    @Request() req,
+    @Param('shopId') shopId: string
+  ) {
+    return this.ownerService.getShopById(req.user.id, shopId);
   }
 }

@@ -11,6 +11,8 @@ import { CreateOwnerInviteDto } from './dto/create-owner-invite.dto';
 import { RoleType } from '../auth/types/role.type';
 import { UserRole } from '../roles/entities/user-role.entity';
 import { Warehouse } from '../manager/entities/warehouse.entity';
+import { In, Brackets } from 'typeorm';
+import { Shop } from '../shops/entities/shop.entity';
 
 @Injectable()
 export class OwnerService {
@@ -20,7 +22,9 @@ export class OwnerService {
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
     @InjectRepository(Invite)
-    private readonly inviteRepository: Repository<Invite>
+    private readonly inviteRepository: Repository<Invite>,
+    @InjectRepository(Shop)
+    private readonly shopRepository: Repository<Shop>
   ) {}
 
   private getRoleName(role: RoleType): string {
@@ -40,19 +44,47 @@ export class OwnerService {
     createInviteDto: CreateOwnerInviteDto,
     ownerId: string
   ): Promise<Invite> {
-    // Проверяем, что склад принадлежит владельцу
-    const warehouse = await this.warehouseRepository
-      .createQueryBuilder('warehouse')
-      .innerJoin('warehouse.userRoles', 'role')
-      .where('warehouse.id = :warehouseId', {
-        warehouseId: createInviteDto.warehouseId,
-      })
-      .andWhere('role.userId = :ownerId', { ownerId })
-      .andWhere('role.type = :type', { type: RoleType.OWNER })
-      .getOne();
+    // Получаем информацию о пользователе, включая признак суперадмина
+    const ownerRole = await this.userRoleRepository.findOne({
+      where: {
+        userId: ownerId,
+        type: RoleType.OWNER,
+      },
+      relations: ['user'],
+    });
 
-    if (!warehouse) {
-      throw new ForbiddenException('У вас нет прав для этого склада');
+    if (!ownerRole) {
+      throw new ForbiddenException('У вас нет прав владельца');
+    }
+
+    // Проверяем, является ли пользователь суперадмином
+    const isSuperAdmin = ownerRole.user.isSuperAdmin;
+
+    // Если не суперадмин, проверяем права на склад
+    if (!isSuperAdmin && createInviteDto.warehouseId) {
+      // Получаем склад
+      const warehouse = await this.warehouseRepository.findOne({
+        where: { id: createInviteDto.warehouseId },
+        relations: ['shop'],
+      });
+
+      if (!warehouse) {
+        throw new NotFoundException('Склад не найден');
+      }
+
+      // Проверяем, владеет ли пользователь магазином, к которому относится склад
+      const hasAccess = await this.userRoleRepository.findOne({
+        where: {
+          userId: ownerId,
+          shopId: warehouse.shopId,
+          type: RoleType.OWNER,
+          isActive: true,
+        },
+      });
+
+      if (!hasAccess) {
+        throw new ForbiddenException('У вас нет прав для этого склада');
+      }
     }
 
     // Проверяем, нет ли активной роли для этого номера в этом складе
@@ -102,36 +134,92 @@ export class OwnerService {
   }
 
   async getOwnerInvites(ownerId: string): Promise<Invite[]> {
-    // Получаем все склады владельца
-    const ownerWarehouses = await this.warehouseRepository
-      .createQueryBuilder('warehouse')
-      .innerJoin('warehouse.userRoles', 'role')
-      .where('role.userId = :ownerId', { ownerId })
-      .andWhere('role.type = :type', { type: RoleType.OWNER })
-      .getMany();
+    // Получаем информацию о пользователе, включая признак суперадмина
+    const ownerRole = await this.userRoleRepository.findOne({
+      where: {
+        userId: ownerId,
+        type: RoleType.OWNER,
+      },
+      relations: ['user'],
+    });
 
-    const warehouseIds = ownerWarehouses.map((warehouse) => warehouse.id);
+    if (!ownerRole) {
+      throw new ForbiddenException('У вас нет прав владельца');
+    }
 
-    // Получаем все приглашения для складов владельца
-    return this.inviteRepository
-      .createQueryBuilder('invite')
-      .leftJoinAndSelect('invite.warehouse', 'warehouse')
-      .leftJoinAndSelect('invite.createdBy', 'createdBy')
-      .leftJoinAndSelect('invite.invitedUser', 'invitedUser')
-      .where('invite.warehouseId IN (:...warehouseIds)', { warehouseIds })
-      .orderBy('invite.createdAt', 'DESC')
-      .getMany();
+    // Проверяем, является ли пользователь суперадмином
+    const isSuperAdmin = ownerRole.user.isSuperAdmin;
+
+    // Если суперадмин, возвращаем все приглашения
+    let invites: Invite[] = [];
+    if (isSuperAdmin) {
+      invites = await this.inviteRepository.find({
+        relations: ['warehouse', 'shop', 'createdBy', 'invitedUser'],
+        order: { createdAt: 'DESC' },
+      });
+    } else {
+      // Для обычного владельца получаем его магазины
+      const ownerShops = await this.userRoleRepository.find({
+        where: {
+          userId: ownerId,
+          type: RoleType.OWNER,
+          isActive: true,
+        },
+        select: ['shopId'],
+      });
+
+      const shopIds = ownerShops
+        .filter((role) => role.shopId)
+        .map((role) => role.shopId);
+
+      if (shopIds.length === 0) {
+        return [];
+      }
+
+      // Получаем все склады, принадлежащие этим магазинам
+      const warehouses = await this.warehouseRepository.find({
+        where: { shopId: In(shopIds) },
+      });
+
+      const warehouseIds = warehouses.map((warehouse) => warehouse.id);
+
+      // Получаем приглашения для магазинов владельца и всех его складов
+      invites = await this.inviteRepository
+        .createQueryBuilder('invite')
+        .leftJoinAndSelect('invite.warehouse', 'warehouse')
+        .leftJoinAndSelect('invite.shop', 'shop')
+        .leftJoinAndSelect('invite.createdBy', 'createdBy')
+        .leftJoinAndSelect('invite.invitedUser', 'invitedUser')
+        .where(
+          new Brackets((qb) => {
+            qb.where('invite.shopId IN (:...shopIds)', { shopIds }).orWhere(
+              'invite.warehouseId IN (:...warehouseIds)',
+              { warehouseIds }
+            );
+          })
+        )
+        .orderBy('invite.createdAt', 'DESC')
+        .getMany();
+    }
+
+    // Для каждого инвайта без warehouse, но с warehouseId, дозагружаем warehouse
+    for (const invite of invites) {
+      if (!invite.warehouse && invite.warehouseId) {
+        invite.warehouse = await this.warehouseRepository.findOne({
+          where: { id: invite.warehouseId },
+        });
+      }
+    }
+
+    return invites;
   }
 
   async cancelInvite(ownerId: string, inviteId: string): Promise<void> {
-    const invite = await this.inviteRepository
-      .createQueryBuilder('invite')
-      .leftJoinAndSelect('invite.warehouse', 'warehouse')
-      .leftJoin('warehouse.userRoles', 'role')
-      .where('invite.id = :inviteId', { inviteId })
-      .andWhere('role.userId = :ownerId', { ownerId })
-      .andWhere('role.type = :type', { type: RoleType.OWNER })
-      .getOne();
+    // Получаем приглашение
+    const invite = await this.inviteRepository.findOne({
+      where: { id: inviteId },
+      relations: ['warehouse', 'shop'],
+    });
 
     if (!invite) {
       throw new NotFoundException('Приглашение не найдено');
@@ -143,7 +231,89 @@ export class OwnerService {
       );
     }
 
+    // Получаем информацию о пользователе, включая признак суперадмина
+    const ownerRole = await this.userRoleRepository.findOne({
+      where: {
+        userId: ownerId,
+        type: RoleType.OWNER,
+      },
+      relations: ['user'],
+    });
+
+    if (!ownerRole) {
+      throw new ForbiddenException('У вас нет прав владельца');
+    }
+
+    // Проверяем, является ли пользователь суперадмином
+    const isSuperAdmin = ownerRole.user.isSuperAdmin;
+
+    // Если не суперадмин, проверяем права на склад
+    if (!isSuperAdmin) {
+      // Если приглашение для склада
+      if (invite.warehouseId) {
+        // Получаем склад
+        const warehouse = await this.warehouseRepository.findOne({
+          where: { id: invite.warehouseId },
+          relations: ['shop'],
+        });
+
+        if (!warehouse) {
+          throw new NotFoundException('Склад не найден');
+        }
+
+        // Проверяем, владеет ли пользователь магазином, к которому относится склад
+        const hasAccess = await this.userRoleRepository.findOne({
+          where: {
+            userId: ownerId,
+            shopId: warehouse.shopId,
+            type: RoleType.OWNER,
+            isActive: true,
+          },
+        });
+
+        if (!hasAccess) {
+          throw new ForbiddenException(
+            'У вас нет прав для отмены этого приглашения'
+          );
+        }
+      }
+      // Если приглашение для магазина
+      else if (invite.shopId) {
+        // Проверяем, владеет ли пользователь этим магазином
+        const hasShopAccess = await this.userRoleRepository.findOne({
+          where: {
+            userId: ownerId,
+            shopId: invite.shopId,
+            type: RoleType.OWNER,
+            isActive: true,
+          },
+        });
+
+        if (!hasShopAccess) {
+          throw new ForbiddenException(
+            'У вас нет прав для отмены этого приглашения'
+          );
+        }
+      }
+    }
+
+    // Сохраняем важные данные перед изменением статуса
+    const warehouseId = invite.warehouseId;
+    const shopId = invite.shopId;
+
+    // Устанавливаем статус CANCELLED и дату изменения статуса
     invite.status = InviteStatus.CANCELLED;
+    invite.statusChangedAt = new Date();
+
+    // Убедимся, что информация о складе и магазине не теряется
+    if (warehouseId) {
+      invite.warehouseId = warehouseId;
+    }
+    if (shopId) {
+      invite.shopId = shopId;
+    }
+
+    // Сохраняем изменения
     await this.inviteRepository.save(invite);
   }
 
@@ -151,17 +321,47 @@ export class OwnerService {
     ownerId: string,
     warehouseId: string
   ): Promise<UserRole[]> {
-    // Проверяем, что склад принадлежит владельцу
-    const warehouse = await this.warehouseRepository
-      .createQueryBuilder('warehouse')
-      .innerJoin('warehouse.userRoles', 'ownerRole')
-      .where('warehouse.id = :warehouseId', { warehouseId })
-      .andWhere('ownerRole.userId = :ownerId', { ownerId })
-      .andWhere('ownerRole.type = :type', { type: RoleType.OWNER })
-      .getOne();
+    // Получаем информацию о пользователе, включая признак суперадмина
+    const userRole = await this.userRoleRepository.findOne({
+      where: {
+        userId: ownerId,
+        type: RoleType.OWNER,
+      },
+      relations: ['user'],
+    });
 
-    if (!warehouse) {
-      throw new ForbiddenException('У вас нет прав для этого склада');
+    if (!userRole) {
+      throw new ForbiddenException('У вас нет прав владельца');
+    }
+
+    // Проверяем, является ли пользователь суперадмином
+    const isSuperAdmin = userRole.user.isSuperAdmin;
+
+    // Если не суперадмин, проверяем права на склад
+    if (!isSuperAdmin) {
+      // Получаем склад
+      const warehouse = await this.warehouseRepository.findOne({
+        where: { id: warehouseId },
+        relations: ['shop'],
+      });
+
+      if (!warehouse) {
+        throw new NotFoundException('Склад не найден');
+      }
+
+      // Проверяем, владеет ли пользователь магазином, к которому относится склад
+      const hasAccess = await this.userRoleRepository.findOne({
+        where: {
+          userId: ownerId,
+          shopId: warehouse.shopId,
+          type: RoleType.OWNER,
+          isActive: true,
+        },
+      });
+
+      if (!hasAccess) {
+        throw new ForbiddenException('У вас нет прав для этого склада');
+      }
     }
 
     // Получаем все роли сотрудников (активные и неактивные)
@@ -182,7 +382,6 @@ export class OwnerService {
         'user.phone',
         'warehouse.id',
         'warehouse.name',
-        'warehouse.type',
         'warehouse.address',
       ])
       .where('role.warehouseId = :warehouseId', { warehouseId })
@@ -195,14 +394,11 @@ export class OwnerService {
   }
 
   async removeStaffMember(ownerId: string, staffId: string): Promise<void> {
-    const staffRole = await this.userRoleRepository
-      .createQueryBuilder('role')
-      .leftJoinAndSelect('role.warehouse', 'warehouse')
-      .leftJoin('warehouse.userRoles', 'ownerRole')
-      .where('role.id = :staffId', { staffId })
-      .andWhere('ownerRole.userId = :ownerId', { ownerId })
-      .andWhere('ownerRole.type = :type', { type: RoleType.OWNER })
-      .getOne();
+    // Получаем роль сотрудника, которого хотим удалить
+    const staffRole = await this.userRoleRepository.findOne({
+      where: { id: staffId },
+      relations: ['warehouse', 'user'],
+    });
 
     if (!staffRole) {
       throw new NotFoundException('Сотрудник не найден');
@@ -210,6 +406,51 @@ export class OwnerService {
 
     if (!staffRole.isActive) {
       throw new ForbiddenException('Сотрудник уже деактивирован');
+    }
+
+    // Получаем информацию о пользователе, включая признак суперадмина
+    const ownerRole = await this.userRoleRepository.findOne({
+      where: {
+        userId: ownerId,
+        type: RoleType.OWNER,
+      },
+      relations: ['user'],
+    });
+
+    if (!ownerRole) {
+      throw new ForbiddenException('У вас нет прав владельца');
+    }
+
+    // Проверяем, является ли пользователь суперадмином
+    const isSuperAdmin = ownerRole.user.isSuperAdmin;
+
+    // Если не суперадмин, проверяем права на склад
+    if (!isSuperAdmin) {
+      // Получаем склад сотрудника
+      const warehouse = await this.warehouseRepository.findOne({
+        where: { id: staffRole.warehouseId },
+        relations: ['shop'],
+      });
+
+      if (!warehouse) {
+        throw new NotFoundException('Склад не найден');
+      }
+
+      // Проверяем, владеет ли пользователь магазином, к которому относится склад
+      const hasAccess = await this.userRoleRepository.findOne({
+        where: {
+          userId: ownerId,
+          shopId: warehouse.shopId,
+          type: RoleType.OWNER,
+          isActive: true,
+        },
+      });
+
+      if (!hasAccess) {
+        throw new ForbiddenException(
+          'У вас нет прав для деактивации этого сотрудника'
+        );
+      }
     }
 
     // Обновляем оба поля при деактивации
@@ -223,17 +464,47 @@ export class OwnerService {
     ownerId: string,
     warehouseId: string
   ): Promise<Invite[]> {
-    // Проверяем, что склад принадлежит владельцу
-    const warehouse = await this.warehouseRepository
-      .createQueryBuilder('warehouse')
-      .innerJoin('warehouse.userRoles', 'role')
-      .where('warehouse.id = :warehouseId', { warehouseId })
-      .andWhere('role.userId = :ownerId', { ownerId })
-      .andWhere('role.type = :type', { type: RoleType.OWNER })
-      .getOne();
+    // Получаем информацию о пользователе, включая признак суперадмина
+    const userRole = await this.userRoleRepository.findOne({
+      where: {
+        userId: ownerId,
+        type: RoleType.OWNER,
+      },
+      relations: ['user'],
+    });
 
-    if (!warehouse) {
-      throw new ForbiddenException('У вас нет прав для этого склада');
+    if (!userRole) {
+      throw new ForbiddenException('У вас нет прав владельца');
+    }
+
+    // Проверяем, является ли пользователь суперадмином
+    const isSuperAdmin = userRole.user.isSuperAdmin;
+
+    // Если не суперадмин, проверяем права на склад
+    if (!isSuperAdmin) {
+      // Получаем склад
+      const warehouse = await this.warehouseRepository.findOne({
+        where: { id: warehouseId },
+        relations: ['shop'],
+      });
+
+      if (!warehouse) {
+        throw new NotFoundException('Склад не найден');
+      }
+
+      // Проверяем, владеет ли пользователь магазином, к которому относится склад
+      const hasAccess = await this.userRoleRepository.findOne({
+        where: {
+          userId: ownerId,
+          shopId: warehouse.shopId,
+          type: RoleType.OWNER,
+          isActive: true,
+        },
+      });
+
+      if (!hasAccess) {
+        throw new ForbiddenException('У вас нет прав для этого склада');
+      }
     }
 
     // Получаем все приглашения для конкретного склада
@@ -245,5 +516,208 @@ export class OwnerService {
       .where('invite.warehouseId = :warehouseId', { warehouseId })
       .orderBy('invite.createdAt', 'DESC')
       .getMany();
+  }
+
+  async getShopStaff(ownerId: string, shopId: string): Promise<UserRole[]> {
+    // Получаем информацию о пользователе, включая признак суперадмина
+    const userRole = await this.userRoleRepository.findOne({
+      where: {
+        userId: ownerId,
+        type: RoleType.OWNER,
+      },
+      relations: ['user'],
+    });
+
+    if (!userRole) {
+      throw new ForbiddenException('У вас нет прав владельца');
+    }
+
+    // Проверяем, является ли пользователь суперадмином
+    const isSuperAdmin = userRole.user.isSuperAdmin;
+
+    // Если не суперадмин, проверяем права на магазин
+    if (!isSuperAdmin) {
+      // Проверяем, владеет ли пользователь этим магазином
+      const hasAccess = await this.userRoleRepository.findOne({
+        where: {
+          userId: ownerId,
+          shopId: shopId,
+          type: RoleType.OWNER,
+          isActive: true,
+        },
+      });
+
+      if (!hasAccess) {
+        throw new ForbiddenException('У вас нет прав для этого магазина');
+      }
+    }
+
+    // Получаем все склады, принадлежащие этому магазину
+    const warehouses = await this.warehouseRepository.find({
+      where: { shopId: shopId },
+    });
+
+    const warehouseIds = warehouses.map((warehouse) => warehouse.id);
+
+    // Получаем все роли сотрудников (активные и неактивные)
+    // - сотрудников непосредственно магазина
+    // - сотрудников всех складов магазина
+    return this.userRoleRepository
+      .createQueryBuilder('role')
+      .leftJoinAndSelect('role.user', 'user')
+      .leftJoinAndSelect('role.warehouse', 'warehouse')
+      .leftJoinAndSelect('role.shop', 'shop')
+      .select([
+        'role.id',
+        'role.type',
+        'role.isActive',
+        'role.createdAt',
+        'role.deactivatedAt',
+        'role.warehouseId',
+        'role.shopId',
+        'user.id',
+        'user.firstName',
+        'user.lastName',
+        'user.phone',
+        'warehouse.id',
+        'warehouse.name',
+        'warehouse.address',
+        'shop.id',
+        'shop.name',
+        'shop.address',
+      ])
+      .where(
+        new Brackets((qb) => {
+          qb.where('role.shopId = :shopId', { shopId }).orWhere(
+            'role.warehouseId IN (:...warehouseIds)',
+            { warehouseIds: warehouseIds.length > 0 ? warehouseIds : [''] }
+          );
+        })
+      )
+      .andWhere('role.type IN (:...types)', {
+        types: [RoleType.OWNER, RoleType.MANAGER, RoleType.CASHIER],
+      })
+      .orderBy('user.id', 'ASC')
+      .addOrderBy('role.createdAt', 'DESC')
+      .getMany();
+  }
+
+  async getShopById(ownerId: string, shopId: string) {
+    // Получаем информацию о пользователе, включая признак суперадмина
+    const userRole = await this.userRoleRepository.findOne({
+      where: {
+        userId: ownerId,
+        type: RoleType.OWNER,
+      },
+      relations: ['user'],
+    });
+
+    if (!userRole) {
+      throw new ForbiddenException('У вас нет прав владельца');
+    }
+
+    // Проверяем, является ли пользователь суперадмином
+    const isSuperAdmin = userRole.user.isSuperAdmin;
+
+    // Если не суперадмин, проверяем права на магазин
+    if (!isSuperAdmin) {
+      // Проверяем, владеет ли пользователь этим магазином
+      const hasAccess = await this.userRoleRepository.findOne({
+        where: {
+          userId: ownerId,
+          shopId: shopId,
+          type: RoleType.OWNER,
+          isActive: true,
+        },
+      });
+
+      if (!hasAccess) {
+        throw new ForbiddenException('У вас нет прав для этого магазина');
+      }
+    }
+
+    // Получаем магазин из репозитория Shop
+    const shop = await this.shopRepository.findOne({
+      where: { id: shopId },
+    });
+
+    if (!shop) {
+      throw new NotFoundException(`Магазин с ID ${shopId} не найден`);
+    }
+
+    return shop;
+  }
+
+  async getShopInvites(ownerId: string, shopId: string): Promise<Invite[]> {
+    // Получаем информацию о пользователе, включая признак суперадмина
+    const ownerRole = await this.userRoleRepository.findOne({
+      where: {
+        userId: ownerId,
+        type: RoleType.OWNER,
+      },
+      relations: ['user'],
+    });
+
+    if (!ownerRole) {
+      throw new ForbiddenException('У вас нет прав владельца');
+    }
+
+    // Проверяем, является ли пользователь суперадмином
+    const isSuperAdmin = ownerRole.user.isSuperAdmin;
+
+    // Если не суперадмин, проверяем права на магазин
+    if (!isSuperAdmin) {
+      // Проверяем, владеет ли пользователь указанным магазином
+      const hasAccess = await this.userRoleRepository.findOne({
+        where: {
+          userId: ownerId,
+          shopId: shopId,
+          type: RoleType.OWNER,
+          isActive: true,
+        },
+      });
+
+      if (!hasAccess) {
+        throw new ForbiddenException('У вас нет прав для этого магазина');
+      }
+    }
+
+    // Получаем все склады, принадлежащие этому магазину
+    const warehouses = await this.warehouseRepository.find({
+      where: { shopId, isActive: true },
+    });
+
+    const warehouseIds = warehouses.map((warehouse) => warehouse.id);
+
+    // Получаем приглашения для магазина и всех его складов
+    const invites = await this.inviteRepository
+      .createQueryBuilder('invite')
+      .leftJoinAndSelect('invite.warehouse', 'warehouse')
+      .leftJoinAndSelect('invite.shop', 'shop')
+      .leftJoinAndSelect('invite.createdBy', 'createdBy')
+      .leftJoinAndSelect('invite.invitedUser', 'invitedUser')
+      .where(
+        new Brackets((qb) => {
+          qb.where('invite.shopId = :shopId', { shopId });
+          if (warehouseIds.length > 0) {
+            qb.orWhere('invite.warehouseId IN (:...warehouseIds)', {
+              warehouseIds,
+            });
+          }
+        })
+      )
+      .orderBy('invite.createdAt', 'DESC')
+      .getMany();
+
+    // Для каждого инвайта без warehouse, но с warehouseId, дозагружаем warehouse
+    for (const invite of invites) {
+      if (!invite.warehouse && invite.warehouseId) {
+        invite.warehouse = await this.warehouseRepository.findOne({
+          where: { id: invite.warehouseId },
+        });
+      }
+    }
+
+    return invites;
   }
 }
