@@ -24,6 +24,7 @@ import { Supplier } from '../entities/supplier.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserRole } from '../../roles/entities/user-role.entity';
+import { SupplierProductsService } from '../services/supplier-products.service';
 
 @Controller('manager/suppliers')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -36,7 +37,8 @@ export class SuppliersController {
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
     @InjectRepository(Supplier)
-    private readonly suppliersRepository: Repository<Supplier>
+    private readonly suppliersRepository: Repository<Supplier>,
+    private readonly supplierProductsService: SupplierProductsService
   ) {}
 
   @Post()
@@ -487,6 +489,314 @@ export class SuppliersController {
     } catch (error) {
       this.logger.error(
         `[remove] Ошибка при удалении поставщика: ${error.message}`,
+        error.stack
+      );
+      throw error;
+    }
+  }
+
+  @Get(':supplierId/products')
+  async getSupplierProducts(
+    @Request() req,
+    @Param('supplierId', ParseUUIDPipe) supplierId: string,
+    @Query('shopId') shopId?: string
+  ): Promise<any[]> {
+    this.logger.log(
+      `[getSupplierProducts] Получение товаров поставщика с ID=${supplierId}, shopId=${shopId}, userId=${req.user.id}`
+    );
+
+    try {
+      // Сначала получаем информацию о поставщике, чтобы узнать его warehouseId
+      const supplier = await this.suppliersRepository.findOne({
+        where: { id: supplierId, isActive: true },
+      });
+
+      if (!supplier) {
+        this.logger.warn(
+          `[getSupplierProducts] Поставщик с ID ${supplierId} не найден`
+        );
+        throw new NotFoundException(`Поставщик с ID ${supplierId} не найден`);
+      }
+
+      this.logger.debug(
+        `[getSupplierProducts] Найден поставщик: ${JSON.stringify({
+          id: supplier.id,
+          name: supplier.name,
+          warehouseId: supplier.warehouseId,
+        })}`
+      );
+
+      this.logger.log(
+        `[getSupplierProducts] ИНФОРМАЦИЯ О ДОСТУПЕ:
+        - Запрошенный supplierId: ${supplierId}
+        - Склад поставщика: ${supplier.warehouseId}
+        - Пользователь: ${req.user.id}`
+      );
+
+      // Проверяем, имеет ли менеджер доступ к складу этого поставщика
+      const managerRole = await this.userRoleRepository.findOne({
+        where: {
+          userId: req.user.id,
+          type: RoleType.MANAGER,
+          warehouseId: supplier.warehouseId,
+          isActive: true,
+        },
+        relations: ['warehouse'],
+      });
+
+      if (!managerRole) {
+        this.logger.warn(
+          `[getSupplierProducts] Пользователь ${req.user.id} не имеет доступа к складу ${supplier.warehouseId} поставщика ${supplierId}`
+        );
+
+        // Проверяем, есть ли у менеджера роли вообще
+        const anyManagerRole = await this.userRoleRepository.findOne({
+          where: {
+            userId: req.user.id,
+            type: RoleType.MANAGER,
+            isActive: true,
+          },
+          relations: ['warehouse'],
+        });
+
+        if (!anyManagerRole || !anyManagerRole.warehouse) {
+          this.logger.error(
+            `[getSupplierProducts] Роль менеджера не найдена для userId=${req.user.id}`
+          );
+          throw new ForbiddenException('У вас нет прав менеджера склада');
+        }
+
+        this.logger.warn(
+          `[getSupplierProducts] Менеджер пытается получить товары поставщика со склада ${supplier.warehouseId}, но имеет доступ только к складу ${anyManagerRole.warehouse.id}`
+        );
+        throw new ForbiddenException(
+          'У вас нет прав для просмотра товаров этого поставщика'
+        );
+      }
+
+      this.logger.log(
+        `[getSupplierProducts] Доступ подтвержден к товарам поставщика ${supplierId} на складе ${
+          supplier.warehouseId
+        } (${managerRole.warehouse?.name || 'Без имени'})`
+      );
+
+      // Теперь получаем товары поставщика, используя warehouseId поставщика
+      return this.supplierProductsService.getSupplierProducts(
+        req.user.id,
+        supplierId,
+        supplier.warehouseId
+      );
+    } catch (error) {
+      this.logger.error(
+        `[getSupplierProducts] Ошибка при получении товаров поставщика: ${error.message}`,
+        error.stack
+      );
+      throw error;
+    }
+  }
+
+  @Post(':supplierId/products/:barcodeId')
+  async addProductToSupplier(
+    @Request() req,
+    @Param('supplierId', ParseUUIDPipe) supplierId: string,
+    @Param('barcodeId', ParseUUIDPipe) barcodeId: string,
+    @Body() data: { price: number; minimumOrder?: number },
+    @Query('shopId') shopId?: string
+  ): Promise<any> {
+    this.logger.log(
+      `[addProductToSupplier] Добавление товара ${barcodeId} поставщику ${supplierId}, shopId=${shopId}, userId=${req.user.id}`
+    );
+
+    try {
+      // Сначала получаем информацию о поставщике, чтобы узнать его warehouseId
+      const supplier = await this.suppliersRepository.findOne({
+        where: { id: supplierId, isActive: true },
+      });
+
+      if (!supplier) {
+        this.logger.warn(
+          `[addProductToSupplier] Поставщик с ID ${supplierId} не найден`
+        );
+        throw new NotFoundException(`Поставщик с ID ${supplierId} не найден`);
+      }
+
+      this.logger.debug(
+        `[addProductToSupplier] Найден поставщик: ${JSON.stringify({
+          id: supplier.id,
+          name: supplier.name,
+          warehouseId: supplier.warehouseId,
+        })}`
+      );
+
+      this.logger.log(
+        `[addProductToSupplier] ИНФОРМАЦИЯ О ДОСТУПЕ:
+        - Поставщик: ${supplierId} (${supplier.name})
+        - Товар: ${barcodeId}
+        - Склад поставщика: ${supplier.warehouseId}
+        - Пользователь: ${req.user.id}`
+      );
+
+      // Проверяем, имеет ли менеджер доступ к складу этого поставщика
+      const managerRole = await this.userRoleRepository.findOne({
+        where: {
+          userId: req.user.id,
+          type: RoleType.MANAGER,
+          warehouseId: supplier.warehouseId,
+          isActive: true,
+        },
+        relations: ['warehouse'],
+      });
+
+      if (!managerRole) {
+        this.logger.warn(
+          `[addProductToSupplier] Пользователь ${req.user.id} не имеет доступа к складу ${supplier.warehouseId} поставщика ${supplierId}`
+        );
+
+        // Проверяем, есть ли у менеджера роли вообще
+        const anyManagerRole = await this.userRoleRepository.findOne({
+          where: {
+            userId: req.user.id,
+            type: RoleType.MANAGER,
+            isActive: true,
+          },
+          relations: ['warehouse'],
+        });
+
+        if (!anyManagerRole || !anyManagerRole.warehouse) {
+          this.logger.error(
+            `[addProductToSupplier] Роль менеджера не найдена для userId=${req.user.id}`
+          );
+          throw new ForbiddenException('У вас нет прав менеджера склада');
+        }
+
+        this.logger.warn(
+          `[addProductToSupplier] Менеджер пытается добавить товар поставщику со склада ${supplier.warehouseId}, но имеет доступ только к складу ${anyManagerRole.warehouse.id}`
+        );
+        throw new ForbiddenException(
+          'У вас нет прав для добавления товаров этому поставщику'
+        );
+      }
+
+      this.logger.log(
+        `[addProductToSupplier] Доступ подтвержден для добавления товара ${barcodeId} поставщику ${supplierId} на складе ${
+          supplier.warehouseId
+        } (${managerRole.warehouse?.name || 'Без имени'})`
+      );
+
+      // Добавляем товар поставщику, используя warehouseId поставщика
+      return this.supplierProductsService.addProductToSupplier(
+        req.user.id,
+        supplierId,
+        barcodeId,
+        supplier.warehouseId,
+        data
+      );
+    } catch (error) {
+      this.logger.error(
+        `[addProductToSupplier] Ошибка при добавлении товара поставщику: ${error.message}`,
+        error.stack
+      );
+      throw error;
+    }
+  }
+
+  @Delete(':supplierId/products/:barcodeId')
+  async removeProductFromSupplier(
+    @Request() req,
+    @Param('supplierId', ParseUUIDPipe) supplierId: string,
+    @Param('barcodeId', ParseUUIDPipe) barcodeId: string,
+    @Query('shopId') shopId?: string
+  ): Promise<void> {
+    this.logger.log(
+      `[removeProductFromSupplier] Удаление товара ${barcodeId} у поставщика ${supplierId}, shopId=${shopId}, userId=${req.user.id}`
+    );
+
+    try {
+      // Сначала получаем информацию о поставщике, чтобы узнать его warehouseId
+      const supplier = await this.suppliersRepository.findOne({
+        where: { id: supplierId, isActive: true },
+      });
+
+      if (!supplier) {
+        this.logger.warn(
+          `[removeProductFromSupplier] Поставщик с ID ${supplierId} не найден`
+        );
+        throw new NotFoundException(`Поставщик с ID ${supplierId} не найден`);
+      }
+
+      this.logger.debug(
+        `[removeProductFromSupplier] Найден поставщик: ${JSON.stringify({
+          id: supplier.id,
+          name: supplier.name,
+          warehouseId: supplier.warehouseId,
+        })}`
+      );
+
+      this.logger.log(
+        `[removeProductFromSupplier] ИНФОРМАЦИЯ О ДОСТУПЕ:
+        - Поставщик: ${supplierId} (${supplier.name})
+        - Товар: ${barcodeId}
+        - Склад поставщика: ${supplier.warehouseId}
+        - Пользователь: ${req.user.id}`
+      );
+
+      // Проверяем, имеет ли менеджер доступ к складу этого поставщика
+      const managerRole = await this.userRoleRepository.findOne({
+        where: {
+          userId: req.user.id,
+          type: RoleType.MANAGER,
+          warehouseId: supplier.warehouseId,
+          isActive: true,
+        },
+        relations: ['warehouse'],
+      });
+
+      if (!managerRole) {
+        this.logger.warn(
+          `[removeProductFromSupplier] Пользователь ${req.user.id} не имеет доступа к складу ${supplier.warehouseId} поставщика ${supplierId}`
+        );
+
+        // Проверяем, есть ли у менеджера роли вообще
+        const anyManagerRole = await this.userRoleRepository.findOne({
+          where: {
+            userId: req.user.id,
+            type: RoleType.MANAGER,
+            isActive: true,
+          },
+          relations: ['warehouse'],
+        });
+
+        if (!anyManagerRole || !anyManagerRole.warehouse) {
+          this.logger.error(
+            `[removeProductFromSupplier] Роль менеджера не найдена для userId=${req.user.id}`
+          );
+          throw new ForbiddenException('У вас нет прав менеджера склада');
+        }
+
+        this.logger.warn(
+          `[removeProductFromSupplier] Менеджер пытается удалить товар у поставщика со склада ${supplier.warehouseId}, но имеет доступ только к складу ${anyManagerRole.warehouse.id}`
+        );
+        throw new ForbiddenException(
+          'У вас нет прав для удаления товаров у этого поставщика'
+        );
+      }
+
+      this.logger.log(
+        `[removeProductFromSupplier] Доступ подтвержден для удаления товара ${barcodeId} у поставщика ${supplierId} на складе ${
+          supplier.warehouseId
+        } (${managerRole.warehouse?.name || 'Без имени'})`
+      );
+
+      // Удаляем товар у поставщика, используя warehouseId поставщика
+      return this.supplierProductsService.removeProductFromSupplier(
+        req.user.id,
+        supplierId,
+        barcodeId,
+        supplier.warehouseId
+      );
+    } catch (error) {
+      this.logger.error(
+        `[removeProductFromSupplier] Ошибка при удалении товара у поставщика: ${error.message}`,
         error.stack
       );
       throw error;
