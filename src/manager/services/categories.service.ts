@@ -20,7 +20,8 @@ export class CategoriesService {
   ) {}
 
   private async validateManagerAccess(userId: string, shopId: string) {
-    const managerRole = await this.userRoleRepository.findOne({
+    // Сначала проверяем, существует ли роль менеджера магазина
+    const shopManagerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
         shopId,
@@ -29,11 +30,31 @@ export class CategoriesService {
       },
     });
 
-    if (!managerRole) {
-      throw new ForbiddenException(
-        'У вас нет прав для управления этим магазином'
-      );
+    if (shopManagerRole) {
+      return; // У пользователя есть прямой доступ к магазину
     }
+
+    // Если нет прямой роли для магазина, ищем роль менеджера склада в этом магазине
+    const warehouseManagerRole = await this.userRoleRepository.findOne({
+      where: {
+        userId,
+        type: RoleType.MANAGER,
+        isActive: true,
+      },
+      relations: ['warehouse'],
+    });
+
+    if (
+      warehouseManagerRole &&
+      warehouseManagerRole.warehouse &&
+      warehouseManagerRole.warehouse.shopId === shopId
+    ) {
+      return; // У пользователя есть доступ к складу этого магазина
+    }
+
+    throw new ForbiddenException(
+      'У вас нет прав для управления этим магазином'
+    );
   }
 
   async create(createCategoryDto: CreateCategoryDto, userId: string) {
