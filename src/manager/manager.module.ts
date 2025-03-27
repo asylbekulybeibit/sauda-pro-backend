@@ -51,6 +51,7 @@ import { WarehouseServicesController } from './controllers/warehouse-services.co
 import { WarehouseServicesService } from './services/warehouse-services.service';
 import { WarehouseProductsController } from './controllers/warehouse-products.controller';
 import { WarehouseProductsService } from './services/warehouse-products.service';
+import { ProductsController } from './controllers/products.controller';
 
 // Новые импорты для учета баланса методов оплаты
 import { PaymentMethodTransaction } from './entities/payment-method-transaction.entity';
@@ -160,6 +161,7 @@ import { User } from '../users/entities/user.entity';
     ReceiptActionsController,
     WarehouseServicesController,
     WarehouseProductsController,
+    ProductsController,
   ],
   providers: [
     ManagerService,

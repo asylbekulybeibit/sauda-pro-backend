@@ -7,6 +7,9 @@ import {
   Query,
   Logger,
   ForbiddenException,
+  Post,
+  Body,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -251,6 +254,70 @@ export class WarehouseProductsController {
     } catch (error) {
       this.logger.error(
         `[getWarehouseProductsByShop] Ошибка при получении товаров: ${error.message}`,
+        error.stack
+      );
+      throw error;
+    }
+  }
+
+  // Добавляем метод для создания товара на складе
+  @Post()
+  async createWarehouseProduct(@Body() createProductDto: any, @Request() req) {
+    this.logger.log(
+      `[createWarehouseProduct] Создание товара на складе, userId=${req.user.id}`
+    );
+
+    try {
+      // Получаем роль менеджера для определения склада
+      const managerRole = await this.userRoleRepository.findOne({
+        where: {
+          userId: req.user.id,
+          type: RoleType.MANAGER,
+          isActive: true,
+        },
+        relations: ['warehouse'],
+      });
+
+      if (!managerRole || !managerRole.warehouse) {
+        this.logger.error(
+          `[createWarehouseProduct] Роль менеджера не найдена для userId=${req.user.id}`
+        );
+        throw new ForbiddenException('У вас нет прав менеджера склада');
+      }
+
+      // Преобразуем входные данные в формат, ожидаемый сервисом
+      const productDto = {
+        warehouseId: createProductDto.warehouseId || managerRole.warehouse.id,
+        barcodeId: createProductDto.barcodeId,
+        barcode: createProductDto.barcode,
+        name:
+          createProductDto.name ||
+          createProductDto.productName ||
+          'Новый товар',
+        description: createProductDto.description || '',
+        categoryId: createProductDto.categoryId,
+        quantity: createProductDto.quantity || 0,
+        purchasePrice:
+          createProductDto.price || createProductDto.purchasePrice || 0,
+        sellingPrice:
+          createProductDto.price || createProductDto.sellingPrice || 0,
+        minQuantity: createProductDto.minQuantity || 0,
+        isActive: true,
+      };
+
+      this.logger.debug(
+        `[createWarehouseProduct] Создание товара для склада ${productDto.warehouseId}`
+      );
+
+      this.logger.debug(
+        `[createWarehouseProduct] Данные товара: ${JSON.stringify(productDto)}`
+      );
+
+      // Используем сервис для создания товара
+      return this.warehouseProductsService.createWarehouseProduct(productDto);
+    } catch (error) {
+      this.logger.error(
+        `[createWarehouseProduct] Ошибка при создании товара: ${error.message}`,
         error.stack
       );
       throw error;
