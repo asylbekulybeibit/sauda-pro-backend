@@ -16,12 +16,17 @@ import { StaffService } from '../services/staff.service';
 import { CreateStaffInviteDto } from '../dto/staff/create-staff-invite.dto';
 import { InviteStatsDto } from '../dto/staff/invite-stats.dto';
 import { Invite } from '../../invites/entities/invite.entity';
+import { ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { WarehouseService } from '../services/warehouse.service';
 
 @Controller('manager/warehouse')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(RoleType.MANAGER)
 export class WarehouseController {
-  constructor(private readonly staffService: StaffService) {}
+  constructor(
+    private readonly staffService: StaffService,
+    private readonly warehouseService: WarehouseService
+  ) {}
 
   @Get('invites/:warehouseId')
   getInvites(
@@ -76,5 +81,23 @@ export class WarehouseController {
       req.user.id,
       warehouseId
     );
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get warehouse by ID' })
+  @ApiResponse({ status: 200, description: 'Returns warehouse details' })
+  async findOne(@Param('id') id: string) {
+    console.log(
+      '[WarehouseController] Получен запрос на поиск склада с ID:',
+      id
+    );
+    try {
+      const result = await this.warehouseService.findOne(id);
+      console.log('[WarehouseController] Склад успешно найден');
+      return result;
+    } catch (error) {
+      console.error('[WarehouseController] Ошибка при поиске склада:', error);
+      throw error;
+    }
   }
 }

@@ -69,11 +69,6 @@ export class PurchasesService {
       `[createPurchaseTransaction] Creating transaction for product ${item.productId} in purchase ${purchase.id}`
     );
 
-    // Проверяем связь с поставщиком
-    console.log(
-      `[createPurchaseTransaction] Purchase supplierId: ${purchase.supplierId}`
-    );
-
     // Проверяем существование товара
     const warehouseProduct = await this.warehouseProductRepository.findOne({
       where: {
@@ -93,22 +88,20 @@ export class PurchasesService {
       );
     }
 
-    console.log(
-      `[createPurchaseTransaction] Product found: ${warehouseProduct.barcode.productName} (ID: ${warehouseProduct.id})`
-    );
-
     // Строгое преобразование цены в число
     let price = 0;
-
-    // После transform() в DTO, item.price всегда должно быть числом
     if (typeof item.price === 'number' && !isNaN(item.price)) {
       price = item.price;
     }
 
     console.log(
-      `[createPurchaseTransaction] Создаем транзакцию для товара ${
-        warehouseProduct.barcode.productName
-      } с ценой ${price}, исходный тип: ${typeof item.price}`
+      `[createPurchaseTransaction] Processing price for product ${warehouseProduct.barcode.productName}:`,
+      {
+        originalPrice: item.price,
+        originalType: typeof item.price,
+        convertedPrice: price,
+        productId: item.productId,
+      }
     );
 
     // Создаем транзакцию
@@ -127,20 +120,20 @@ export class PurchasesService {
       invoiceNumber: purchase.invoiceNumber || '',
       serialNumber: item.serialNumber || '',
       expiryDate: item.expiryDate,
-      price: price,
+      price: price, // Explicitly set price in metadata too
     };
 
-    // Добавляем supplierId только если он существует
     if (purchase.supplierId) {
       metadata.supplierId = purchase.supplierId;
     }
 
     transaction.metadata = metadata;
 
-    console.log(`[createPurchaseTransaction] Транзакция подготовлена:`, {
+    console.log(`[createPurchaseTransaction] Transaction prepared:`, {
       warehouseProductId: transaction.warehouseProductId,
       quantity: transaction.quantity,
       price: transaction.price,
+      metadataPrice: transaction.metadata.price,
       supplierId: metadata.supplierId,
     });
 
@@ -148,28 +141,49 @@ export class PurchasesService {
     try {
       const savedTransaction =
         await this.transactionRepository.save(transaction);
-      console.log(
-        `[createPurchaseTransaction] Транзакция успешно сохранена с ID: ${savedTransaction.id}`
-      );
+
+      console.log(`[createPurchaseTransaction] Transaction saved:`, {
+        id: savedTransaction.id,
+        price: savedTransaction.price,
+        metadataPrice: savedTransaction.metadata.price,
+        quantity: savedTransaction.quantity,
+      });
+
+      // Verify the saved price
+      if (savedTransaction.price !== price) {
+        console.warn(
+          `[createPurchaseTransaction] WARNING: Saved price ${savedTransaction.price} differs from original ${price}. Attempting to update...`
+        );
+
+        // Try to update the price if it wasn't saved correctly
+        await this.transactionRepository.update(savedTransaction.id, {
+          price: () => `${price}`,
+          metadata: () =>
+            `'${JSON.stringify({
+              ...savedTransaction.metadata,
+              price: price,
+            })}'`,
+        });
+
+        // Verify the update
+        const verifiedTransaction = await this.transactionRepository.findOne({
+          where: { id: savedTransaction.id },
+        });
+
+        console.log(
+          `[createPurchaseTransaction] Price verification after update:`,
+          {
+            id: verifiedTransaction.id,
+            price: verifiedTransaction.price,
+            metadataPrice: verifiedTransaction.metadata.price,
+          }
+        );
+      }
 
       // Обновляем количество товара
       await this.warehouseProductRepository.update(item.productId, {
         quantity: () => `quantity + ${item.quantity}`,
       });
-
-      console.log(
-        `[createPurchaseTransaction] Обновлено количество товара ${item.productId}: +${item.quantity}`
-      );
-
-      // Проверяем, правильно ли сохранилась цена
-      if (savedTransaction.price !== price) {
-        console.warn(
-          `[createPurchaseTransaction] Предупреждение: сохраненная цена ${savedTransaction.price} отличается от исходной ${price}`
-        );
-
-        // Попытка обновить цену, если она не сохранилась правильно
-        await this.transactionRepository.update(savedTransaction.id, { price });
-      }
 
       return savedTransaction;
     } catch (error) {
@@ -639,87 +653,132 @@ export class PurchasesService {
   }
 
   async findOne(id: string, warehouseId: string): Promise<PurchaseWithItems> {
+    console.log('[PurchasesService.findOne] Finding purchase:', {
+      id,
+      warehouseId,
+    });
+
     const purchase = await this.purchaseRepository.findOne({
-      where: { id, warehouseId, isActive: true },
+      where: {
+        id,
+        warehouseId,
+      },
       relations: [
-        'supplier',
         'transactions',
         'transactions.warehouseProduct',
         'transactions.warehouseProduct.barcode',
+        'warehouse',
+        'supplier',
         'createdBy',
       ],
     });
 
     if (!purchase) {
-      throw new NotFoundException('Purchase not found');
-    }
-
-    // Проверка и логирование транзакций
-    if (purchase.transactions.length > 0) {
-      console.log(
-        `Покупка ${purchase.id} содержит ${purchase.transactions.length} транзакций`
-      );
-      purchase.transactions.forEach((t, i) => {
-        console.log(
-          `Транзакция ${i + 1}: id=${t.id}, цена=${t.price}, количество=${
-            t.quantity
-          }, метаданные=${JSON.stringify(t.metadata)}`
-        );
-
-        // Проверяем наличие цены в транзакции
-        if (t.price === null || t.price === undefined) {
-          // Попытка восстановить цену из метаданных
-          if (t.metadata && t.metadata.price) {
-            console.log(
-              `Восстанавливаем цену из метаданных: ${t.metadata.price}`
-            );
-            t.price = t.metadata.price;
-          } else {
-            console.warn(`Транзакция без цены: ${t.id}`);
-          }
-        }
+      console.log('[PurchasesService.findOne] Purchase not found:', {
+        id,
+        warehouseId,
       });
-    } else {
-      console.warn(`Покупка ${purchase.id} не содержит транзакций`);
+      throw new NotFoundException(
+        `Purchase with ID ${id} not found in warehouse ${warehouseId}`
+      );
     }
 
-    // Все покупки имеют статус COMPLETED и используют транзакции
-    const items = purchase.transactions.map((transaction) => {
-      const price =
-        typeof transaction.price === 'number'
-          ? transaction.price
-          : transaction.metadata?.price || 0;
-
-      return {
-        productId: transaction.warehouseProductId,
-        product: {
-          name: transaction.warehouseProduct.barcode.productName,
-        },
-        quantity: transaction.quantity,
-        price: price, // Используем цену из транзакции или метаданных
-        total: transaction.quantity * price, // Правильный расчет суммы
-        serialNumber: transaction.metadata?.serialNumber,
-        expiryDate: transaction.metadata?.expiryDate,
-        comment: transaction.note,
-      };
-    });
-
-    // Пересчитываем общую сумму и количество на основе актуальных данных
-    const totalAmount = items.reduce((sum, item) => sum + (item.total || 0), 0);
-    const totalItems = items.reduce(
-      (sum, item) => sum + (item.quantity || 0),
-      0
+    console.log(
+      '[PurchasesService.findOne] Found purchase with transactions:',
+      purchase.transactions?.length || 0
     );
 
-    const result: PurchaseWithItems = {
-      ...purchase,
-      totalAmount: totalAmount, // Обновляем общую сумму
-      totalItems: totalItems, // Обновляем общее количество
-      items,
-      createdBy: purchase.createdBy,
-    };
+    // Transform transactions into items with the correct interface
+    const items =
+      purchase.transactions?.map((transaction) => {
+        console.log('[PurchasesService.findOne] Processing transaction:', {
+          id: transaction.id,
+          rawPrice: transaction.price,
+          metadataPrice: transaction.metadata?.price,
+          quantity: transaction.quantity,
+        });
 
-    return result;
+        // Get price from transaction or metadata
+        let price = null;
+
+        // Try to get price from transaction first
+        if (
+          typeof transaction.price === 'number' &&
+          !isNaN(transaction.price)
+        ) {
+          price = transaction.price;
+          console.log(
+            '[PurchasesService.findOne] Using transaction price:',
+            price
+          );
+        }
+        // If no transaction price, try metadata price
+        else if (
+          typeof transaction.metadata?.price === 'number' &&
+          !isNaN(transaction.metadata.price)
+        ) {
+          price = transaction.metadata.price;
+          console.log(
+            '[PurchasesService.findOne] Using metadata price:',
+            price
+          );
+        }
+        // If still no price, log warning and use 0
+        else {
+          console.warn(
+            '[PurchasesService.findOne] No valid price found for transaction:',
+            transaction.id
+          );
+          price = 0;
+        }
+
+        const quantity = transaction.quantity || 0;
+        const total = quantity * price;
+
+        console.log('[PurchasesService.findOne] Final values for item:', {
+          productName: transaction.warehouseProduct?.barcode?.productName,
+          price,
+          quantity,
+          total,
+        });
+
+        return {
+          productId: transaction.warehouseProductId,
+          product: {
+            name:
+              transaction.warehouseProduct?.barcode?.productName ||
+              'Unknown Product',
+          },
+          quantity: quantity,
+          price: price,
+          total: total,
+          barcode: transaction.warehouseProduct?.barcode?.code || '—',
+          serialNumber: transaction.metadata?.serialNumber,
+          expiryDate: transaction.metadata?.expiryDate,
+          comment: transaction.note,
+        };
+      }) || [];
+
+    // Calculate total amount
+    const totalAmount = items.reduce((sum, item) => sum + (item.total || 0), 0);
+
+    console.log('[PurchasesService.findOne] Final purchase data:', {
+      itemsCount: items.length,
+      totalAmount,
+      items: items.map((item) => ({
+        productName: item.product.name,
+        price: item.price,
+        quantity: item.quantity,
+        total: item.total,
+      })),
+    });
+
+    // Return purchase with correctly formatted items and total
+    return {
+      ...purchase,
+      items,
+      totalAmount,
+    };
   }
 
   async deletePurchase(

@@ -16,6 +16,7 @@ import { RoleType } from '../../auth/types/role.type';
 import { PurchasesService } from '../services/purchases.service';
 import { CreatePurchaseDto } from '../dto/purchases/create-purchase.dto';
 import { PurchaseWithItems } from '../interfaces/purchase-with-items.interface';
+import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 @Controller('manager/purchases')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -97,11 +98,19 @@ export class PurchasesController {
   }
 
   @Get(':warehouseId/:id')
+  @ApiOperation({ summary: 'Get purchase by ID and warehouse ID' })
+  @ApiResponse({ status: 200, description: 'Returns purchase details' })
   async getPurchase(
     @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req
   ): Promise<PurchaseWithItems> {
+    console.log(
+      '[PurchasesController] Getting purchase by ID:',
+      id,
+      'warehouseId:',
+      warehouseId
+    );
     return this.purchasesService.findOne(id, warehouseId);
   }
 
