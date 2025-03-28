@@ -1,41 +1,4 @@
-import {
-  IsString,
-  IsOptional,
-  IsUUID,
-  IsEmail,
-  ValidateNested,
-  IsArray,
-  IsBoolean,
-} from 'class-validator';
-import { Type } from 'class-transformer';
-
-export class ContactDto {
-  @IsString()
-  name: string;
-
-  @IsString()
-  position: string;
-
-  @IsString()
-  phone: string;
-
-  @IsOptional()
-  @IsEmail()
-  email?: string;
-}
-
-export class PaymentInfoDto {
-  @IsString()
-  type: string;
-
-  @IsOptional()
-  @IsString()
-  bankDetails?: string;
-
-  @IsOptional()
-  @IsString()
-  terms?: string;
-}
+import { IsString, IsOptional, IsUUID, IsEmail } from 'class-validator';
 
 export class CreateSupplierDto {
   @IsString()
@@ -52,7 +15,7 @@ export class CreateSupplierDto {
   @IsOptional()
   phone?: string;
 
-  @IsString()
+  @IsEmail()
   @IsOptional()
   email?: string;
 
@@ -63,27 +26,4 @@ export class CreateSupplierDto {
   @IsString()
   @IsOptional()
   notes?: string;
-
-  @IsOptional()
-  @IsString()
-  description?: string;
-
-  @IsOptional()
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ContactDto)
-  contacts?: ContactDto[];
-
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => PaymentInfoDto)
-  paymentInfo?: PaymentInfoDto;
-
-  @IsUUID()
-  @IsOptional()
-  warehouseId?: string;
-
-  @IsBoolean()
-  @IsOptional()
-  isWarehouseSpecific?: boolean;
 }
