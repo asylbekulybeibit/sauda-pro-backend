@@ -10,6 +10,7 @@ import { CreateCategoryDto } from '../dto/categories/create-category.dto';
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
 import { Logger } from '@nestjs/common';
+import { Barcode } from '../entities/barcode.entity';
 
 @Injectable()
 export class CategoriesService {
@@ -19,7 +20,9 @@ export class CategoriesService {
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>,
     @InjectRepository(UserRole)
-    private readonly userRoleRepository: Repository<UserRole>
+    private readonly userRoleRepository: Repository<UserRole>,
+    @InjectRepository(Barcode)
+    private readonly barcodeRepository: Repository<Barcode>
   ) {}
 
   private async validateManagerAccess(userId: string, shopId: string) {
@@ -193,8 +196,30 @@ export class CategoriesService {
       );
     }
 
-    category.isActive = false;
-    return this.categoryRepository.save(category);
+    try {
+      // Сначала обновляем все штрихкоды, связанные с этой категорией
+      const updateResult = await this.barcodeRepository
+        .createQueryBuilder()
+        .update(Barcode)
+        .set({ categoryId: null })
+        .where('categoryId = :categoryId', { categoryId: id })
+        .execute();
+
+      this.logger.log(
+        `[remove] Обновлено ${updateResult.affected} штрихкодов для категории ${category.name}`
+      );
+
+      // Затем помечаем категорию как неактивную
+      category.isActive = false;
+      await this.categoryRepository.save(category);
+
+      return category;
+    } catch (error) {
+      this.logger.error(
+        `[remove] Ошибка при удалении категории ${category.name}: ${error.message}`
+      );
+      throw error;
+    }
   }
 
   private async isDescendant(
