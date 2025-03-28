@@ -185,62 +185,79 @@ export class WarehouseProductsService {
         );
       }
 
-      // Проверяем, существует ли штрихкод
+      // Проверяем, есть ли баркод у товара
       let barcode;
+      let barcodeId;
+
       if (productDto.barcodeId) {
+        this.logger.debug(
+          `[createWarehouseProduct] Ищем баркод по ID ${productDto.barcodeId}`
+        );
         barcode = await this.barcodeRepository.findOne({
           where: { id: productDto.barcodeId },
         });
-      } else if (productDto.barcode) {
-        // Проверяем формат barcode - может быть объектом или строкой
-        if (typeof productDto.barcode === 'string') {
-          // Если barcode - строка, создаем новый штрихкод с этим кодом
+        if (barcode) {
           this.logger.debug(
-            `[createWarehouseProduct] Создаем новый штрихкод из строки: ${productDto.barcode}`
+            `[createWarehouseProduct] Найден баркод: ${barcode.productName}`
           );
+          barcodeId = barcode.id;
+        }
+      } else if (productDto.barcode) {
+        this.logger.debug(`[createWarehouseProduct] Создаем новый баркод`);
 
+        // Проверяем имя продукта
+        const productName = productDto.name || 'Новый товар';
+        this.logger.debug(
+          `[createWarehouseProduct] Имя продукта: ${productName}`
+        );
+
+        // Создаем новый баркод, НЕ привязывая его к конкретному магазину
+        // Баркоды теперь общие для всех магазинов
+        if (typeof productDto.barcode === 'string') {
+          this.logger.debug(
+            `[createWarehouseProduct] Создаем баркод из строки: ${productDto.barcode}`
+          );
+          // Если barcode - это строка, создаем новый баркод с этим кодом
           const newBarcode = this.barcodeRepository.create({
-            code: productDto.barcode, // Используем строку как код
-            productName: productDto.name || 'Новый товар', // Используем имя из запроса или значение по умолчанию
+            code: productDto.barcode,
+            productName: productName,
             description: productDto.description || '',
             categoryId: productDto.categoryId,
             isService: false,
             isActive: true,
-            shopId: warehouse.shopId,
+            // Не указываем shopId, чтобы баркод был доступен всем
           });
+
           barcode = await this.barcodeRepository.save(newBarcode);
+          barcodeId = barcode.id;
         } else {
-          // Если передан объект штрихкода, создаем новый
+          // Если barcode - это объект, используем его свойства
           this.logger.debug(
-            `[createWarehouseProduct] Создаем новый штрихкод из объекта`
+            `[createWarehouseProduct] Создаем баркод из объекта`
           );
-
           const newBarcode = this.barcodeRepository.create({
-            code: productDto.barcode.code,
-            productName: productDto.barcode.productName,
-            description: productDto.barcode.description,
-            categoryId: productDto.barcode.categoryId,
-            isService: false,
+            ...productDto.barcode,
+            productName: productName,
+            description:
+              productDto.description || productDto.barcode.description || '',
             isActive: true,
-            shopId: warehouse.shopId, // Используем shopId склада
+            // Не указываем shopId, чтобы баркод был доступен всем
           });
-          barcode = await this.barcodeRepository.save(newBarcode);
-        }
 
-        this.logger.debug(
-          `[createWarehouseProduct] Создан новый штрихкод: ${barcode.id}`
-        );
+          barcode = await this.barcodeRepository.save(newBarcode);
+          barcodeId = barcode.id;
+        }
       } else {
         this.logger.error(
-          `[createWarehouseProduct] Не указан штрихкод для товара`
+          `[createWarehouseProduct] Не указан баркод для товара`
         );
-        throw new Error('Не указан штрихкод для товара');
+        throw new Error('Необходимо указать баркод (barcodeId или barcode)');
       }
 
       // Создаем товар склада с правильными полями в соответствии с сущностью
       const warehouseProduct = new WarehouseProduct();
       warehouseProduct.warehouseId = warehouse.id;
-      warehouseProduct.barcodeId = barcode.id;
+      warehouseProduct.barcodeId = barcodeId;
       warehouseProduct.quantity = productDto.quantity || 0;
       warehouseProduct.purchasePrice = productDto.purchasePrice || 0;
       warehouseProduct.sellingPrice = productDto.sellingPrice || 0;
@@ -258,6 +275,45 @@ export class WarehouseProductsService {
     } catch (error) {
       this.logger.error(
         `[createWarehouseProduct] Ошибка при создании товара: ${error.message}`,
+        error.stack
+      );
+      throw error;
+    }
+  }
+
+  // Метод для получения товара по ID
+  async getWarehouseProductById(id: string): Promise<WarehouseProduct> {
+    this.logger.log(`[getWarehouseProductById] Получение товара с ID ${id}`);
+
+    try {
+      const product = await this.warehouseProductRepository.findOne({
+        where: { id },
+        relations: ['barcode', 'warehouse'],
+      });
+
+      if (!product) {
+        this.logger.error(
+          `[getWarehouseProductById] Товар с ID ${id} не найден`
+        );
+        throw new NotFoundException(`Товар с ID ${id} не найден`);
+      }
+
+      this.logger.debug(
+        `[getWarehouseProductById] Товар найден: ${JSON.stringify({
+          id: product.id,
+          barcode: product.barcode
+            ? {
+                id: product.barcode.id,
+                productName: product.barcode.productName,
+              }
+            : null,
+        })}`
+      );
+
+      return product;
+    } catch (error) {
+      this.logger.error(
+        `[getWarehouseProductById] Ошибка при получении товара: ${error.message}`,
         error.stack
       );
       throw error;

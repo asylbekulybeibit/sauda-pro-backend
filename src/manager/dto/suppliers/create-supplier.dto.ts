@@ -41,25 +41,32 @@ export class CreateSupplierDto {
   @IsString()
   name: string;
 
-  @IsOptional()
+  @IsUUID()
+  shopId: string;
+
   @IsString()
+  @IsOptional()
   contactPerson?: string;
+
+  @IsString()
+  @IsOptional()
+  phone?: string;
+
+  @IsString()
+  @IsOptional()
+  email?: string;
+
+  @IsString()
+  @IsOptional()
+  address?: string;
+
+  @IsString()
+  @IsOptional()
+  notes?: string;
 
   @IsOptional()
   @IsString()
   description?: string;
-
-  @IsOptional()
-  @IsString()
-  phone?: string;
-
-  @IsOptional()
-  @IsEmail()
-  email?: string;
-
-  @IsOptional()
-  @IsString()
-  address?: string;
 
   @IsOptional()
   @IsArray()

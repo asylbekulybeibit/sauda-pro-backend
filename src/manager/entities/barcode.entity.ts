@@ -27,22 +27,19 @@ export class Barcode {
   description: string;
 
   @Column({ nullable: true })
-  categoryId: string;
-
-  @Column({ nullable: true })
   shopId: string;
 
   @Column({ default: false })
   isService: boolean;
 
   @Column({ nullable: true })
-  duration: number; // Длительность услуги в минутах (только для сервисов)
+  categoryId: string;
 
-  @ManyToOne(() => Shop, { nullable: true })
+  @ManyToOne(() => Shop)
   @JoinColumn({ name: 'shopId' })
   shop: Shop;
 
-  @ManyToOne(() => Category, { nullable: true })
+  @ManyToOne(() => Category)
   @JoinColumn({ name: 'categoryId' })
   category: Category;
 

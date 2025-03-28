@@ -425,7 +425,7 @@ export class InventoryService {
             supplierInfo = {
               id: supplier.id,
               name: supplier.name,
-              contactName: supplier.contactName || supplier.contactPerson,
+              contactPerson: supplier.contactPerson,
               phone: supplier.phone,
             };
           }

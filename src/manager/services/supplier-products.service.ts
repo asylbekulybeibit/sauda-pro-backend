@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -15,157 +16,132 @@ import { SupplierProductDto } from '../dto/suppliers/supplier-product.dto';
 
 @Injectable()
 export class SupplierProductsService {
+  private readonly logger = new Logger(SupplierProductsService.name);
+
   constructor(
     @InjectRepository(SupplierProduct)
-    private supplierProductRepository: Repository<SupplierProduct>,
+    private readonly supplierProductRepository: Repository<SupplierProduct>,
     @InjectRepository(Barcode)
-    private barcodeRepository: Repository<Barcode>,
+    private readonly barcodeRepository: Repository<Barcode>,
     @InjectRepository(Supplier)
-    private supplierRepository: Repository<Supplier>,
+    private readonly supplierRepository: Repository<Supplier>,
     @InjectRepository(UserRole)
-    private userRoleRepository: Repository<UserRole>
+    private readonly userRoleRepository: Repository<UserRole>
   ) {}
 
   private async validateManagerAccess(
     userId: string,
-    warehouseId: string
+    shopId: string
   ): Promise<void> {
     const hasAccess = await this.userRoleRepository.findOne({
-      where: { userId, warehouseId, type: RoleType.MANAGER, isActive: true },
+      where: { userId, shopId, type: RoleType.MANAGER, isActive: true },
     });
 
     if (!hasAccess) {
-      throw new ForbiddenException('No access to this warehouse');
+      throw new ForbiddenException('У вас нет доступа к этому магазину');
     }
   }
 
   async getSupplierProducts(
-    userId: string,
     supplierId: string,
-    warehouseId: string
-  ): Promise<any[]> {
-    await this.validateManagerAccess(userId, warehouseId);
+    shopId: string
+  ): Promise<SupplierProduct[]> {
+    this.logger.log(
+      `[getSupplierProducts] Получение товаров поставщика ${supplierId} для магазина ${shopId}`
+    );
 
-    // Проверяем, существует ли поставщик
+    await this.validateManagerAccess(supplierId, shopId);
+
+    // Проверяем существование поставщика
     const supplier = await this.supplierRepository.findOne({
-      where: { id: supplierId, warehouseId, isActive: true },
+      where: { id: supplierId, shopId, isActive: true },
     });
 
     if (!supplier) {
-      throw new NotFoundException('Supplier not found');
+      throw new NotFoundException('Поставщик не найден');
     }
 
-    // Получаем связи поставщик-товар
-    const supplierProducts = await this.supplierProductRepository.find({
+    // Получаем все товары поставщика
+    return this.supplierProductRepository.find({
       where: { supplierId },
       relations: ['barcode'],
     });
-
-    // Извлекаем товары из связей
-    const products = supplierProducts.map((sp) => {
-      const barcode = sp.barcode;
-      // Добавляем цену и минимальный заказ от поставщика к товару
-      // Убедимся, что цена - это число
-      const price =
-        typeof sp.price === 'string'
-          ? parseFloat(sp.price)
-          : typeof sp.price === 'number'
-          ? sp.price
-          : 0;
-
-      return {
-        ...barcode,
-        price: price,
-        minimumOrder: sp.minimumOrder,
-      };
-    });
-
-    return products;
   }
 
   async addProductToSupplier(
-    userId: string,
     supplierId: string,
     barcodeId: string,
-    warehouseId: string,
-    data: { price: number; minimumOrder?: number }
+    data: { price: number; minimumOrder?: number },
+    shopId: string
   ): Promise<SupplierProduct> {
-    await this.validateManagerAccess(userId, warehouseId);
+    this.logger.log(
+      `[addProductToSupplier] Добавление товара ${barcodeId} поставщику ${supplierId} для магазина ${shopId}`
+    );
 
-    // Проверяем, существует ли поставщик
+    await this.validateManagerAccess(supplierId, shopId);
+
+    // Проверяем существование поставщика
     const supplier = await this.supplierRepository.findOne({
-      where: { id: supplierId, warehouseId, isActive: true },
+      where: { id: supplierId, shopId, isActive: true },
     });
 
     if (!supplier) {
-      throw new NotFoundException('Supplier not found');
+      throw new NotFoundException('Поставщик не найден');
     }
 
-    // Проверяем, существует ли товар
+    // Проверяем существование товара
     const barcode = await this.barcodeRepository.findOne({
-      where: { id: barcodeId, isActive: true },
+      where: { id: barcodeId },
     });
 
     if (!barcode) {
-      throw new NotFoundException('Product not found');
+      throw new NotFoundException('Товар не найден');
     }
 
-    // Проверяем, не добавлен ли уже этот товар к поставщику
-    const existingRelation = await this.supplierProductRepository.findOne({
+    // Создаем или обновляем связь поставщика с товаром
+    let supplierProduct = await this.supplierProductRepository.findOne({
       where: { supplierId, barcodeId },
     });
 
-    if (existingRelation) {
-      throw new BadRequestException('Product already added to this supplier');
+    if (supplierProduct) {
+      // Обновляем существующую связь
+      Object.assign(supplierProduct, data);
+    } else {
+      // Создаем новую связь
+      supplierProduct = this.supplierProductRepository.create({
+        supplierId,
+        barcodeId,
+        ...data,
+      });
     }
-
-    // Создаем связь поставщик-товар
-    const supplierProduct = this.supplierProductRepository.create({
-      supplierId,
-      barcodeId,
-      price: data.price,
-      minimumOrder: data.minimumOrder,
-    });
 
     return this.supplierProductRepository.save(supplierProduct);
   }
 
   async removeProductFromSupplier(
-    userId: string,
     supplierId: string,
     barcodeId: string,
-    warehouseId: string
+    shopId: string
   ): Promise<void> {
-    await this.validateManagerAccess(userId, warehouseId);
+    this.logger.log(
+      `[removeProductFromSupplier] Удаление товара ${barcodeId} у поставщика ${supplierId} для магазина ${shopId}`
+    );
 
-    // Проверяем, существует ли поставщик
+    await this.validateManagerAccess(supplierId, shopId);
+
+    // Проверяем существование поставщика
     const supplier = await this.supplierRepository.findOne({
-      where: { id: supplierId, warehouseId, isActive: true },
+      where: { id: supplierId, shopId, isActive: true },
     });
 
     if (!supplier) {
-      throw new NotFoundException('Supplier not found');
+      throw new NotFoundException('Поставщик не найден');
     }
 
-    // Проверяем, существует ли товар
-    const barcode = await this.barcodeRepository.findOne({
-      where: { id: barcodeId, isActive: true },
+    // Удаляем связь поставщика с товаром
+    await this.supplierProductRepository.delete({
+      supplierId,
+      barcodeId,
     });
-
-    if (!barcode) {
-      throw new NotFoundException('Product not found');
-    }
-
-    // Проверяем, существует ли связь поставщик-товар
-    const supplierProduct = await this.supplierProductRepository.findOne({
-      where: { supplierId, barcodeId },
-    });
-
-    if (!supplierProduct) {
-      throw new NotFoundException('Product not found for this supplier');
-    }
-
-    // Удаляем связь поставщик-товар
-    await this.supplierProductRepository.remove(supplierProduct);
   }
 }

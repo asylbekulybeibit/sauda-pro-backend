@@ -82,7 +82,22 @@ export class ProductsController {
       );
 
       // Используем сервис для создания товара
-      return this.warehouseProductsService.createWarehouseProduct(productDto);
+      const createdProduct =
+        await this.warehouseProductsService.createWarehouseProduct(productDto);
+
+      // Загружаем полную информацию о товаре с штрихкодом
+      const productWithBarcode =
+        await this.warehouseProductsService.getWarehouseProductById(
+          createdProduct.id
+        );
+
+      this.logger.debug(
+        `[createProduct] Товар успешно создан: ${JSON.stringify(
+          productWithBarcode
+        )}`
+      );
+
+      return productWithBarcode;
     } catch (error) {
       this.logger.error(
         `[createProduct] Ошибка при создании товара: ${error.message}`,

@@ -39,7 +39,7 @@ export class Warehouse {
   @Column({ type: 'uuid', nullable: true })
   shopId: string;
 
-  @ManyToOne(() => Shop)
+  @ManyToOne(() => Shop, (shop) => shop.warehouses)
   @JoinColumn({ name: 'shopId' })
   shop: Shop;
 

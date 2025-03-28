@@ -18,7 +18,7 @@ import { SupplierProductsService } from '../services/supplier-products.service';
 import { Barcode } from '../entities/barcode.entity';
 import { SupplierProduct } from '../entities/supplier-product.entity';
 
-@Controller('manager/:warehouseId/suppliers')
+@Controller('manager/shop/:shopId/suppliers')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(RoleType.MANAGER)
 export class SupplierProductsController {
@@ -30,13 +30,9 @@ export class SupplierProductsController {
   getSupplierProducts(
     @Request() req,
     @Param('supplierId', ParseUUIDPipe) supplierId: string,
-    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
+    @Param('shopId', ParseUUIDPipe) shopId: string
   ): Promise<any[]> {
-    return this.supplierProductsService.getSupplierProducts(
-      req.user.id,
-      supplierId,
-      warehouseId
-    );
+    return this.supplierProductsService.getSupplierProducts(supplierId, shopId);
   }
 
   @Post(':supplierId/products/:barcodeId')
@@ -44,15 +40,14 @@ export class SupplierProductsController {
     @Request() req,
     @Param('supplierId', ParseUUIDPipe) supplierId: string,
     @Param('barcodeId', ParseUUIDPipe) barcodeId: string,
-    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
+    @Param('shopId', ParseUUIDPipe) shopId: string,
     @Body() data: { price: number; minimumOrder?: number }
   ): Promise<SupplierProduct> {
     return this.supplierProductsService.addProductToSupplier(
-      req.user.id,
       supplierId,
       barcodeId,
-      warehouseId,
-      data
+      data,
+      shopId
     );
   }
 
@@ -61,13 +56,12 @@ export class SupplierProductsController {
     @Request() req,
     @Param('supplierId', ParseUUIDPipe) supplierId: string,
     @Param('barcodeId', ParseUUIDPipe) barcodeId: string,
-    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
+    @Param('shopId', ParseUUIDPipe) shopId: string
   ): Promise<void> {
     return this.supplierProductsService.removeProductFromSupplier(
-      req.user.id,
       supplierId,
       barcodeId,
-      warehouseId
+      shopId
     );
   }
 }

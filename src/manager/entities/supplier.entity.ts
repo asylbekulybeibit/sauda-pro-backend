@@ -7,9 +7,9 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { Warehouse } from './warehouse.entity';
+import { Shop } from '../../shops/entities/shop.entity';
 
-@Entity()
+@Entity('suppliers')
 export class Supplier {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -17,33 +17,30 @@ export class Supplier {
   @Column()
   name: string;
 
+  @Column({ nullable: true })
+  contactPerson: string;
+
+  @Column({ nullable: true })
+  phone: string;
+
+  @Column({ nullable: true })
+  email: string;
+
+  @Column({ nullable: true })
+  address: string;
+
+  @Column({ type: 'text', nullable: true })
+  notes: string;
+
   @Column()
-  warehouseId: string;
+  shopId: string;
 
-  @ManyToOne(() => Warehouse)
-  @JoinColumn({ name: 'warehouseId' })
-  warehouse: Warehouse;
-
-  @Column({ default: false })
-  isGlobal: boolean;
+  @ManyToOne(() => Shop)
+  @JoinColumn({ name: 'shopId' })
+  shop: Shop;
 
   @Column({ default: true })
   isActive: boolean;
-
-  @Column({ nullable: true })
-  contactName?: string;
-
-  @Column({ nullable: true })
-  contactPerson?: string;
-
-  @Column({ nullable: true })
-  address?: string;
-
-  @Column({ nullable: true })
-  phone?: string;
-
-  @Column({ nullable: true })
-  email?: string;
 
   @CreateDateColumn()
   createdAt: Date;

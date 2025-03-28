@@ -42,7 +42,7 @@ export class ManagerService {
     }
   }
 
-  private async validateManagerAccessToShop(
+  async validateManagerAccessToShop(
     userId: string,
     shopId: string
   ): Promise<void> {
@@ -156,14 +156,14 @@ export class ManagerService {
       `[getBarcodes] Получение баркодов для магазина ${shopId}, isService=${isService}`
     );
 
-    // Получаем баркоды фильтруя по shopId и isService
-    // Так как баркоды общие для всего магазина, фильтруем только по shopId и isService
+    // Получаем баркоды только для указанного магазина
     return this.barcodeRepository.find({
       where: {
         shopId,
         isService,
         isActive: true,
       },
+      relations: ['category'],
       order: { productName: 'ASC' },
     });
   }

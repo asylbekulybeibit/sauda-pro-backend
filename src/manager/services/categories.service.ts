@@ -9,9 +9,12 @@ import { Category } from '../entities/category.entity';
 import { CreateCategoryDto } from '../dto/categories/create-category.dto';
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class CategoriesService {
+  private readonly logger = new Logger(CategoriesService.name);
+
   constructor(
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>,
@@ -20,7 +23,7 @@ export class CategoriesService {
   ) {}
 
   private async validateManagerAccess(userId: string, shopId: string) {
-    // Сначала проверяем, существует ли роль менеджера магазина
+    // Проверяем роль менеджера магазина
     const shopManagerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
@@ -30,35 +33,20 @@ export class CategoriesService {
       },
     });
 
-    if (shopManagerRole) {
-      return; // У пользователя есть прямой доступ к магазину
+    if (!shopManagerRole) {
+      throw new ForbiddenException(
+        'У вас нет прав для управления этим магазином'
+      );
     }
-
-    // Если нет прямой роли для магазина, ищем роль менеджера склада в этом магазине
-    const warehouseManagerRole = await this.userRoleRepository.findOne({
-      where: {
-        userId,
-        type: RoleType.MANAGER,
-        isActive: true,
-      },
-      relations: ['warehouse'],
-    });
-
-    if (
-      warehouseManagerRole &&
-      warehouseManagerRole.warehouse &&
-      warehouseManagerRole.warehouse.shopId === shopId
-    ) {
-      return; // У пользователя есть доступ к складу этого магазина
-    }
-
-    throw new ForbiddenException(
-      'У вас нет прав для управления этим магазином'
-    );
   }
 
   async create(createCategoryDto: CreateCategoryDto, userId: string) {
+    // Проверяем доступ менеджера к магазину
     await this.validateManagerAccess(userId, createCategoryDto.shopId);
+
+    this.logger.log(
+      `[create] Создание новой категории: ${createCategoryDto.name} для магазина ${createCategoryDto.shopId}`
+    );
 
     // Если указана родительская категория, проверяем её существование и принадлежность к тому же магазину
     if (createCategoryDto.parentId) {
@@ -77,13 +65,24 @@ export class CategoriesService {
       }
     }
 
-    const category = this.categoryRepository.create(createCategoryDto);
+    // Создаем категорию с привязкой к конкретному магазину
+    const category = this.categoryRepository.create({
+      ...createCategoryDto,
+      isActive: true,
+    });
+
     return this.categoryRepository.save(category);
   }
 
   async findByShop(shopId: string, userId: string) {
+    // Проверяем доступ менеджера
     await this.validateManagerAccess(userId, shopId);
 
+    this.logger.log(
+      `[findByShop] Получение категорий для магазина ${shopId}, userId=${userId}`
+    );
+
+    // Возвращаем категории с фильтрацией по shopId
     return this.categoryRepository.find({
       where: {
         shopId,
@@ -96,32 +95,31 @@ export class CategoriesService {
     });
   }
 
-  async findAll(userId: string) {
-    const managerRole = await this.userRoleRepository.findOne({
-      where: {
-        userId,
-        type: RoleType.MANAGER,
-        isActive: true,
-      },
-    });
+  async findAll(userId: string, shopId: string) {
+    // Проверяем доступ менеджера
+    await this.validateManagerAccess(userId, shopId);
 
-    if (!managerRole) {
-      throw new ForbiddenException('У вас нет прав менеджера');
-    }
+    this.logger.log(
+      `[findAll] Получение всех категорий для магазина ${shopId}`
+    );
 
+    // Возвращаем категории только для определенного магазина
     return this.categoryRepository.find({
       where: {
-        shopId: managerRole.shopId,
+        shopId,
         isActive: true,
       },
       relations: ['parent', 'children'],
+      order: {
+        name: 'ASC',
+      },
     });
   }
 
   async findOne(id: string, userId: string) {
     const category = await this.categoryRepository.findOne({
       where: { id },
-      relations: ['parent', 'children', 'barcodes'],
+      relations: ['parent', 'children'],
     });
 
     if (!category) {

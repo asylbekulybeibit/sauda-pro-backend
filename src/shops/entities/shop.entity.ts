@@ -4,8 +4,9 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  OneToMany,
 } from 'typeorm';
-
+import { Warehouse } from '../../manager/entities/warehouse.entity';
 @Entity('shops')
 export class Shop {
   @PrimaryGeneratedColumn('uuid')
@@ -31,4 +32,7 @@ export class Shop {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @OneToMany(() => Warehouse, (warehouse) => warehouse.shop)
+  warehouses: Warehouse[];
 }

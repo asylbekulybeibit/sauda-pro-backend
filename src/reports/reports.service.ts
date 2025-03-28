@@ -353,10 +353,24 @@ export class ReportsService {
     // Получаем shopId для работы с категориями
     const shopId = await this.getShopIdByWarehouseId(report.warehouseId);
 
+    // Получаем все категории магазина
     const categories = await this.categoryRepository.find({
       where: { shopId: shopId },
-      relations: ['barcodes'],
     });
+
+    // Получаем все баркоды для подсчета количества в каждой категории
+    const barcodes = await this.barcodeRepository.find({
+      where: { shopId: shopId },
+      select: ['id', 'categoryId'],
+    });
+
+    // Подсчитываем количество баркодов для каждой категории
+    const barcodesCountByCategory = barcodes.reduce((acc, barcode) => {
+      if (barcode.categoryId) {
+        acc[barcode.categoryId] = (acc[barcode.categoryId] || 0) + 1;
+      }
+      return acc;
+    }, {});
 
     const transactions = await this.transactionRepository.find({
       where: {
@@ -380,7 +394,7 @@ export class ReportsService {
     categories.forEach((category) => {
       categoryStats[category.id] = {
         name: category.name || 'Без названия',
-        productCount: category.barcodes?.length || 0,
+        productCount: barcodesCountByCategory[category.id] || 0,
         totalSales: 0,
         totalQuantity: 0,
       };
@@ -400,8 +414,8 @@ export class ReportsService {
     return {
       summary: {
         totalCategories: categories.length,
-        totalProducts: categories.reduce(
-          (sum, c) => sum + (c.barcodes?.length || 0),
+        totalProducts: Object.values(barcodesCountByCategory).reduce(
+          (sum: number, count: number) => sum + count,
           0
         ),
         topCategory: Object.values(categoryStats).reduce((top, curr) =>

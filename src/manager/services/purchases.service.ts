@@ -434,7 +434,7 @@ export class PurchasesService {
             oldPrice: oldPurchasePrice,
             newPrice: itemPrice,
             reason: 'Обновление через приход',
-            productId: warehouseProduct.id,
+            warehouseProductId: warehouseProduct.id,
             changedById: createPurchaseDto.createdById || 'system',
             priceType: PriceType.PURCHASE,
           });
@@ -485,7 +485,7 @@ export class PurchasesService {
             oldPrice: oldSellingPrice,
             newPrice: newSellingPrice,
             reason: 'Обновление через приход',
-            productId: warehouseProduct.id,
+            warehouseProductId: warehouseProduct.id,
             changedById: createPurchaseDto.createdById || 'system',
             priceType: PriceType.SELLING,
           });

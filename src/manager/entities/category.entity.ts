@@ -8,7 +8,6 @@ import {
   UpdateDateColumn,
   JoinColumn,
 } from 'typeorm';
-import { Barcode } from './barcode.entity';
 import { Shop } from '../../shops/entities/shop.entity';
 
 @Entity()
@@ -40,9 +39,6 @@ export class Category {
 
   @OneToMany(() => Category, (category) => category.parent)
   children: Category[];
-
-  @OneToMany(() => Barcode, (barcode) => barcode.category)
-  barcodes: Barcode[];
 
   @CreateDateColumn()
   createdAt: Date;

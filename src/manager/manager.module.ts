@@ -92,6 +92,9 @@ import { ReceiptActionsService } from './services/receipt-actions.service';
 // Добавляем User для CashierService
 import { User } from '../users/entities/user.entity';
 
+// Новый импорт для контроллера баркодов
+import { BarcodesController } from './controllers/barcodes.controller';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -162,6 +165,7 @@ import { User } from '../users/entities/user.entity';
     WarehouseServicesController,
     WarehouseProductsController,
     ProductsController,
+    BarcodesController,
   ],
   providers: [
     ManagerService,
