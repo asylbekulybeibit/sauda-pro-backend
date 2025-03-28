@@ -117,7 +117,7 @@ export class PurchasesService {
     transaction.warehouseProductId = item.productId;
     transaction.type = TransactionType.PURCHASE;
     transaction.quantity = item.quantity;
-    transaction.price = price; // Используем обработанную цену
+    transaction.price = price;
     transaction.note = item.comment;
     transaction.createdById = userId;
     transaction.purchaseId = purchase.id;
@@ -127,7 +127,7 @@ export class PurchasesService {
       invoiceNumber: purchase.invoiceNumber || '',
       serialNumber: item.serialNumber || '',
       expiryDate: item.expiryDate,
-      price: price, // Дублируем обработанную цену в метаданных
+      price: price,
     };
 
     // Добавляем supplierId только если он существует
@@ -150,6 +150,15 @@ export class PurchasesService {
         await this.transactionRepository.save(transaction);
       console.log(
         `[createPurchaseTransaction] Транзакция успешно сохранена с ID: ${savedTransaction.id}`
+      );
+
+      // Обновляем количество товара
+      await this.warehouseProductRepository.update(item.productId, {
+        quantity: () => `quantity + ${item.quantity}`,
+      });
+
+      console.log(
+        `[createPurchaseTransaction] Обновлено количество товара ${item.productId}: +${item.quantity}`
       );
 
       // Проверяем, правильно ли сохранилась цена
