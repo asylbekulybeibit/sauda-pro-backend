@@ -5,6 +5,7 @@ import {
   ManyToOne,
   CreateDateColumn,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { Service } from './service.entity';
 import { Staff } from './staff.entity';
@@ -12,6 +13,9 @@ import { Shop } from '../../shops/entities/shop.entity';
 import { Warehouse } from './warehouse.entity';
 
 @Entity('service_staff')
+@Index(['warehouseId', 'staffId'])
+@Index(['shopId', 'staffId'])
+@Index(['serviceId', 'staffId'])
 export class ServiceStaff {
   @PrimaryGeneratedColumn('uuid')
   id: string;

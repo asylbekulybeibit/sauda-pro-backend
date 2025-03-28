@@ -7,11 +7,14 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { Shop } from '../../shops/entities/shop.entity';
 import { Warehouse } from './warehouse.entity';
 
 @Entity('staff')
+@Index(['warehouseId', 'isActive'])
+@Index(['shopId', 'isActive'])
 export class Staff {
   @PrimaryGeneratedColumn('uuid')
   id: string;

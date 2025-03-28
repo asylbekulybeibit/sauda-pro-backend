@@ -14,6 +14,13 @@ import { PriceHistory } from './entities/price-history.entity';
 import { Promotion } from './entities/promotion.entity';
 import { LabelTemplate } from './entities/label-template.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { CashRegister } from './entities/cash-register.entity';
+import { RegisterPaymentMethod } from './entities/register-payment-method.entity';
+import { PaymentMethodTransaction } from './entities/payment-method-transaction.entity';
+import { Staff } from './entities/staff.entity';
+import { Invite } from '../invites/entities/invite.entity';
+import { ServiceStaff } from './entities/service-staff.entity';
+import { Service } from './entities/service.entity';
 
 import { WarehouseProductsController } from './controllers/warehouse-products.controller';
 import { CategoriesController } from './controllers/categories.controller';
@@ -24,6 +31,10 @@ import { InventoryController } from './controllers/inventory.controller';
 import { LabelsController } from './controllers/labels.controller';
 import { PriceHistoryController } from './controllers/price-history.controller';
 import { PromotionsController } from './controllers/promotions.controller';
+import { CashRegistersController } from './controllers/cash-registers.controller';
+import { PaymentMethodsController } from './controllers/payment-methods.controller';
+import { StaffController } from './controllers/staff.controller';
+import { EmployeeController } from './controllers/employee.controller';
 
 import { WarehouseProductsService } from './services/warehouse-products.service';
 import { CategoriesService } from './services/categories.service';
@@ -33,6 +44,11 @@ import { InventoryService } from './services/inventory.service';
 import { LabelsService } from './services/labels.service';
 import { PriceHistoryService } from './services/price-history.service';
 import { PromotionsService } from './services/promotions.service';
+import { CashRegistersService } from './services/cash-registers.service';
+import { PaymentMethodTransactionsService } from './services/payment-method-transactions.service';
+import { StaffService } from './services/staff.service';
+import { EmployeeService } from './services/employee.service';
+import { ServiceStaffService } from './services/service-staff.service';
 
 @Module({
   imports: [
@@ -48,6 +64,13 @@ import { PromotionsService } from './services/promotions.service';
       LabelTemplate,
       PriceHistory,
       Promotion,
+      CashRegister,
+      RegisterPaymentMethod,
+      PaymentMethodTransaction,
+      Staff,
+      Invite,
+      ServiceStaff,
+      Service,
     ]),
     NotificationsModule,
   ],
@@ -62,6 +85,10 @@ import { PromotionsService } from './services/promotions.service';
     LabelsController,
     PriceHistoryController,
     PromotionsController,
+    CashRegistersController,
+    PaymentMethodsController,
+    StaffController,
+    EmployeeController,
   ],
   providers: [
     ManagerService,
@@ -73,6 +100,11 @@ import { PromotionsService } from './services/promotions.service';
     LabelsService,
     PriceHistoryService,
     PromotionsService,
+    CashRegistersService,
+    PaymentMethodTransactionsService,
+    StaffService,
+    EmployeeService,
+    ServiceStaffService,
   ],
   exports: [ManagerService],
 })
