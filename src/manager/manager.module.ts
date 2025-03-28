@@ -21,6 +21,8 @@ import { Staff } from './entities/staff.entity';
 import { Invite } from '../invites/entities/invite.entity';
 import { ServiceStaff } from './entities/service-staff.entity';
 import { Service } from './entities/service.entity';
+import { Client } from './entities/client.entity';
+import { Vehicle } from './entities/vehicle.entity';
 
 import { WarehouseProductsController } from './controllers/warehouse-products.controller';
 import { CategoriesController } from './controllers/categories.controller';
@@ -35,6 +37,8 @@ import { CashRegistersController } from './controllers/cash-registers.controller
 import { PaymentMethodsController } from './controllers/payment-methods.controller';
 import { StaffController } from './controllers/staff.controller';
 import { EmployeeController } from './controllers/employee.controller';
+import { ClientController } from './controllers/client.controller';
+import { VehicleController } from './controllers/vehicle.controller';
 
 import { WarehouseProductsService } from './services/warehouse-products.service';
 import { CategoriesService } from './services/categories.service';
@@ -49,6 +53,8 @@ import { PaymentMethodTransactionsService } from './services/payment-method-tran
 import { StaffService } from './services/staff.service';
 import { EmployeeService } from './services/employee.service';
 import { ServiceStaffService } from './services/service-staff.service';
+import { ClientService } from './services/client.service';
+import { VehicleService } from './services/vehicle.service';
 
 @Module({
   imports: [
@@ -71,6 +77,8 @@ import { ServiceStaffService } from './services/service-staff.service';
       Invite,
       ServiceStaff,
       Service,
+      Client,
+      Vehicle,
     ]),
     NotificationsModule,
   ],
@@ -89,6 +97,8 @@ import { ServiceStaffService } from './services/service-staff.service';
     PaymentMethodsController,
     StaffController,
     EmployeeController,
+    ClientController,
+    VehicleController,
   ],
   providers: [
     ManagerService,
@@ -105,6 +115,8 @@ import { ServiceStaffService } from './services/service-staff.service';
     StaffService,
     EmployeeService,
     ServiceStaffService,
+    ClientService,
+    VehicleService,
   ],
   exports: [ManagerService],
 })
