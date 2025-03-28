@@ -69,11 +69,9 @@ export class InventoryController {
     purchaseDto.warehouseId = inventoryPurchaseDto.warehouseId;
     purchaseDto.supplierId = inventoryPurchaseDto.supplierId;
     purchaseDto.invoiceNumber = inventoryPurchaseDto.invoiceNumber;
-    purchaseDto.date = inventoryPurchaseDto.date;
+    purchaseDto.date = inventoryPurchaseDto.date.toISOString();
     purchaseDto.comment = inventoryPurchaseDto.comment;
-    purchaseDto.updatePrices = inventoryPurchaseDto.updatePrices;
-    purchaseDto.updatePurchasePrices =
-      inventoryPurchaseDto.updatePurchasePrices;
+    purchaseDto.updatePurchasePrices = true; // Всегда обновляем закупочные цены при создании прихода через инвентаризацию
     purchaseDto.createLabels = inventoryPurchaseDto.createLabels;
 
     // Преобразуем элементы со старого формата (warehouseProductId) в новый (productId)

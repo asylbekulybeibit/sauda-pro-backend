@@ -250,7 +250,7 @@ export class PurchasesService {
     purchase.warehouseId = createPurchaseDto.warehouseId;
     purchase.supplierId = createPurchaseDto.supplierId || null;
     purchase.invoiceNumber = createPurchaseDto.invoiceNumber || '';
-    purchase.date = createPurchaseDto.date;
+    purchase.date = new Date(createPurchaseDto.date);
     purchase.comment = createPurchaseDto.comment;
     purchase.createdById = userId;
     purchase.status = PurchaseStatus.COMPLETED; // Все новые приходы имеют статус COMPLETED
@@ -336,10 +336,7 @@ export class PurchasesService {
     }
 
     // Обновляем цены товаров, если нужно
-    if (
-      createPurchaseDto.updatePrices ||
-      createPurchaseDto.updatePurchasePrices
-    ) {
+    if (createPurchaseDto.updatePurchasePrices) {
       await this.updateProductPrices(createPurchaseDto);
     }
 
@@ -362,32 +359,11 @@ export class PurchasesService {
   ): Promise<void> {
     console.log(`[updateProductPrices] Начинаем обновление цен товаров`);
     console.log(
-      `[updateProductPrices] Параметр updatePrices: ${createPurchaseDto.updatePrices}`
-    );
-    console.log(
       `[updateProductPrices] Параметр updatePurchasePrices: ${createPurchaseDto.updatePurchasePrices}`
     );
     console.log(
       `[updateProductPrices] Всего товаров для обработки: ${createPurchaseDto.items.length}`
     );
-
-    // Получаем наценку и тип наценки из DTO или используем значения по умолчанию
-    const markupValue =
-      createPurchaseDto.markup !== undefined ? createPurchaseDto.markup : 30; // По умолчанию 30
-    const markupType = createPurchaseDto.markupType || 'percentage'; // По умолчанию процентная наценка
-
-    if (markupType === 'percentage') {
-      // Для процентной наценки преобразуем проценты в множитель (30% -> 1.3)
-      const markup = 1 + markupValue / 100;
-      console.log(
-        `[updateProductPrices] Используется процентная наценка: ${markupValue}% (множитель ${markup})`
-      );
-    } else {
-      // Для фиксированной наценки просто выводим значение
-      console.log(
-        `[updateProductPrices] Используется фиксированная наценка: ${markupValue}`
-      );
-    }
 
     let updatedCount = 0;
     let skippedCount = 0;
@@ -412,9 +388,6 @@ export class PurchasesService {
         );
         console.log(
           `[updateProductPrices] Текущая закупочная цена: ${warehouseProduct.purchasePrice}`
-        );
-        console.log(
-          `[updateProductPrices] Текущая цена продажи: ${warehouseProduct.sellingPrice}`
         );
 
         // Получаем числовое представление цены
@@ -466,57 +439,6 @@ export class PurchasesService {
         } else {
           console.log(
             `[updateProductPrices] Пропускаем обновление закупочной цены (флаг выключен)`
-          );
-        }
-
-        // Обновляем цену продажи, если нужно
-        if (createPurchaseDto.updatePrices) {
-          console.log(
-            `[updateProductPrices] Обновляем цену продажи для товара ${warehouseProduct.barcode.productName}`
-          );
-          console.log(
-            `[updateProductPrices] Старая цена продажи: ${warehouseProduct.sellingPrice}`
-          );
-
-          // Сохраняем старую цену
-          const oldSellingPrice = warehouseProduct.sellingPrice;
-
-          // Рассчитываем новую цену продажи в зависимости от типа наценки
-          let newSellingPrice: number;
-          if (markupType === 'percentage') {
-            // Для процентной наценки: закупочная * (1 + процент/100)
-            const markup = 1 + markupValue / 100;
-            newSellingPrice = itemPrice * markup;
-            console.log(
-              `[updateProductPrices] Расчет: ${itemPrice} * ${markup} (${markupValue}%)`
-            );
-          } else {
-            // Для фиксированной наценки: закупочная + фиксированная сумма
-            newSellingPrice = itemPrice + markupValue;
-            console.log(
-              `[updateProductPrices] Расчет: ${itemPrice} + ${markupValue}`
-            );
-          }
-
-          warehouseProduct.sellingPrice = newSellingPrice;
-          console.log(
-            `[updateProductPrices] Новая цена продажи: ${warehouseProduct.sellingPrice}`
-          );
-
-          // Сохраняем изменение в истории цен
-          await this.priceHistoryRepository.save({
-            oldPrice: oldSellingPrice,
-            newPrice: newSellingPrice,
-            reason: 'Обновление через приход',
-            warehouseProductId: warehouseProduct.id,
-            changedById: createPurchaseDto.createdById || 'system',
-            priceType: PriceType.SELLING,
-          });
-
-          priceUpdated = true;
-        } else {
-          console.log(
-            `[updateProductPrices] Пропускаем обновление цены продажи (флаг выключен)`
           );
         }
 

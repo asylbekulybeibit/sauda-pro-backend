@@ -10,6 +10,7 @@ import {
   IsBoolean,
   IsUUID,
   IsEnum,
+  IsDateString,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { PurchaseStatus } from '../../entities/purchase.entity';
@@ -97,24 +98,21 @@ export class UpdatePurchaseItemDto {
 // DTO для создания нового прихода
 export class CreatePurchaseDto {
   @IsUUID()
-  @IsOptional()
   warehouseId: string;
 
+  @IsOptional()
   @IsUUID()
-  @IsOptional()
-  supplierId: string;
+  supplierId?: string | null;
 
+  @IsOptional()
   @IsString()
-  @IsOptional()
-  invoiceNumber: string;
+  invoiceNumber?: string;
 
-  @Type(() => Date)
-  @IsDate()
-  @IsOptional()
-  date: Date;
+  @IsDateString()
+  date: string;
 
+  @IsOptional()
   @IsString()
-  @IsOptional()
   comment?: string;
 
   @IsArray()
@@ -122,33 +120,22 @@ export class CreatePurchaseDto {
   @Type(() => PurchaseItemDto)
   items: PurchaseItemDto[];
 
-  @IsBoolean()
   @IsOptional()
-  updatePrices?: boolean;
-
   @IsBoolean()
-  @IsOptional()
   updatePurchasePrices?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
   createLabels?: boolean;
 
-  @IsBoolean()
   @IsOptional()
+  @IsBoolean()
   checkDuplicates?: boolean;
 
-  @IsNumber()
   @IsOptional()
-  @Min(0)
-  markup?: number;
-
   @IsString()
-  @IsOptional()
-  markupType?: 'percentage' | 'fixed';
+  status?: 'draft' | 'completed' | 'cancelled';
 
-  @IsString()
-  @IsOptional()
   createdById?: string;
 }
 
