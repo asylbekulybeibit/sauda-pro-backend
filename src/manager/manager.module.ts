@@ -22,6 +22,8 @@ import { ServiceStaff } from './entities/service-staff.entity';
 import { Service } from './entities/service.entity';
 import { Client } from './entities/client.entity';
 import { Vehicle } from './entities/vehicle.entity';
+import { InventoryNotification } from './entities/inventory-notification.entity';
+import { VehicleNotification } from './entities/vehicle-notification.entity';
 
 import { WarehouseProductsController } from './controllers/warehouse-products.controller';
 import { CategoriesController } from './controllers/categories.controller';
@@ -38,6 +40,7 @@ import { StaffController } from './controllers/staff.controller';
 import { EmployeeController } from './controllers/employee.controller';
 import { ClientController } from './controllers/client.controller';
 import { VehicleController } from './controllers/vehicle.controller';
+import { NotificationsController } from './controllers/notifications.controller';
 
 import { WarehouseProductsService } from './services/warehouse-products.service';
 import { CategoriesService } from './services/categories.service';
@@ -54,6 +57,8 @@ import { EmployeeService } from './services/employee.service';
 import { ServiceStaffService } from './services/service-staff.service';
 import { ClientService } from './services/client.service';
 import { VehicleService } from './services/vehicle.service';
+import { NotificationsService } from './services/notifications.service';
+import { WhatsappModule } from '../whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -78,7 +83,10 @@ import { VehicleService } from './services/vehicle.service';
       Service,
       Client,
       Vehicle,
+      InventoryNotification,
+      VehicleNotification,
     ]),
+    WhatsappModule,
   ],
   controllers: [
     ManagerController,
@@ -97,6 +105,7 @@ import { VehicleService } from './services/vehicle.service';
     EmployeeController,
     ClientController,
     VehicleController,
+    NotificationsController,
   ],
   providers: [
     ManagerService,
@@ -115,7 +124,8 @@ import { VehicleService } from './services/vehicle.service';
     ServiceStaffService,
     ClientService,
     VehicleService,
+    NotificationsService,
   ],
-  exports: [ManagerService],
+  exports: [ManagerService, NotificationsService],
 })
 export class ManagerModule {}

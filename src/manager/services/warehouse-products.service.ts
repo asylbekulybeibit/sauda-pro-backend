@@ -65,12 +65,35 @@ export class WarehouseProductsService {
         ', '
       )}`
     );
+
+    const whereCondition: any = {
+      warehouseId: In(warehouseIds),
+      isActive: true,
+    };
+
+    // Добавляем фильтр по isService, если он указан
+    if (isService !== undefined) {
+      this.logger.debug(
+        `[getWarehouseProductsByShop] Применяем фильтр isService=${isService}`
+      );
+      whereCondition.barcode = { isService };
+    }
+
     const products = await this.warehouseProductRepository.find({
-      where: {
-        warehouseId: In(warehouseIds),
-        isActive: true,
-      },
+      where: whereCondition,
       relations: ['barcode', 'warehouse', 'barcode.category'],
+      select: {
+        id: true,
+        quantity: true,
+        minQuantity: true,
+        isActive: true,
+        warehouseId: true,
+        barcode: {
+          id: true,
+          productName: true,
+          isService: true,
+        },
+      },
       order: {
         createdAt: 'DESC',
       },
@@ -125,7 +148,7 @@ export class WarehouseProductsService {
         this.logger.debug(
           `[getWarehouseProductsByWarehouseId] Применяем фильтр isService=${isService}`
         );
-        // TODO: определить, как точно применять фильтр isService
+        whereCondition.barcode = { isService };
       }
 
       this.logger.debug(
@@ -443,6 +466,26 @@ export class WarehouseProductsService {
       minQuantity: 0,
     });
 
+    return this.warehouseProductRepository.save(product);
+  }
+
+  async findOne(id: string): Promise<WarehouseProduct | null> {
+    return this.warehouseProductRepository.findOne({
+      where: { id },
+      relations: ['barcode', 'warehouse'],
+    });
+  }
+
+  async update(
+    id: string,
+    updateDto: Partial<WarehouseProduct>
+  ): Promise<WarehouseProduct> {
+    const product = await this.findOne(id);
+    if (!product) {
+      throw new NotFoundException(`Товар с ID ${id} не найден`);
+    }
+
+    Object.assign(product, updateDto);
     return this.warehouseProductRepository.save(product);
   }
 }
