@@ -19,7 +19,6 @@ import {
   PurchaseItemDto,
   UpdatePurchaseDto,
 } from '../dto/purchases/create-purchase.dto';
-import { NotificationsService } from '../../notifications/notifications.service';
 import { PurchaseWithItems } from '../interfaces/purchase-with-items.interface';
 import { LabelsService } from '../services/labels.service';
 import { LabelTemplate } from '../entities/label-template.entity';
@@ -42,7 +41,6 @@ export class PurchasesService {
     private labelTemplateRepository: Repository<LabelTemplate>,
     @InjectRepository(PriceHistory)
     private priceHistoryRepository: Repository<PriceHistory>,
-    private readonly notificationsService: NotificationsService,
     private readonly labelsService: LabelsService
   ) {}
 

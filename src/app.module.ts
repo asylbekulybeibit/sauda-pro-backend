@@ -10,7 +10,6 @@ import { RolesModule } from './roles/roles.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { OwnerModule } from './owner/owner.module';
 import { ManagerModule } from './manager/manager.module';
-import { NotificationsModule } from './notifications/notifications.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { CacheModule } from './common/cache.module';
@@ -51,7 +50,6 @@ import { ReceiptItem } from './manager/entities/receipt-item.entity';
     DashboardModule,
     OwnerModule,
     ManagerModule,
-    NotificationsModule,
     AnalyticsModule,
     ExpensesModule,
   ],

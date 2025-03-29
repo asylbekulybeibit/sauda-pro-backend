@@ -13,7 +13,6 @@ import { InventoryTransaction } from './entities/inventory-transaction.entity';
 import { PriceHistory } from './entities/price-history.entity';
 import { Promotion } from './entities/promotion.entity';
 import { LabelTemplate } from './entities/label-template.entity';
-import { NotificationsModule } from '../notifications/notifications.module';
 import { CashRegister } from './entities/cash-register.entity';
 import { RegisterPaymentMethod } from './entities/register-payment-method.entity';
 import { PaymentMethodTransaction } from './entities/payment-method-transaction.entity';
@@ -80,7 +79,6 @@ import { VehicleService } from './services/vehicle.service';
       Client,
       Vehicle,
     ]),
-    NotificationsModule,
   ],
   controllers: [
     ManagerController,

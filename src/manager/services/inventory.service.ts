@@ -19,7 +19,6 @@ import {
   TransactionMetadata,
   TransactionType as DtoTransactionType,
 } from '../dto/inventory/create-transaction.dto';
-import { NotificationsService } from '../../notifications/notifications.service';
 import { CreateInventoryDto } from '../dto/create-inventory.dto';
 import { Supplier } from '../entities/supplier.entity';
 
@@ -36,7 +35,6 @@ export class InventoryService {
     private readonly userRoleRepository: Repository<UserRole>,
     @InjectRepository(Supplier)
     private readonly supplierRepository: Repository<Supplier>,
-    private readonly notificationsService: NotificationsService
   ) {}
 
   private async validateManagerAccess(
@@ -159,13 +157,7 @@ export class InventoryService {
       }
 
       // Создаем уведомления о перемещении
-      await this.notificationsService.createTransferInitiatedNotification(
-        warehouseId,
-        metadata.invoiceNumber || 'N/A',
-        warehouseProduct.barcode.productName,
-        quantity,
-        targetWarehouse.name
-      );
+      
     }
 
     // Для приходов проверяем поставщика
@@ -272,13 +264,7 @@ export class InventoryService {
       relations: ['barcode'],
     });
 
-    if (updatedProduct.quantity <= updatedProduct.minQuantity) {
-      await this.notificationsService.createLowStockNotification(
-        warehouseId,
-        updatedProduct.barcode.productName,
-        updatedProduct.quantity
-      );
-    }
+   
 
     return savedTransaction;
   }

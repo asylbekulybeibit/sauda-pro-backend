@@ -22,9 +22,15 @@ export class SuppliersService {
     private userRoleRepository: Repository<UserRole>
   ) {}
 
-  async validateManagerAccess(userId: string, shopId: string): Promise<void> {
-    // Проверяем роль менеджера магазина
-    const shopManagerRole = await this.userRoleRepository.findOne({
+  private async validateManagerAccess(
+    userId: string,
+    shopId: string
+  ): Promise<void> {
+    this.logger.debug(
+      `[validateManagerAccess] Проверка доступа для userId: ${userId}, shopId: ${shopId}`
+    );
+
+    const managerRole = await this.userRoleRepository.findOne({
       where: {
         userId,
         shopId,
@@ -33,30 +39,15 @@ export class SuppliersService {
       },
     });
 
-    if (shopManagerRole) {
-      return; // У пользователя есть прямой доступ к магазину
+    if (!managerRole) {
+      this.logger.warn(
+        `[validateManagerAccess] Доступ запрещен для userId: ${userId}, shopId: ${shopId}`
+      );
+      throw new ForbiddenException('Нет доступа к этому магазину');
     }
 
-    // Если нет прямой роли для магазина, ищем роль менеджера склада в этом магазине
-    const warehouseManagerRole = await this.userRoleRepository.findOne({
-      where: {
-        userId,
-        type: RoleType.MANAGER,
-        isActive: true,
-      },
-      relations: ['warehouse'],
-    });
-
-    if (
-      warehouseManagerRole &&
-      warehouseManagerRole.warehouse &&
-      warehouseManagerRole.warehouse.shopId === shopId
-    ) {
-      return; // У пользователя есть доступ к складу этого магазина
-    }
-
-    throw new ForbiddenException(
-      'У вас нет прав для управления этим магазином'
+    this.logger.debug(
+      `[validateManagerAccess] Доступ подтвержден для userId: ${userId}, shopId: ${shopId}`
     );
   }
 
@@ -64,12 +55,13 @@ export class SuppliersService {
     userId: string,
     createSupplierDto: CreateSupplierDto
   ): Promise<Supplier> {
+    this.logger.log(
+      `[create] Начало создания поставщика для магазина ${createSupplierDto.shopId}`
+    );
+    this.logger.debug(`[create] Данные поставщика:`, createSupplierDto);
+
     // Проверяем доступ к магазину
     await this.validateManagerAccess(userId, createSupplierDto.shopId);
-
-    this.logger.log(
-      `[create] Создание поставщика ${createSupplierDto.name} для магазина ${createSupplierDto.shopId}`
-    );
 
     // Создаем поставщика с привязкой только к магазину
     const supplier = this.suppliersRepository.create({
@@ -77,19 +69,25 @@ export class SuppliersService {
       isActive: true,
     });
 
-    return this.suppliersRepository.save(supplier);
+    const savedSupplier = await this.suppliersRepository.save(supplier);
+    this.logger.log(
+      `[create] Поставщик успешно создан с ID: ${savedSupplier.id}`
+    );
+    this.logger.debug(`[create] Созданный поставщик:`, savedSupplier);
+
+    return savedSupplier;
   }
 
   async findAll(userId: string, shopId: string): Promise<Supplier[]> {
+    this.logger.log(
+      `[findAll] Запрос списка поставщиков для магазина ${shopId}`
+    );
+
     // Проверяем доступ к магазину
     await this.validateManagerAccess(userId, shopId);
 
-    this.logger.log(
-      `[findAll] Получение всех поставщиков для магазина ${shopId}`
-    );
-
     // Получаем всех поставщиков магазина
-    return this.suppliersRepository.find({
+    const suppliers = await this.suppliersRepository.find({
       where: {
         shopId,
         isActive: true,
@@ -98,9 +96,21 @@ export class SuppliersService {
         name: 'ASC',
       },
     });
+
+    this.logger.log(
+      `[findAll] Найдено ${suppliers.length} поставщиков для магазина ${shopId}`
+    );
+    this.logger.debug(
+      `[findAll] Список ID найденных поставщиков:`,
+      suppliers.map((s) => s.id)
+    );
+
+    return suppliers;
   }
 
   async findOne(userId: string, shopId: string, id: string): Promise<Supplier> {
+    this.logger.log(`[findOne] Поиск поставщика ${id} для магазина ${shopId}`);
+
     // Проверяем доступ к магазину
     await this.validateManagerAccess(userId, shopId);
 
@@ -109,9 +119,13 @@ export class SuppliersService {
     });
 
     if (!supplier) {
+      this.logger.warn(
+        `[findOne] Поставщик ${id} не найден в магазине ${shopId}`
+      );
       throw new NotFoundException('Поставщик не найден');
     }
 
+    this.logger.debug(`[findOne] Найден поставщик:`, supplier);
     return supplier;
   }
 
@@ -121,6 +135,11 @@ export class SuppliersService {
     id: string,
     updateData: Partial<CreateSupplierDto>
   ): Promise<Supplier> {
+    this.logger.log(
+      `[update] Обновление поставщика ${id} в магазине ${shopId}`
+    );
+    this.logger.debug(`[update] Данные для обновления:`, updateData);
+
     // Проверяем доступ к магазину
     await this.validateManagerAccess(userId, shopId);
 
@@ -129,10 +148,18 @@ export class SuppliersService {
     // Обновляем данные поставщика
     Object.assign(supplier, updateData);
 
-    return this.suppliersRepository.save(supplier);
+    const updatedSupplier = await this.suppliersRepository.save(supplier);
+    this.logger.log(`[update] Поставщик ${id} успешно обновлен`);
+    this.logger.debug(`[update] Обновленный поставщик:`, updatedSupplier);
+
+    return updatedSupplier;
   }
 
   async remove(userId: string, shopId: string, id: string): Promise<void> {
+    this.logger.log(
+      `[remove] Деактивация поставщика ${id} в магазине ${shopId}`
+    );
+
     // Проверяем доступ к магазину
     await this.validateManagerAccess(userId, shopId);
 
@@ -141,5 +168,7 @@ export class SuppliersService {
     // Помечаем поставщика как неактивного вместо удаления
     supplier.isActive = false;
     await this.suppliersRepository.save(supplier);
+
+    this.logger.log(`[remove] Поставщик ${id} успешно деактивирован`);
   }
 }
