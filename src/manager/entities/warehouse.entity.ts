@@ -11,7 +11,6 @@ import {
 import { WarehouseProduct } from './warehouse-product.entity';
 import { CashRegister } from './cash-register.entity';
 import { Shop } from '../../shops/entities/shop.entity';
-import { WarehouseService } from './warehouse-service.entity';
 
 @Entity('warehouses')
 export class Warehouse {
@@ -49,11 +48,6 @@ export class Warehouse {
   )
   warehouseProducts: WarehouseProduct[];
 
-  @OneToMany(
-    () => WarehouseService,
-    (warehouseService) => warehouseService.warehouse
-  )
-  warehouseServices: WarehouseService[];
 
   @OneToMany(() => CashRegister, (cashRegister) => cashRegister.warehouse)
   cashRegisters: CashRegister[];

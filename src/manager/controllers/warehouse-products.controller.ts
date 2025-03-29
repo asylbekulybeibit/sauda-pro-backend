@@ -10,6 +10,7 @@ import {
   Post,
   Body,
   NotFoundException,
+  Patch,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -19,6 +20,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UserRole } from '../../roles/entities/user-role.entity';
 import { WarehouseProductsService } from '../services/warehouse-products.service';
+import { Warehouse } from '../entities/warehouse.entity';
+import { CreateServiceProductDto } from '../dto/warehouse-products/create-service-product.dto';
+import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 @Controller('manager/warehouse-products')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -29,69 +33,89 @@ export class WarehouseProductsController {
   constructor(
     private readonly warehouseProductsService: WarehouseProductsService,
     @InjectRepository(UserRole)
-    private readonly userRoleRepository: Repository<UserRole>
+    private readonly userRoleRepository: Repository<UserRole>,
+    @InjectRepository(Warehouse)
+    private readonly warehouseRepository: Repository<Warehouse>
   ) {}
 
   private async validateManagerAccessToWarehouse(
     userId: string,
-    shopId: string
+    shopId: string,
+    warehouseId?: string
   ): Promise<string> {
     this.logger.debug(
-      `[validateManagerAccessToWarehouse] Проверка доступа пользователя ${userId} к магазину ${shopId}`
+      `[validateManagerAccessToWarehouse] НАЧАЛО ПРОВЕРКИ ДОСТУПА:
+      - userId: ${userId}
+      - shopId: ${shopId}
+      - warehouseId: ${warehouseId || 'не указан'}`
     );
 
-    // Получаем роль менеджера для конкретного склада
+    // Получаем роль менеджера со всеми связями
     const managerRole = await this.userRoleRepository.findOne({
-      where: {
-        userId,
-        type: RoleType.MANAGER,
-        isActive: true,
-      },
-      relations: ['warehouse'],
+      where: [
+        {
+          // Прямой доступ к складу
+          userId,
+          warehouseId,
+          type: RoleType.MANAGER,
+          isActive: true,
+        },
+        {
+          // Доступ через магазин (если менеджер магазина)
+          userId,
+          type: RoleType.MANAGER,
+          isActive: true,
+          warehouse: {
+            shopId,
+          },
+        },
+      ],
+      relations: ['warehouse', 'warehouse.shop'],
     });
 
     this.logger.debug(
-      `[validateManagerAccessToWarehouse] Найдена роль: ${JSON.stringify(
-        managerRole || 'не найдено'
-      )}`
+      `[validateManagerAccessToWarehouse] Найдена роль менеджера:
+      - roleId: ${managerRole?.id || 'не найдена'}
+      - warehouse: ${managerRole?.warehouse?.id || 'нет склада'}
+      - managerShopId: ${managerRole?.warehouse?.shopId || 'нет магазина'}`
     );
 
     if (!managerRole) {
+      // Дополнительная проверка - получим информацию о складе
+      if (warehouseId) {
+        const warehouse = await this.warehouseRepository.findOne({
+          where: { id: warehouseId },
+          relations: ['shop'],
+        });
+
+        if (warehouse && warehouse.shopId === shopId) {
+          // Проверим, есть ли у пользователя права на магазин склада
+          const shopManagerRole = await this.userRoleRepository.findOne({
+            where: {
+              userId,
+              shopId: warehouse.shopId,
+              type: RoleType.MANAGER,
+              isActive: true,
+            },
+          });
+
+          if (shopManagerRole) {
+            // Пользователь имеет права на магазин, к которому принадлежит склад
+            return warehouseId;
+          }
+        }
+      }
+
       this.logger.error(
         `[validateManagerAccessToWarehouse] Роль менеджера не найдена для userId=${userId}`
-      );
-      throw new ForbiddenException('У вас нет прав менеджера склада');
-    }
-
-    if (!managerRole.warehouse) {
-      this.logger.error(
-        `[validateManagerAccessToWarehouse] У менеджера нет привязки к складу: userId=${userId}, roleId=${managerRole.id}`
-      );
-      throw new ForbiddenException('У вас нет прав менеджера склада');
-    }
-
-    // Проверяем, принадлежит ли склад менеджера указанному магазину
-    this.logger.debug(
-      `[validateManagerAccessToWarehouse] Склад менеджера: ${JSON.stringify(
-        managerRole.warehouse
-      )}`
-    );
-
-    if (managerRole.warehouse.shopId !== shopId) {
-      this.logger.error(
-        `[validateManagerAccessToWarehouse] Склад менеджера (${managerRole.warehouse.id}) не принадлежит магазину ${shopId}, warehouse.shopId=${managerRole.warehouse.shopId}`
       );
       throw new ForbiddenException(
         'У вас нет прав менеджера склада для этого магазина'
       );
     }
 
-    this.logger.log(
-      `[validateManagerAccessToWarehouse] Доступ подтвержден для userId=${userId}, warehouseId=${managerRole.warehouse.id}`
-    );
-
-    // Возвращаем ID склада менеджера
-    return managerRole.warehouse.id;
+    // Возвращаем ID склада менеджера или запрошенный ID склада
+    return warehouseId || managerRole.warehouse.id;
   }
 
   @Get('shop/:shopId')
@@ -318,6 +342,106 @@ export class WarehouseProductsController {
     } catch (error) {
       this.logger.error(
         `[createWarehouseProduct] Ошибка при создании товара: ${error.message}`,
+        error.stack
+      );
+      throw error;
+    }
+  }
+
+  @Patch(':id')
+  async updateWarehouseProduct(
+    @Param('id') id: string,
+    @Body() updateProductDto: any,
+    @Request() req
+  ) {
+    this.logger.debug(
+      `[updateWarehouseProduct] Запрос на обновление товара:
+      - productId: ${id}
+      - userId: ${req.user.id}
+      - updateData: ${JSON.stringify(updateProductDto)}`
+    );
+
+    try {
+      // Получаем информацию о продукте со всеми связями
+      const product =
+        await this.warehouseProductsService.getWarehouseProductById(id);
+
+      if (!product) {
+        throw new NotFoundException('Товар не найден');
+      }
+
+      this.logger.debug(
+        `[updateWarehouseProduct] Найден товар:
+        - productId: ${product.id}
+        - warehouseId: ${product.warehouseId}
+        - shopId: ${product.warehouse.shopId}`
+      );
+
+      // Проверяем доступ к магазину и складу
+      await this.validateManagerAccessToWarehouse(
+        req.user.id,
+        product.warehouse.shopId,
+        product.warehouseId
+      );
+
+      // Обновляем товар
+      const updatedProduct =
+        await this.warehouseProductsService.updateWarehouseProduct(
+          id,
+          updateProductDto
+        );
+
+      this.logger.log(
+        `[updateWarehouseProduct] Товар успешно обновлен:
+        - productId: ${updatedProduct.id}
+        - warehouseId: ${updatedProduct.warehouseId}`
+      );
+
+      return updatedProduct;
+    } catch (error) {
+      this.logger.error(
+        `[updateWarehouseProduct] Ошибка при обновлении товара:
+        - productId: ${id}
+        - error: ${error.message}`,
+        error.stack
+      );
+      throw error;
+    }
+  }
+
+  @Post('service')
+  @ApiOperation({ summary: 'Create a service product' })
+  @ApiResponse({
+    status: 201,
+    description: 'Service product created successfully',
+  })
+  async createServiceProduct(
+    @Body() createServiceProductDto: CreateServiceProductDto,
+    @Request() req
+  ) {
+    this.logger.log(
+      `[createServiceProduct] Creating service product for warehouse ${createServiceProductDto.warehouseId}`
+    );
+
+    try {
+      // Validate manager access
+      await this.validateManagerAccessToWarehouse(
+        req.user.id,
+        createServiceProductDto.warehouseId
+      );
+
+      const result = await this.warehouseProductsService.createServiceProduct(
+        createServiceProductDto,
+        req.user.id
+      );
+
+      this.logger.log(
+        `[createServiceProduct] Service product created successfully: ${result.id}`
+      );
+      return result;
+    } catch (error) {
+      this.logger.error(
+        `[createServiceProduct] Error creating service product: ${error.message}`,
         error.stack
       );
       throw error;

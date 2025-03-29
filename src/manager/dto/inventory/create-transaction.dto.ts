@@ -51,7 +51,36 @@ export class TransactionMetadata {
 
   @IsNumber()
   @IsOptional()
+  actualQuantity?: number; // Для инвентаризации
+
+  @IsNumber()
+  @IsOptional()
   difference?: number; // Для инвентаризации
+
+  @IsString()
+  @IsOptional()
+  date?: string; // Дата инвентаризации
+
+  @IsOptional()
+  deviceInfo?: {
+    userAgent: string;
+    platform: string;
+    language: string;
+    timestamp: string;
+    submissionId: string;
+  };
+
+  @IsNumber()
+  @IsOptional()
+  itemIndex?: number;
+
+  @IsOptional()
+  inventory?: {
+    id: string;
+    date: string;
+    comment?: string;
+    itemCount: number;
+  };
 
   @IsBoolean()
   @IsOptional()

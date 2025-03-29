@@ -1,4 +1,12 @@
-import { IsString, IsNumber, IsUUID, IsOptional, Min } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsUUID,
+  IsOptional,
+  Min,
+  IsEnum,
+} from 'class-validator';
+import { PriceType } from '../../entities/price-history.entity';
 
 export class CreatePriceHistoryDto {
   @IsNumber()
@@ -15,4 +23,10 @@ export class CreatePriceHistoryDto {
 
   @IsUUID()
   productId: string;
+
+  @IsUUID()
+  warehouseProductId: string;
+
+  @IsEnum(PriceType)
+  priceType: PriceType;
 }

@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import {
   InventoryTransaction,
   TransactionType as EntityTransactionType,
@@ -22,7 +22,6 @@ import {
 import { NotificationsService } from '../../notifications/notifications.service';
 import { CreateInventoryDto } from '../dto/create-inventory.dto';
 import { Supplier } from '../entities/supplier.entity';
-import { In } from 'typeorm';
 
 @Injectable()
 export class InventoryService {
@@ -43,20 +42,67 @@ export class InventoryService {
   private async validateManagerAccess(
     userId: string,
     warehouseId: string
-  ): Promise<void> {
-    const hasAccess = await this.userRoleRepository.findOne({
+  ): Promise<string> {
+    console.log('[InventoryService] Validating manager access:', {
+      userId,
+      warehouseId,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Сначала проверяем прямой доступ к складу
+    const directAccess = await this.userRoleRepository.findOne({
       where: {
         userId,
         warehouseId,
         type: RoleType.MANAGER,
+        isActive: true,
       },
+      relations: ['warehouse', 'warehouse.shop'],
     });
 
-    if (!hasAccess) {
-      throw new ForbiddenException(
-        'User does not have manager access to this warehouse'
-      );
+    if (directAccess) {
+      console.log('[InventoryService] Direct warehouse access found:', {
+        userId,
+        warehouseId,
+        role: {
+          id: directAccess.id,
+          type: directAccess.type,
+          warehouseId: directAccess.warehouseId,
+        },
+      });
+      return warehouseId;
     }
+
+    // Если нет прямого доступа, ищем любую активную роль менеджера для этого пользователя
+    const anyManagerRole = await this.userRoleRepository.findOne({
+      where: {
+        userId,
+        type: RoleType.MANAGER,
+        isActive: true,
+      },
+      relations: ['warehouse', 'warehouse.shop'],
+    });
+
+    if (!anyManagerRole || !anyManagerRole.warehouse) {
+      console.warn('[InventoryService] No manager role found:', {
+        userId,
+        warehouseId,
+        timestamp: new Date().toISOString(),
+      });
+      throw new ForbiddenException('У вас нет прав менеджера склада');
+    }
+
+    console.log(
+      '[InventoryService] Found manager role for different warehouse:',
+      {
+        userId,
+        requestedWarehouseId: warehouseId,
+        actualWarehouseId: anyManagerRole.warehouse.id,
+      }
+    );
+
+    // Возвращаем ID склада, к которому у пользователя есть доступ
+    return anyManagerRole.warehouse.id;
   }
 
   async createTransaction(
@@ -176,6 +222,13 @@ export class InventoryService {
     const entityType = EntityTransactionType[type];
 
     // Создаем транзакцию
+    console.log('[InventoryService] Creating transaction with metadata:', {
+      metadata,
+      type,
+      quantity,
+      warehouseProductId,
+    });
+
     const transaction = this.transactionRepository.create({
       warehouseId: warehouseId,
       warehouseProductId: warehouseProductId,
@@ -189,7 +242,19 @@ export class InventoryService {
       createdById: userId,
     });
 
+    console.log('[InventoryService] Transaction before save:', {
+      id: transaction.id,
+      type: transaction.type,
+      metadata: transaction.metadata,
+    });
+
     const savedTransaction = await this.transactionRepository.save(transaction);
+
+    console.log('[InventoryService] Saved transaction:', {
+      id: savedTransaction.id,
+      type: savedTransaction.type,
+      metadata: savedTransaction.metadata,
+    });
 
     // Обновляем количество товара
     await this.warehouseProductRepository.update(warehouseProductId, {
@@ -220,71 +285,75 @@ export class InventoryService {
 
   async getTransactions(
     userId: string,
-    warehouseId: string
+    shopId: string
   ): Promise<InventoryTransaction[]> {
-    await this.validateManagerAccess(userId, warehouseId);
+    console.log('[InventoryService] Getting transactions:', {
+      userId,
+      shopId,
+      timestamp: new Date().toISOString(),
+    });
 
-    const startTime = Date.now();
-    console.log(
-      `[${startTime}] Fetching transactions for warehouse: ${warehouseId}, user: ${userId}`
-    );
+    // Получаем все склады магазина
+    const warehouses = await this.warehouseRepository.find({
+      where: { shopId, isActive: true },
+      order: { isMain: 'DESC', name: 'ASC' },
+    });
 
-    try {
-      const transactions = await this.transactionRepository.find({
-        where: { warehouseId, isActive: true },
-        order: { createdAt: 'DESC' },
-        relations: [
-          'warehouseProduct',
-          'warehouseProduct.barcode',
-          'createdBy',
-        ],
+    if (!warehouses || warehouses.length === 0) {
+      console.warn('[InventoryService] No warehouses found for shop:', {
+        shopId,
+        timestamp: new Date().toISOString(),
       });
-
-      const endTime = Date.now();
-      console.log(
-        `[${endTime}] Found ${transactions.length} transactions in ${
-          endTime - startTime
-        }ms`
-      );
-
-      // Логируем детали по транзакциям типа ADJUSTMENT (инвентаризация)
-      const adjustments = transactions.filter(
-        (tr) => tr.type === EntityTransactionType.ADJUSTMENT
-      );
-      console.log(
-        `Found ${transactions.length} total transactions, ${adjustments.length} ADJUSTMENT transactions`
-      );
-
-      if (adjustments.length > 0) {
-        adjustments.forEach((adj, index) => {
-          console.log(
-            `[${index + 1}] ADJUSTMENT: warehouseProductId=${
-              adj.warehouseProductId
-            }, product=${
-              adj.warehouseProduct?.barcode?.productName || 'unknown'
-            }, quantity=${adj.quantity}`
-          );
-        });
-      }
-
-      // Проверяем наличие транзакций без связанных товаров
-      const missingProducts = transactions.filter((tr) => !tr.warehouseProduct);
-      if (missingProducts.length > 0) {
-        console.log(
-          `WARNING: Found ${missingProducts.length} transactions without linked products`
-        );
-        missingProducts.forEach((tr) => {
-          console.log(
-            `Transaction ${tr.id} missing product. Created at ${tr.createdAt}, warehouseProductId=${tr.warehouseProductId}, type=${tr.type}`
-          );
-        });
-      }
-
-      return transactions;
-    } catch (error) {
-      console.error(`ERROR fetching transactions: ${error.message}`);
-      throw error;
+      throw new NotFoundException('Склады не найдены для данного магазина');
     }
+
+    console.log('[InventoryService] Found warehouses:', {
+      count: warehouses.length,
+      warehouseIds: warehouses.map((w) => w.id),
+    });
+
+    // Проверяем доступ к складам и получаем ID доступного склада
+    let accessibleWarehouseId;
+    for (const warehouse of warehouses) {
+      try {
+        accessibleWarehouseId = await this.validateManagerAccess(
+          userId,
+          warehouse.id
+        );
+        break; // Если нашли доступный склад, прекращаем поиск
+      } catch (error) {
+        console.warn('[InventoryService] No access to warehouse:', {
+          warehouseId: warehouse.id,
+          error: error.message,
+        });
+        continue;
+      }
+    }
+
+    if (!accessibleWarehouseId) {
+      console.warn('[InventoryService] No accessible warehouses found:', {
+        shopId,
+        userId,
+        timestamp: new Date().toISOString(),
+      });
+      throw new ForbiddenException(
+        'У вас нет доступа к складам данного магазина'
+      );
+    }
+
+    console.log('[InventoryService] Using accessible warehouse:', {
+      warehouseId: accessibleWarehouseId,
+    });
+
+    // Получаем транзакции для доступного склада
+    return this.transactionRepository.find({
+      where: {
+        warehouseId: accessibleWarehouseId,
+        isActive: true,
+      },
+      order: { createdAt: 'DESC' },
+      relations: ['warehouseProduct', 'warehouseProduct.barcode', 'createdBy'],
+    });
   }
 
   async getProductTransactions(
@@ -319,27 +388,108 @@ export class InventoryService {
     return null;
   }
 
-  async findAll(warehouseId: string) {
-    // Get all inventory adjustments for this warehouse
-    return this.transactionRepository.find({
-      where: {
-        warehouseId,
-        type: EntityTransactionType.ADJUSTMENT,
-      },
-      order: { createdAt: 'DESC' },
-      relations: ['warehouseProduct', 'warehouseProduct.barcode', 'createdBy'],
+  async findAll(warehouseId: string, userId: string) {
+    console.log('[InventoryService] findAll called:', {
+      warehouseId,
+      userId,
+      timestamp: new Date().toISOString(),
     });
+
+    try {
+      // Validate manager access
+      await this.validateManagerAccess(userId, warehouseId);
+
+      console.log('[InventoryService] Access validated, fetching adjustments');
+
+      // Get all inventory adjustments for this warehouse
+      const adjustments = await this.transactionRepository.find({
+        where: {
+          warehouseId,
+          type: EntityTransactionType.ADJUSTMENT,
+          isActive: true,
+        },
+        order: { createdAt: 'DESC' },
+        relations: [
+          'warehouseProduct',
+          'warehouseProduct.barcode',
+          'createdBy',
+        ],
+      });
+
+      console.log('[InventoryService] Found adjustments:', {
+        count: adjustments.length,
+        warehouseId,
+        timestamp: new Date().toISOString(),
+        sample: adjustments.slice(0, 2).map((adj) => ({
+          id: adj.id,
+          type: adj.type,
+          metadata: adj.metadata,
+          quantity: adj.quantity,
+        })),
+      });
+
+      return adjustments;
+    } catch (error) {
+      console.error('[InventoryService] Error in findAll:', {
+        error: error.message,
+        stack: error.stack,
+        warehouseId,
+        userId,
+      });
+      throw error;
+    }
   }
 
-  async findOne(id: number, warehouseId: string) {
-    return this.transactionRepository.findOne({
-      where: {
-        id: String(id),
-        warehouseId,
-        type: EntityTransactionType.ADJUSTMENT,
-      },
-      relations: ['warehouseProduct', 'warehouseProduct.barcode', 'createdBy'],
+  async findOne(id: number, warehouseId: string, userId: string) {
+    console.log('[InventoryService] findOne called:', {
+      id,
+      warehouseId,
+      userId,
+      timestamp: new Date().toISOString(),
     });
+
+    try {
+      // Validate manager access
+      await this.validateManagerAccess(userId, warehouseId);
+
+      console.log('[InventoryService] Access validated, fetching adjustment');
+
+      const adjustment = await this.transactionRepository.findOne({
+        where: {
+          id: String(id),
+          warehouseId,
+          type: EntityTransactionType.ADJUSTMENT,
+          isActive: true,
+        },
+        relations: [
+          'warehouseProduct',
+          'warehouseProduct.barcode',
+          'createdBy',
+        ],
+      });
+
+      console.log('[InventoryService] Found adjustment:', {
+        found: !!adjustment,
+        id,
+        warehouseId,
+        timestamp: new Date().toISOString(),
+      });
+
+      if (!adjustment) {
+        throw new NotFoundException('Инвентаризация не найдена');
+      }
+
+      return adjustment;
+    } catch (error) {
+      console.error('[InventoryService] Error in findOne:', {
+        error: error.message,
+        stack: error.stack,
+        id,
+        warehouseId,
+        userId,
+      });
+      throw error;
+    }
   }
 
   async getSales(

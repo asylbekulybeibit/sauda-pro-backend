@@ -36,20 +36,23 @@ export class WarehouseProduct {
   @JoinColumn({ name: 'warehouseId' })
   warehouse: Warehouse;
 
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   purchasePrice: number;
 
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   sellingPrice: number;
 
-  @Column('int')
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   quantity: number;
 
-  @Column('int', { default: 0 })
+  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   minQuantity: number;
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ default: false })
+  isService: boolean;
 
   @OneToMany(
     () => PriceHistory,

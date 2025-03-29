@@ -1,9 +1,15 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { WarehouseProduct } from '../entities/warehouse-product.entity';
 import { Warehouse } from '../entities/warehouse.entity';
 import { Barcode } from '../entities/barcode.entity';
+import { CreateServiceProductDto } from '../dto/warehouse-products/create-service-product.dto';
 
 @Injectable()
 export class WarehouseProductsService {
@@ -64,7 +70,7 @@ export class WarehouseProductsService {
         warehouseId: In(warehouseIds),
         isActive: true,
       },
-      relations: ['barcode', 'warehouse'],
+      relations: ['barcode', 'warehouse', 'barcode.category'],
       order: {
         createdAt: 'DESC',
       },
@@ -129,7 +135,7 @@ export class WarehouseProductsService {
       );
       const products = await this.warehouseProductRepository.find({
         where: whereCondition,
-        relations: ['barcode', 'warehouse'],
+        relations: ['barcode', 'warehouse', 'barcode.category'],
         order: {
           createdAt: 'DESC',
         },
@@ -318,5 +324,125 @@ export class WarehouseProductsService {
       );
       throw error;
     }
+  }
+
+  // Метод для обновления товара на складе
+  async updateWarehouseProduct(
+    id: string,
+    updateDto: Partial<WarehouseProduct>
+  ): Promise<WarehouseProduct> {
+    this.logger.log(`[updateWarehouseProduct] Обновление товара с ID ${id}`);
+
+    try {
+      const product = await this.warehouseProductRepository.findOne({
+        where: { id, isActive: true },
+        relations: ['barcode', 'warehouse'],
+      });
+
+      if (!product) {
+        this.logger.error(
+          `[updateWarehouseProduct] Товар с ID ${id} не найден`
+        );
+        throw new NotFoundException(`Товар с ID ${id} не найден`);
+      }
+
+      // Обновляем только разрешенные поля
+      if (updateDto.purchasePrice !== undefined) {
+        product.purchasePrice = updateDto.purchasePrice;
+      }
+      if (updateDto.sellingPrice !== undefined) {
+        product.sellingPrice = updateDto.sellingPrice;
+      }
+      if (updateDto.quantity !== undefined) {
+        product.quantity = updateDto.quantity;
+      }
+      if (updateDto.minQuantity !== undefined) {
+        product.minQuantity = updateDto.minQuantity;
+      }
+      if (updateDto.isActive !== undefined) {
+        product.isActive = updateDto.isActive;
+      }
+
+      const updatedProduct =
+        await this.warehouseProductRepository.save(product);
+      this.logger.log(
+        `[updateWarehouseProduct] Товар успешно обновлен: ${updatedProduct.id}`
+      );
+
+      return updatedProduct;
+    } catch (error) {
+      this.logger.error(
+        `[updateWarehouseProduct] Ошибка при обновлении товара: ${error.message}`,
+        error.stack
+      );
+      throw error;
+    }
+  }
+
+  async createServiceProduct(
+    dto: CreateServiceProductDto,
+    userId: string
+  ): Promise<WarehouseProduct> {
+    const barcode = await this.barcodeRepository.findOne({
+      where: { id: dto.barcodeId },
+      relations: ['shop'],
+    });
+
+    if (!barcode) {
+      throw new NotFoundException('Barcode not found');
+    }
+
+    if (!barcode.isService) {
+      throw new BadRequestException('Barcode is not a service');
+    }
+
+    const warehouse = await this.warehouseRepository.findOne({
+      where: { id: dto.warehouseId },
+      relations: ['shop'],
+    });
+
+    if (!warehouse) {
+      throw new NotFoundException('Warehouse not found');
+    }
+
+    if (warehouse.shop.id !== barcode.shop.id) {
+      throw new BadRequestException(
+        'Barcode and warehouse must belong to the same shop'
+      );
+    }
+
+    const existingProduct = await this.warehouseProductRepository.findOne({
+      where: {
+        barcode: { id: dto.barcodeId },
+        warehouse: { id: dto.warehouseId },
+      },
+    });
+
+    if (existingProduct) {
+      if (!existingProduct.isActive) {
+        // Если услуга существует, но неактивна - активируем её
+        existingProduct.isActive = true;
+        existingProduct.sellingPrice =
+          dto.sellingPrice || existingProduct.sellingPrice;
+        existingProduct.purchasePrice =
+          dto.purchasePrice || existingProduct.purchasePrice;
+        return this.warehouseProductRepository.save(existingProduct);
+      }
+      throw new BadRequestException(
+        'Service product already exists in this warehouse'
+      );
+    }
+
+    const product = this.warehouseProductRepository.create({
+      barcode,
+      warehouse,
+      isService: true,
+      sellingPrice: dto.sellingPrice || 0,
+      purchasePrice: dto.purchasePrice || 0,
+      quantity: 0,
+      minQuantity: 0,
+    });
+
+    return this.warehouseProductRepository.save(product);
   }
 }

@@ -6,9 +6,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
-import { WarehouseService } from '../entities/warehouse-service.entity';
 import { Warehouse } from '../entities/warehouse.entity';
 import { Barcode } from '../entities/barcode.entity';
+import { Service, ServiceStatus } from '../entities/service.entity';
 import { CreateWarehouseServiceDto } from '../dto/warehouse-service/create-warehouse-service.dto';
 // import { UpdateWarehouseServiceDto } from '../dto/warehouse-service/update-warehouse-service.dto';
 
@@ -17,8 +17,8 @@ export class WarehouseServicesService {
   private readonly logger = new Logger(WarehouseServicesService.name);
 
   constructor(
-    @InjectRepository(WarehouseService)
-    private readonly warehouseServiceRepository: Repository<WarehouseService>,
+    @InjectRepository(Service)
+    private readonly serviceRepository: Repository<Service>,
     @InjectRepository(Warehouse)
     private readonly warehouseRepository: Repository<Warehouse>,
     @InjectRepository(Barcode)
@@ -56,31 +56,44 @@ export class WarehouseServicesService {
   async create(
     createWarehouseServiceDto: CreateWarehouseServiceDto,
     userId: string
-  ): Promise<WarehouseService> {
+  ): Promise<Service> {
     this.logger.log(
       `[create] Создание новой услуги склада, userId=${userId}, warehouseId=${createWarehouseServiceDto.warehouseId}`
     );
 
     await this.validateAccess(userId, createWarehouseServiceDto.warehouseId);
 
-    // Create new warehouse service
-    const warehouseService = this.warehouseServiceRepository.create(
-      createWarehouseServiceDto
-    );
+    // Find the warehouse to get shopId
+    const warehouse = await this.warehouseRepository.findOne({
+      where: { id: createWarehouseServiceDto.warehouseId },
+    });
+
+    if (!warehouse) {
+      throw new NotFoundException(`Warehouse not found`);
+    }
+
+    // Create new service
+    const service = this.serviceRepository.create({
+      shopId: warehouse.shopId,
+      warehouseId: createWarehouseServiceDto.warehouseId,
+      barcodeId: createWarehouseServiceDto.barcodeId,
+      originalPrice: createWarehouseServiceDto.price,
+      finalPrice: createWarehouseServiceDto.price,
+      createdBy: userId,
+      status: ServiceStatus.PENDING,
+      discountPercent: 0,
+    });
 
     this.logger.debug(
-      `[create] Сохранение новой услуги: ${JSON.stringify(warehouseService)}`
+      `[create] Сохранение новой услуги: ${JSON.stringify(service)}`
     );
-    const result = await this.warehouseServiceRepository.save(warehouseService);
+    const result = await this.serviceRepository.save(service);
     this.logger.log(`[create] Услуга успешно создана с ID ${result.id}`);
 
     return result;
   }
 
-  async findAllByShop(
-    shopId: string,
-    userId: string
-  ): Promise<WarehouseService[]> {
+  async findAllByShop(shopId: string, userId: string): Promise<Service[]> {
     this.logger.log(
       `[findAllByShop] Получение услуг складов для магазина ${shopId}, userId=${userId}`
     );
@@ -112,10 +125,10 @@ export class WarehouseServicesService {
     this.logger.debug(
       `[findAllByShop] Запрос услуг для складов ${warehouseIds.join(', ')}`
     );
-    const services = await this.warehouseServiceRepository.find({
+    const services = await this.serviceRepository.find({
       where: {
         warehouseId: In(warehouseIds),
-        isActive: true,
+        status: ServiceStatus.PENDING,
       },
       relations: ['barcode'],
     });
@@ -124,7 +137,7 @@ export class WarehouseServicesService {
     return services;
   }
 
-  async findByWarehouseId(warehouseId: string): Promise<WarehouseService[]> {
+  async findByWarehouseId(warehouseId: string): Promise<Service[]> {
     this.logger.log(
       `[findByWarehouseId] Получение услуг для склада ${warehouseId}`
     );
@@ -155,10 +168,10 @@ export class WarehouseServicesService {
       this.logger.debug(
         `[findByWarehouseId] Запрос услуг для склада ${warehouseId}`
       );
-      const services = await this.warehouseServiceRepository.find({
+      const services = await this.serviceRepository.find({
         where: {
           warehouseId: warehouseId,
-          isActive: true,
+          status: ServiceStatus.PENDING,
         },
         relations: ['barcode'],
         order: {
@@ -195,39 +208,37 @@ export class WarehouseServicesService {
     }
   }
 
-  async findOne(id: string, userId: string): Promise<WarehouseService> {
+  async findOne(id: string, userId: string): Promise<Service> {
     this.logger.log(`[findOne] Получение услуги по ID ${id}, userId=${userId}`);
 
-    const warehouseService = await this.warehouseServiceRepository.findOne({
+    const service = await this.serviceRepository.findOne({
       where: { id },
       relations: ['barcode', 'warehouse'],
     });
 
-    if (!warehouseService) {
+    if (!service) {
       this.logger.warn(`[findOne] Услуга с ID ${id} не найдена`);
-      throw new NotFoundException(`Warehouse service with ID ${id} not found`);
+      throw new NotFoundException(`Service with ID ${id} not found`);
     }
 
     this.logger.debug(
       `[findOne] Услуга найдена: ${JSON.stringify({
-        id: warehouseService.id,
-        warehouseId: warehouseService.warehouseId,
-        barcode: warehouseService.barcode
-          ? { id: warehouseService.barcode.id }
-          : null,
+        id: service.id,
+        warehouseId: service.warehouseId,
+        barcode: service.barcode ? { id: service.barcode.id } : null,
       })}`
     );
 
-    await this.validateAccess(userId, warehouseService.warehouseId);
+    await this.validateAccess(userId, service.warehouseId);
 
-    return warehouseService;
+    return service;
   }
 
   async update(
     id: string,
     updateWarehouseServiceDto: any,
     userId: string
-  ): Promise<WarehouseService> {
+  ): Promise<Service> {
     this.logger.log(`[update] Обновление услуги ${id}, userId=${userId}`);
     this.logger.debug(
       `[update] Данные для обновления: ${JSON.stringify(
@@ -235,7 +246,7 @@ export class WarehouseServicesService {
       )}`
     );
 
-    const warehouseService = await this.findOne(id, userId);
+    const service = await this.findOne(id, userId);
 
     if (updateWarehouseServiceDto.warehouseId) {
       this.logger.debug(
@@ -244,15 +255,12 @@ export class WarehouseServicesService {
       await this.validateAccess(userId, updateWarehouseServiceDto.warehouseId);
     }
 
-    // Update the warehouse service
+    // Update the service
     this.logger.debug(`[update] Объединение данных`);
-    this.warehouseServiceRepository.merge(
-      warehouseService,
-      updateWarehouseServiceDto
-    );
+    this.serviceRepository.merge(service, updateWarehouseServiceDto);
 
     this.logger.debug(`[update] Сохранение обновленной услуги`);
-    const result = await this.warehouseServiceRepository.save(warehouseService);
+    const result = await this.serviceRepository.save(service);
     this.logger.log(`[update] Услуга ${id} успешно обновлена`);
 
     return result;
@@ -261,10 +269,10 @@ export class WarehouseServicesService {
   async remove(id: string, userId: string): Promise<void> {
     this.logger.log(`[remove] Удаление услуги ${id}, userId=${userId}`);
 
-    const warehouseService = await this.findOne(id, userId);
+    const service = await this.findOne(id, userId);
 
     this.logger.debug(`[remove] Услуга найдена, выполняется удаление`);
-    await this.warehouseServiceRepository.remove(warehouseService);
+    await this.serviceRepository.remove(service);
     this.logger.log(`[remove] Услуга ${id} успешно удалена`);
   }
 }

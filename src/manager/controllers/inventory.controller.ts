@@ -46,10 +46,22 @@ export class InventoryController {
     @Body() createTransactionDto: CreateTransactionDto,
     @Request() req
   ) {
-    return this.inventoryService.createTransaction(
-      req.user.id,
-      createTransactionDto
-    );
+    console.log('[InventoryController] Creating transaction:', {
+      type: createTransactionDto.type,
+      metadata: createTransactionDto.metadata,
+      userId: req.user.id,
+    });
+
+    return this.inventoryService
+      .createTransaction(req.user.id, createTransactionDto)
+      .then((result) => {
+        console.log('[InventoryController] Transaction created:', {
+          id: result.id,
+          type: result.type,
+          metadata: result.metadata,
+        });
+        return result;
+      });
   }
 
   /**
@@ -92,9 +104,18 @@ export class InventoryController {
   /**
    * Получение всех транзакций магазина
    */
-  @Get('transactions/:warehouseId')
-  getTransactions(@Param('warehouseId') warehouseId: string, @Request() req) {
-    return this.inventoryService.getTransactions(req.user.id, warehouseId);
+  @Get('transactions/:shopId')
+  getTransactions(
+    @Param('shopId', ParseUUIDPipe) shopId: string,
+    @Request() req
+  ) {
+    console.log('[InventoryController] getTransactions called:', {
+      shopId,
+      userId: req.user.id,
+      userRole: req.user.role,
+      timestamp: new Date().toISOString(),
+    });
+    return this.inventoryService.getTransactions(req.user.id, shopId);
   }
 
   /**
@@ -131,16 +152,57 @@ export class InventoryController {
    * Получение всех инвентаризаций магазина
    */
   @Get('warehouse/:warehouseId')
-  findAll(@Param('warehouseId') warehouseId: string) {
-    return this.inventoryService.findAll(warehouseId);
+  findAll(
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
+    @Request() req
+  ) {
+    console.log('[InventoryController] findAll called:', {
+      warehouseId,
+      userId: req.user.id,
+      userRole: req.user.role,
+      timestamp: new Date().toISOString(),
+    });
+    try {
+      return this.inventoryService.findAll(warehouseId, req.user.id);
+    } catch (error) {
+      console.error('[InventoryController] Error in findAll:', {
+        error: error.message,
+        stack: error.stack,
+        warehouseId,
+        userId: req.user.id,
+      });
+      throw error;
+    }
   }
 
   /**
    * Получение конкретной инвентаризации
    */
   @Get(':id/warehouse/:warehouseId')
-  findOne(@Param('id') id: string, @Param('warehouseId') warehouseId: string) {
-    return this.inventoryService.findOne(+id, warehouseId);
+  findOne(
+    @Param('id') id: string,
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string,
+    @Request() req
+  ) {
+    console.log('[InventoryController] findOne called:', {
+      id,
+      warehouseId,
+      userId: req.user.id,
+      userRole: req.user.role,
+      timestamp: new Date().toISOString(),
+    });
+    try {
+      return this.inventoryService.findOne(+id, warehouseId, req.user.id);
+    } catch (error) {
+      console.error('[InventoryController] Error in findOne:', {
+        error: error.message,
+        stack: error.stack,
+        id,
+        warehouseId,
+        userId: req.user.id,
+      });
+      throw error;
+    }
   }
 
   @Get('sales/:warehouseId')
