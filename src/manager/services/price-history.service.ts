@@ -130,9 +130,9 @@ export class PriceHistoryService {
 
     const query = this.priceHistoryRepository
       .createQueryBuilder('priceHistory')
-      .innerJoin('priceHistory.product', 'product')
-      .where('product.warehouseId = :warehouseId', { warehouseId })
-      .andWhere('product.isActive = :isActive', { isActive: true });
+      .innerJoin('priceHistory.warehouseProduct', 'warehouseProduct')
+      .where('warehouseProduct.warehouseId = :warehouseId', { warehouseId })
+      .andWhere('warehouseProduct.isActive = :isActive', { isActive: true });
 
     // Добавляем фильтры по датам только если они указаны
     if (startDate && endDate) {
@@ -161,7 +161,11 @@ export class PriceHistoryService {
     // Логируем SQL запрос для отладки
     const sqlQuery = query
       .leftJoinAndSelect('priceHistory.changedBy', 'changedBy')
-      .leftJoinAndSelect('priceHistory.product', 'productDetails')
+      .leftJoinAndSelect(
+        'priceHistory.warehouseProduct',
+        'warehouseProductDetails'
+      )
+      .leftJoinAndSelect('warehouseProductDetails.barcode', 'barcode')
       .orderBy('priceHistory.createdAt', 'DESC')
       .getSql();
 
