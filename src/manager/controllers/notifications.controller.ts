@@ -16,12 +16,16 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles, ShopParam } from '../../auth/decorators';
 import { RoleType } from '../../auth/types/role.type';
+import { WhatsappService } from '../../whatsapp/whatsapp.service';
 
 @Controller('shops/:shopId/notifications')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(RoleType.MANAGER)
 export class NotificationsController {
-  constructor(private readonly notificationsService: NotificationsService) {}
+  constructor(
+    private readonly notificationsService: NotificationsService,
+    private readonly whatsappService: WhatsappService
+  ) {}
 
   // Inventory notifications
   @Get('inventory')
@@ -57,7 +61,7 @@ export class NotificationsController {
     @ShopParam('shopId') shopId: string,
     @Param('id') id: string
   ) {
-    return this.notificationsService.deleteInventoryRule(id);
+    return this.notificationsService.deleteInventoryRule(shopId, id);
   }
 
   // Vehicle notifications
@@ -89,5 +93,18 @@ export class NotificationsController {
     @Param('id') ruleId: string
   ) {
     return this.notificationsService.deleteVehicleRule(shopId, ruleId);
+  }
+
+  @Patch('whatsapp/interval')
+  async updateWhatsappInterval(
+    @ShopParam('shopId') shopId: string,
+    @Query('warehouseId') warehouseId: string,
+    @Body() data: { intervalHours: number }
+  ) {
+    return this.whatsappService.updateNotificationInterval(
+      shopId,
+      warehouseId,
+      data.intervalHours
+    );
   }
 }

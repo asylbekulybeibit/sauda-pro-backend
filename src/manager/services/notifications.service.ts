@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InventoryNotification } from '../entities/inventory-notification.entity';
@@ -84,21 +88,32 @@ export class NotificationsService {
     return this.inventoryNotificationRepo.save(updatedRule);
   }
 
-  async deleteInventoryRule(id: string) {
+  async deleteInventoryRule(shopId: string, id: string) {
     const rule = await this.inventoryNotificationRepo.findOne({
-      where: { id },
+      where: { id, shopId },
+      relations: ['warehouseProduct'],
     });
+
     if (!rule) {
-      throw new Error('Правило не найдено');
+      throw new NotFoundException('Правило уведомления не найдено');
     }
 
-    // Сбрасываем minQuantity в таблице warehouse_products
-    await this.warehouseProductsService.update(rule.warehouseProduct.id, {
-      minQuantity: 0,
-    });
+    try {
+      // Сбрасываем minQuantity в таблице warehouse_products если есть связь
+      if (rule.warehouseProduct) {
+        await this.warehouseProductsService.update(rule.warehouseProduct.id, {
+          minQuantity: 0,
+        });
+      }
 
-    await this.inventoryNotificationRepo.remove(rule);
-    return true;
+      await this.inventoryNotificationRepo.remove(rule);
+      return { success: true };
+    } catch (error) {
+      console.error('[NotificationsService] Error deleting rule:', error);
+      throw new InternalServerErrorException(
+        'Ошибка при удалении правила уведомления'
+      );
+    }
   }
 
   // Vehicle notifications
@@ -145,43 +160,40 @@ export class NotificationsService {
     await this.vehicleNotificationRepo.remove(rule);
   }
 
-  private async checkAndNotify() {
+  async checkAndNotify() {
     try {
-      console.log(
-        '[NotificationsService] Начинаем проверку товаров с низким количеством...'
-      );
-
-      // Получаем все активные правила с их товарами
-      const rules = await this.inventoryNotificationRepo.find({
-        where: { isEnabled: true },
-        relations: ['warehouseProduct', 'warehouseProduct.barcode'],
+      const notifications = await this.inventoryNotificationRepo.find({
+        where: {
+          isEnabled: true,
+        },
+        relations: [
+          'warehouseProduct',
+          'warehouseProduct.barcode',
+          'warehouseProduct.warehouse',
+        ],
       });
 
-      for (const rule of rules) {
-        const product = rule.warehouseProduct;
+      for (const notification of notifications) {
+        const { warehouseProduct } = notification;
+        if (!warehouseProduct) continue;
 
-        // Проверяем только активные товары (не услуги)
-        if (!product.isActive || product.barcode.isService) {
-          continue;
-        }
+        const currentQuantity = warehouseProduct.quantity;
+        const minQuantity = notification.minQuantity;
 
-        // Проверяем количество
-        if (product.quantity <= rule.minQuantity) {
-          console.log(
-            `[NotificationsService] Товар ${product.barcode.productName} имеет низкое количество (${product.quantity}/${rule.minQuantity})`
-          );
-
-          // Отправляем уведомление через WhatsApp
+        if (currentQuantity <= minQuantity) {
           await this.whatsappService.sendLowStockNotification({
-            productName: product.barcode.productName,
-            currentQuantity: product.quantity,
-            minQuantity: rule.minQuantity,
+            productName: warehouseProduct.barcode.productName,
+            currentQuantity,
+            minQuantity,
+            warehouseId: warehouseProduct.warehouseId,
+            shopId: notification.shopId,
+            warehouseProductId: warehouseProduct.id,
           });
         }
       }
     } catch (error) {
       console.error(
-        '[NotificationsService] Ошибка при проверке товаров:',
+        '[NotificationsService] Error checking notifications:',
         error
       );
     }
