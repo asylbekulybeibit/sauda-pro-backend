@@ -24,6 +24,7 @@ import { Client } from './entities/client.entity';
 import { Vehicle } from './entities/vehicle.entity';
 import { InventoryNotification } from './entities/inventory-notification.entity';
 import { VehicleNotification } from './entities/vehicle-notification.entity';
+import { Debt } from './entities/debt.entity';
 
 import { WarehouseProductsController } from './controllers/warehouse-products.controller';
 import { CategoriesController } from './controllers/categories.controller';
@@ -41,6 +42,7 @@ import { EmployeeController } from './controllers/employee.controller';
 import { ClientController } from './controllers/client.controller';
 import { VehicleController } from './controllers/vehicle.controller';
 import { NotificationsController } from './controllers/notifications.controller';
+import { DebtsController } from './controllers/debts.controller';
 
 import { WarehouseProductsService } from './services/warehouse-products.service';
 import { CategoriesService } from './services/categories.service';
@@ -58,6 +60,7 @@ import { ServiceStaffService } from './services/service-staff.service';
 import { ClientService } from './services/client.service';
 import { VehicleService } from './services/vehicle.service';
 import { NotificationsService } from './services/notifications.service';
+import { DebtsService } from './services/debts.service';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 
 @Module({
@@ -85,6 +88,7 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
       Vehicle,
       InventoryNotification,
       VehicleNotification,
+      Debt,
     ]),
     WhatsappModule,
   ],
@@ -106,6 +110,7 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
     ClientController,
     VehicleController,
     NotificationsController,
+    DebtsController,
   ],
   providers: [
     ManagerService,
@@ -125,6 +130,7 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
     ClientService,
     VehicleService,
     NotificationsService,
+    DebtsService,
   ],
   exports: [ManagerService, NotificationsService],
 })

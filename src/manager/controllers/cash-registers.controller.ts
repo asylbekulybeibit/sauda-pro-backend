@@ -45,6 +45,13 @@ export class CashRegistersController {
     return this.cashRegistersService.getSharedPaymentMethods(warehouseId);
   }
 
+  @Get('payment-methods')
+  async getAllPaymentMethods(
+    @Param('warehouseId', ParseUUIDPipe) warehouseId: string
+  ) {
+    return this.cashRegistersService.getAllPaymentMethods(warehouseId);
+  }
+
   @Get(':id')
   findOne(
     @Param('id') id: string,

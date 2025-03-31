@@ -397,4 +397,16 @@ export class CashRegistersService {
       },
     });
   }
+
+  async getAllPaymentMethods(
+    warehouseId: string
+  ): Promise<RegisterPaymentMethod[]> {
+    return this.paymentMethodRepository.find({
+      where: [
+        { warehouseId, isShared: true },
+        { warehouseId, isShared: false },
+      ],
+      relations: ['cashRegister'],
+    });
+  }
 }

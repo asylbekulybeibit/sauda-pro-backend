@@ -16,4 +16,6 @@ export interface PurchaseWithItems
     comment?: string;
   }>;
   createdBy?: User;
+  paidAmount: number;
+  remainingAmount: number;
 }

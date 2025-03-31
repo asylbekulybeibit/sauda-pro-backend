@@ -12,6 +12,8 @@ import {
 } from '../entities/payment-method-transaction.entity';
 import { RegisterPaymentMethod } from '../entities/register-payment-method.entity';
 import { CreatePaymentMethodTransactionDto } from '../dto/payment-method-transactions/create-transaction.dto';
+import { Debt } from '../entities/debt.entity';
+import { Purchase } from '../entities/purchase.entity';
 
 @Injectable()
 export class PaymentMethodTransactionsService {
@@ -19,7 +21,9 @@ export class PaymentMethodTransactionsService {
     @InjectRepository(PaymentMethodTransaction)
     private readonly transactionRepository: Repository<PaymentMethodTransaction>,
     @InjectRepository(RegisterPaymentMethod)
-    private readonly paymentMethodRepository: Repository<RegisterPaymentMethod>
+    private readonly paymentMethodRepository: Repository<RegisterPaymentMethod>,
+    @InjectRepository(Purchase)
+    private readonly purchaseRepository: Repository<Purchase>
   ) {}
 
   async create(
@@ -233,14 +237,29 @@ export class PaymentMethodTransactionsService {
     amount: number,
     purchaseId: string,
     userId: string,
-    shiftId: string,
+    shiftId: string | null,
     note?: string
   ): Promise<PaymentMethodTransaction> {
     if (amount <= 0) {
       throw new BadRequestException('Сумма закупки должна быть положительной');
     }
 
-    return this.create(
+    // Получаем метод оплаты
+    const paymentMethod = await this.paymentMethodRepository.findOne({
+      where: { id: paymentMethodId, isActive: true },
+    });
+
+    if (!paymentMethod) {
+      throw new NotFoundException('Метод оплаты не найден');
+    }
+
+    // Проверяем достаточно ли средств
+    if (paymentMethod.currentBalance < amount) {
+      throw new BadRequestException('Недостаточно средств для оплаты');
+    }
+
+    // Создаем транзакцию
+    const transaction = await this.create(
       {
         paymentMethodId,
         shiftId,
@@ -252,5 +271,104 @@ export class PaymentMethodTransactionsService {
       },
       userId
     );
+
+    // Обновляем баланс метода оплаты
+    await this.paymentMethodRepository.update(paymentMethodId, {
+      currentBalance: paymentMethod.currentBalance - amount,
+    });
+
+    return transaction;
+  }
+
+  async recordDebtPayment(
+    paymentMethodId: string,
+    amount: number,
+    debtId: string,
+    userId: string,
+    type: 'incoming' | 'outgoing',
+    note?: string
+  ) {
+    const paymentMethod = await this.paymentMethodRepository.findOne({
+      where: { id: paymentMethodId },
+    });
+
+    if (!paymentMethod) {
+      throw new Error('Payment method not found');
+    }
+
+    const currentBalance = paymentMethod.currentBalance;
+    const newBalance =
+      type === 'incoming' ? currentBalance + amount : currentBalance - amount;
+
+    const transactionData = {
+      paymentMethodId,
+      amount,
+      balanceBefore: currentBalance,
+      balanceAfter: newBalance,
+      transactionType:
+        type === 'incoming'
+          ? TransactionType.DEPOSIT
+          : TransactionType.WITHDRAWAL,
+      note,
+      referenceId: debtId,
+      referenceType: ReferenceType.MANUAL,
+      createdById: userId,
+    };
+
+    const transaction = this.transactionRepository.create(transactionData);
+    await this.transactionRepository.save(transaction);
+
+    // Update payment method balance
+    await this.paymentMethodRepository.update(
+      { id: paymentMethodId },
+      { currentBalance: newBalance }
+    );
+
+    return transaction;
+  }
+
+  async findAllByPurchase(purchaseId: string) {
+    const transactions = await this.transactionRepository.find({
+      where: {
+        referenceType: ReferenceType.PURCHASE,
+        referenceId: purchaseId,
+      },
+      relations: ['paymentMethod', 'createdBy'],
+      order: { createdAt: 'ASC' },
+    });
+
+    // Получаем информацию о приходе для расчета остатка долга
+    const purchase = await this.purchaseRepository.findOne({
+      where: { id: purchaseId },
+    });
+
+    if (!purchase) {
+      throw new NotFoundException('Приход не найден');
+    }
+
+    let totalPaid = 0;
+    const totalAmount = Number(purchase.totalAmount);
+
+    // Добавляем информацию о долге до и после для каждой транзакции
+    return transactions.map((transaction) => {
+      const paymentAmount = Math.abs(Number(transaction.amount));
+      const remainingBefore = totalAmount - totalPaid;
+      totalPaid += paymentAmount;
+      const remainingAfter = Math.max(0, remainingBefore - paymentAmount);
+
+      console.log('Transaction calculation:', {
+        amount: transaction.amount,
+        paymentAmount,
+        totalPaid,
+        remainingBefore,
+        remainingAfter,
+      });
+
+      return {
+        ...transaction,
+        remainingBefore,
+        remainingAfter,
+      };
+    });
   }
 }

@@ -95,6 +95,27 @@ export class UpdatePurchaseItemDto {
   partialQuantity?: number;
 }
 
+// DTO для оплаты прихода
+export class PurchasePaymentDto {
+  @IsUUID()
+  paymentMethodId: string;
+
+  @IsNumber()
+  @Min(0)
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      const numValue = Number(value.replace(/[^0-9.-]+/g, ''));
+      return isNaN(numValue) ? 0 : numValue;
+    }
+    return typeof value === 'number' && !isNaN(value) ? value : 0;
+  })
+  amount: number;
+
+  @IsString()
+  @IsOptional()
+  note?: string;
+}
+
 // DTO для создания нового прихода
 export class CreatePurchaseDto {
   @IsUUID()
@@ -135,6 +156,11 @@ export class CreatePurchaseDto {
   @IsOptional()
   @IsString()
   status?: 'draft' | 'completed' | 'cancelled';
+
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => PurchasePaymentDto)
+  payments?: PurchasePaymentDto[];
 
   createdById?: string;
 }

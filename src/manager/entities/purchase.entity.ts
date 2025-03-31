@@ -51,6 +51,12 @@ export class Purchase {
   @Column('decimal', { precision: 10, scale: 2, default: 0 })
   totalAmount: number;
 
+  @Column('decimal', { precision: 10, scale: 2, default: 0 })
+  paidAmount: number;
+
+  @Column('decimal', { precision: 10, scale: 2, default: 0 })
+  remainingAmount: number;
+
   @Column('int', { default: 0 })
   totalItems: number;
 

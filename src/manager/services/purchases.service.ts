@@ -23,6 +23,9 @@ import { PurchaseWithItems } from '../interfaces/purchase-with-items.interface';
 import { LabelsService } from '../services/labels.service';
 import { LabelTemplate } from '../entities/label-template.entity';
 import { PriceHistory, PriceType } from '../entities/price-history.entity';
+import { PaymentMethodTransactionsService } from './payment-method-transactions.service';
+import { DebtsService } from './debts.service';
+import { DebtType } from '../entities/debt.entity';
 
 @Injectable()
 export class PurchasesService {
@@ -41,7 +44,9 @@ export class PurchasesService {
     private labelTemplateRepository: Repository<LabelTemplate>,
     @InjectRepository(PriceHistory)
     private priceHistoryRepository: Repository<PriceHistory>,
-    private readonly labelsService: LabelsService
+    private readonly labelsService: LabelsService,
+    private readonly paymentMethodTransactionsService: PaymentMethodTransactionsService,
+    private readonly debtsService: DebtsService
   ) {}
 
   private async validateManagerAccess(
@@ -285,9 +290,20 @@ export class PurchasesService {
     purchase.totalAmount = totalAmount;
     purchase.totalItems = totalItems;
 
-    console.log(
-      `Calculated totalAmount: ${totalAmount}, totalItems: ${totalItems}`
-    );
+    // Устанавливаем paidAmount и remainingAmount из платежей
+    const paidAmount =
+      createPurchaseDto.payments?.reduce(
+        (sum, payment) => sum + payment.amount,
+        0
+      ) || 0;
+    purchase.paidAmount = paidAmount;
+    purchase.remainingAmount = totalAmount - paidAmount;
+
+    console.log('[PurchasesService] Purchase amounts calculated:', {
+      totalAmount: purchase.totalAmount,
+      paidAmount: purchase.paidAmount,
+      remainingAmount: purchase.remainingAmount,
+    });
 
     // Сохраняем покупку
     console.log('[PurchasesService] Saving purchase to database...');
@@ -298,6 +314,36 @@ export class PurchasesService {
         '[PurchasesService] Purchase saved successfully:',
         savedPurchase
       );
+
+      // Обрабатываем платежи
+      if (createPurchaseDto.payments && createPurchaseDto.payments.length > 0) {
+        console.log(
+          '[PurchasesService] Processing payments:',
+          createPurchaseDto.payments
+        );
+        for (const payment of createPurchaseDto.payments) {
+          try {
+            await this.paymentMethodTransactionsService.recordPurchasePayment(
+              payment.paymentMethodId,
+              payment.amount,
+              savedPurchase.id,
+              userId,
+              null,
+              payment.note
+            );
+            console.log(
+              '[PurchasesService] Payment processed successfully:',
+              payment
+            );
+          } catch (error) {
+            console.error(
+              '[PurchasesService] Error processing payment:',
+              error
+            );
+            throw error;
+          }
+        }
+      }
     } catch (error) {
       console.error('[PurchasesService] ERROR saving purchase:', error);
       // Проверяем тип ошибки и логируем полезную информацию
@@ -348,8 +394,23 @@ export class PurchasesService {
       }
     }
 
+    // Если есть неоплаченная сумма, создаем долг
+    if (paidAmount < savedPurchase.totalAmount) {
+      await this.debtsService.create(userId, {
+        warehouseId: savedPurchase.warehouseId,
+        type: DebtType.PAYABLE,
+        supplierId: savedPurchase.supplierId,
+        totalAmount: savedPurchase.totalAmount,
+        paidAmount: paidAmount,
+        purchaseId: savedPurchase.id,
+        comment: `Долг по приходу ${
+          savedPurchase.invoiceNumber || savedPurchase.id
+        }`,
+      });
+    }
+
     // Перезагружаем покупку с обновленными данными
-    return this.findOne(savedPurchase.id, createPurchaseDto.warehouseId);
+    return this.findOne(savedPurchase.id, savedPurchase.warehouseId);
   }
 
   private async updateProductPrices(
@@ -858,5 +919,77 @@ export class PurchasesService {
     } else {
       console.log(`[checkForDuplicates] Дубликаты товаров не обнаружены`);
     }
+  }
+
+  async update(
+    id: string,
+    updateData: Partial<Purchase>
+  ): Promise<PurchaseWithItems> {
+    console.log('Updating purchase:', { id, updateData });
+
+    const purchase = await this.purchaseRepository.findOne({
+      where: { id },
+      relations: ['warehouse', 'supplier', 'createdBy'],
+    });
+
+    if (!purchase) {
+      throw new NotFoundException('Приход не найден');
+    }
+
+    // Обновляем поля с явным приведением к числовому типу
+    const paidAmount =
+      updateData.paidAmount !== undefined
+        ? Number(updateData.paidAmount)
+        : Number(purchase.paidAmount || 0);
+
+    const totalAmount =
+      updateData.totalAmount !== undefined
+        ? Number(updateData.totalAmount)
+        : Number(purchase.totalAmount || 0);
+
+    const remainingAmount = totalAmount - paidAmount;
+
+    // Обновляем все поля покупки
+    const updatedPurchase = {
+      ...purchase,
+      ...updateData,
+      paidAmount,
+      totalAmount,
+      remainingAmount,
+    };
+
+    console.log('Saving purchase with updated amounts:', {
+      paidAmount: updatedPurchase.paidAmount,
+      totalAmount: updatedPurchase.totalAmount,
+      remainingAmount: updatedPurchase.remainingAmount,
+    });
+
+    // Сохраняем обновленную покупку
+    const savedPurchase = await this.purchaseRepository.save(updatedPurchase);
+
+    // Получаем связанные транзакции
+    const transactions = await this.transactionRepository.find({
+      where: { purchaseId: id },
+      relations: ['warehouseProduct', 'warehouseProduct.barcode'],
+    });
+
+    // Формируем ответ в формате PurchaseWithItems
+    return {
+      ...savedPurchase,
+      items: transactions.map((transaction) => ({
+        productId: transaction.warehouseProductId,
+        product: {
+          name:
+            transaction.warehouseProduct?.barcode?.productName ||
+            'Unknown Product',
+        },
+        quantity: transaction.quantity,
+        price: transaction.price,
+        total: transaction.quantity * transaction.price,
+        serialNumber: transaction.metadata?.serialNumber,
+        expiryDate: transaction.metadata?.expiryDate,
+        comment: transaction.note,
+      })),
+    };
   }
 }
