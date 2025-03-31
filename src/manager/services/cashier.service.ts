@@ -5,7 +5,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, ILike } from 'typeorm';
+import { Repository, Like, ILike, In, Not } from 'typeorm';
 import { WarehouseProduct } from '../entities/warehouse-product.entity';
 import { CashShift, CashShiftStatus } from '../entities/cash-shift.entity';
 import {
@@ -157,10 +157,18 @@ export class CashierService {
         id: openShiftDto.cashRegisterId,
         warehouseId,
       },
+      relations: ['warehouse', 'warehouse.shop'],
     });
 
     if (!cashRegister) {
       throw new NotFoundException('Касса не найдена');
+    }
+
+    // Получаем shopId из связанного склада
+    const shopId = cashRegister.warehouse?.shop?.id;
+
+    if (!shopId) {
+      throw new BadRequestException('Не найден магазин, связанный со складом');
     }
 
     // Создаем новую смену
@@ -171,6 +179,7 @@ export class CashierService {
       currentAmount: openShiftDto.initialAmount || 0,
       startTime: new Date(),
       status: CashShiftStatus.OPEN,
+      shopId: shopId,
     });
 
     // Сохраняем связь с warehouse через cash register
@@ -178,11 +187,32 @@ export class CashierService {
 
     const savedShift = await this.cashShiftRepository.save(newShift);
 
+    // Выполняем дополнительный запрос для получения информации о пользователе
+    const shiftWithRelations = await this.cashShiftRepository.findOne({
+      where: { id: savedShift.id },
+      relations: ['cashRegister', 'openedBy'],
+    });
+
+    if (!shiftWithRelations) {
+      throw new NotFoundException('Не удалось найти созданную смену');
+    }
+
     return {
       id: savedShift.id,
       startTime: savedShift.startTime,
       initialAmount: savedShift.initialAmount,
       status: savedShift.status,
+      cashRegister: {
+        id: cashRegister.id,
+        name: cashRegister.name,
+      },
+      cashier: {
+        id: shiftWithRelations.openedBy.id,
+        name: `${shiftWithRelations.openedBy.firstName || ''} ${
+          shiftWithRelations.openedBy.lastName || ''
+        }`.trim(),
+      },
+      currentAmount: savedShift.initialAmount,
     };
   }
 
