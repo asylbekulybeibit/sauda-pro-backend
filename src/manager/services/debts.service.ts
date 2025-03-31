@@ -26,6 +26,10 @@ export class DebtsService {
       createdById: userId,
       remainingAmount:
         createDebtDto.totalAmount - (createDebtDto.paidAmount || 0),
+      status:
+        createDebtDto.paidAmount && createDebtDto.paidAmount > 0
+          ? DebtStatus.PARTIALLY_PAID
+          : DebtStatus.ACTIVE,
     });
 
     // Если долг связан с приходом, проверяем его существование
@@ -42,11 +46,19 @@ export class DebtsService {
   }
 
   async findAll(warehouseId: string): Promise<Debt[]> {
-    return this.debtRepository.find({
-      where: { warehouseId, isActive: true },
-      relations: ['supplier', 'purchase', 'createdBy'],
-      order: { createdAt: 'DESC' },
-    });
+    console.log('[DebtsService] Finding all debts for warehouse:', warehouseId);
+    try {
+      const debts = await this.debtRepository.find({
+        where: { warehouseId, isActive: true },
+        relations: ['supplier', 'purchase', 'createdBy'],
+        order: { createdAt: 'DESC' },
+      });
+      console.log('[DebtsService] Found debts:', debts.length);
+      return debts;
+    } catch (error) {
+      console.error('[DebtsService] Error finding debts:', error);
+      throw error;
+    }
   }
 
   async findOne(id: string): Promise<Debt> {
@@ -64,42 +76,64 @@ export class DebtsService {
 
   async addPayment(
     debtId: string,
-    payment: {
-      paymentMethodId: string;
-      amount: number;
-      note?: string;
-    },
+    paymentMethodId: string,
+    amount: number,
     userId: string
-  ): Promise<Debt> {
-    const debt = await this.findOne(debtId);
+  ) {
+    const debt = await this.debtRepository.findOne({
+      where: { id: debtId },
+      relations: ['purchase'],
+    });
 
-    if (payment.amount <= 0) {
+    if (!debt) {
+      throw new NotFoundException('Долг не найден');
+    }
+
+    if (amount <= 0) {
       throw new BadRequestException('Сумма оплаты должна быть больше 0');
     }
 
-    if (payment.amount > debt.remainingAmount) {
-      throw new BadRequestException('Сумма оплаты превышает оставшуюся сумму');
+    if (amount > debt.remainingAmount) {
+      throw new BadRequestException('Сумма оплаты превышает остаток долга');
     }
 
-    // Создаем транзакцию оплаты
-    await this.paymentMethodTransactionsService.recordDebtPayment(
-      payment.paymentMethodId,
-      payment.amount,
-      debt.id,
-      userId,
-      debt.type === DebtType.PAYABLE ? 'outgoing' : 'incoming',
-      payment.note
-    );
+    // Если долг связан с приходом, используем тип транзакции 'purchase'
+    if (debt.purchase) {
+      await this.paymentMethodTransactionsService.recordPurchasePayment(
+        paymentMethodId,
+        amount,
+        debt.purchase.id,
+        userId,
+        null
+      );
+    } else {
+      // Для остальных долгов используем обычную запись долга
+      await this.paymentMethodTransactionsService.recordDebtPayment(
+        paymentMethodId,
+        amount,
+        debtId,
+        userId,
+        debt.type === DebtType.PAYABLE ? 'outgoing' : 'incoming'
+      );
+    }
 
-    // Обновляем информацию о долге
-    debt.paidAmount += payment.amount;
-    debt.remainingAmount = debt.totalAmount - debt.paidAmount;
+    // Обновляем сумму оплаты и остаток
+    debt.paidAmount = Number(debt.paidAmount) + amount;
+    debt.remainingAmount = Number(debt.totalAmount) - Number(debt.paidAmount);
 
     // Обновляем статус долга
     if (debt.remainingAmount === 0) {
       debt.status = DebtStatus.PAID;
     } else if (debt.paidAmount > 0) {
       debt.status = DebtStatus.PARTIALLY_PAID;
+    }
+
+    // Если долг связан с приходом, обновляем информацию об оплате в приходе
+    if (debt.purchase) {
+      debt.purchase.paidAmount = Number(debt.purchase.paidAmount) + amount;
+      debt.purchase.remainingAmount =
+        Number(debt.purchase.totalAmount) - Number(debt.purchase.paidAmount);
+      await this.purchaseRepository.save(debt.purchase);
     }
 
     return this.debtRepository.save(debt);
@@ -120,38 +154,59 @@ export class DebtsService {
   }
 
   async getActiveDebts(warehouseId: string): Promise<Debt[]> {
-    return this.debtRepository.find({
-      where: {
-        warehouseId,
-        isActive: true,
-        status: DebtStatus.ACTIVE,
-      },
-      relations: ['supplier', 'purchase', 'createdBy'],
-      order: { createdAt: 'DESC' },
-    });
+    console.log(
+      '[DebtsService] Getting active debts for warehouse:',
+      warehouseId
+    );
+    try {
+      const debts = await this.debtRepository.find({
+        where: {
+          warehouseId,
+          isActive: true,
+          status: DebtStatus.ACTIVE,
+        },
+        relations: ['supplier', 'purchase', 'createdBy'],
+        order: { createdAt: 'DESC' },
+      });
+      console.log('[DebtsService] Found active debts:', debts.length);
+      return debts;
+    } catch (error) {
+      console.error('[DebtsService] Error getting active debts:', error);
+      throw error;
+    }
   }
 
   async getDebtsStatistics(warehouseId: string) {
-    const debts = await this.debtRepository.find({
-      where: { warehouseId, isActive: true },
-    });
-
-    return {
-      totalPayable: debts
-        .filter((debt) => debt.type === DebtType.PAYABLE)
-        .reduce((sum, debt) => sum + debt.remainingAmount, 0),
-      totalReceivable: debts
-        .filter((debt) => debt.type === DebtType.RECEIVABLE)
-        .reduce((sum, debt) => sum + debt.remainingAmount, 0),
-      activeDebtsCount: debts.filter(
-        (debt) => debt.status === DebtStatus.ACTIVE
-      ).length,
-      partiallyPaidCount: debts.filter(
-        (debt) => debt.status === DebtStatus.PARTIALLY_PAID
-      ).length,
-      paidDebtsCount: debts.filter((debt) => debt.status === DebtStatus.PAID)
-        .length,
-    };
+    console.log(
+      '[DebtsService] Getting statistics for warehouse:',
+      warehouseId
+    );
+    try {
+      const debts = await this.debtRepository.find({
+        where: { warehouseId, isActive: true },
+      });
+      const stats = {
+        totalPayable: debts
+          .filter((debt) => debt.type === DebtType.PAYABLE)
+          .reduce((sum, debt) => sum + debt.remainingAmount, 0),
+        totalReceivable: debts
+          .filter((debt) => debt.type === DebtType.RECEIVABLE)
+          .reduce((sum, debt) => sum + debt.remainingAmount, 0),
+        activeDebtsCount: debts.filter(
+          (debt) => debt.status === DebtStatus.ACTIVE
+        ).length,
+        partiallyPaidCount: debts.filter(
+          (debt) => debt.status === DebtStatus.PARTIALLY_PAID
+        ).length,
+        paidDebtsCount: debts.filter((debt) => debt.status === DebtStatus.PAID)
+          .length,
+      };
+      console.log('[DebtsService] Calculated statistics:', stats);
+      return stats;
+    } catch (error) {
+      console.error('[DebtsService] Error getting statistics:', error);
+      throw error;
+    }
   }
 
   async findByPurchaseId(purchaseId: string): Promise<Debt | null> {

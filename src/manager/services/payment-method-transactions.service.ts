@@ -258,6 +258,25 @@ export class PaymentMethodTransactionsService {
       throw new BadRequestException('Недостаточно средств для оплаты');
     }
 
+    // Получаем информацию о покупке
+    const purchase = await this.purchaseRepository.findOne({
+      where: { id: purchaseId },
+      relations: ['supplier'],
+    });
+
+    if (!purchase) {
+      throw new NotFoundException('Покупка не найдена');
+    }
+
+    // Формируем понятное примечание
+    let defaultNote = 'Оплата закупки';
+    if (purchase.supplier?.name) {
+      defaultNote += ` (${purchase.supplier.name})`;
+    }
+    if (purchase.invoiceNumber) {
+      defaultNote += ` №${purchase.invoiceNumber}`;
+    }
+
     // Создаем транзакцию
     const transaction = await this.create(
       {
@@ -267,7 +286,7 @@ export class PaymentMethodTransactionsService {
         transactionType: TransactionType.PURCHASE,
         referenceType: ReferenceType.PURCHASE,
         referenceId: purchaseId,
-        note: note || `Закупка #${purchaseId}`,
+        note: note || defaultNote,
       },
       userId
     );
