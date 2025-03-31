@@ -25,6 +25,10 @@ import { Vehicle } from './entities/vehicle.entity';
 import { InventoryNotification } from './entities/inventory-notification.entity';
 import { VehicleNotification } from './entities/vehicle-notification.entity';
 import { Debt } from './entities/debt.entity';
+import { Receipt } from './entities/receipt.entity';
+import { ReceiptItem } from './entities/receipt-item.entity';
+import { CashShift } from './entities/cash-shift.entity';
+import { CashOperation } from './entities/cash-operation.entity';
 
 import { WarehouseProductsController } from './controllers/warehouse-products.controller';
 import { CategoriesController } from './controllers/categories.controller';
@@ -43,6 +47,7 @@ import { ClientController } from './controllers/client.controller';
 import { VehicleController } from './controllers/vehicle.controller';
 import { NotificationsController } from './controllers/notifications.controller';
 import { DebtsController } from './controllers/debts.controller';
+import { CashierController } from './controllers/cashier.controller';
 
 import { WarehouseProductsService } from './services/warehouse-products.service';
 import { CategoriesService } from './services/categories.service';
@@ -61,6 +66,7 @@ import { ClientService } from './services/client.service';
 import { VehicleService } from './services/vehicle.service';
 import { NotificationsService } from './services/notifications.service';
 import { DebtsService } from './services/debts.service';
+import { CashierService } from './services/cashier.service';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 
 @Module({
@@ -89,6 +95,10 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
       InventoryNotification,
       VehicleNotification,
       Debt,
+      Receipt,
+      ReceiptItem,
+      CashShift,
+      CashOperation,
     ]),
     WhatsappModule,
   ],
@@ -111,6 +121,7 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
     VehicleController,
     NotificationsController,
     DebtsController,
+    CashierController,
   ],
   providers: [
     ManagerService,
@@ -131,6 +142,7 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
     VehicleService,
     NotificationsService,
     DebtsService,
+    CashierService,
   ],
   exports: [ManagerService, NotificationsService],
 })
