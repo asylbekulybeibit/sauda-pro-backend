@@ -38,29 +38,39 @@ export class CashierService {
    * Поиск товаров по штрихкоду или названию
    */
   async searchProducts(warehouseId: string, query: string) {
-    // Сначала пробуем найти точное соответствие по штрихкоду
-    const barcode = await this.barcodeRepository.findOne({
-      where: { code: query },
-      relations: ['category'],
-    });
+    // Проверяем, является ли запрос числовым (для поиска по штрихкоду)
+    const isNumeric = /^\d+$/.test(query);
 
-    if (barcode) {
-      // Если найден штрихкод, ищем товар на складе
-      const product = await this.warehouseProductRepository.findOne({
-        where: {
-          warehouseId,
-          barcodeId: barcode.id,
-          isActive: true,
-        },
-        relations: ['barcode'],
+    if (isNumeric) {
+      // Ищем по частичному совпадению штрихкода
+      const barcodes = await this.barcodeRepository.find({
+        where: { code: Like(`%${query}%`) },
+        relations: ['category'],
       });
 
-      if (product) {
-        return [this.formatProductForResponse(product, barcode)];
+      if (barcodes.length > 0) {
+        // Если найдены штрихкоды, ищем соответствующие товары на складе
+        const products = await this.warehouseProductRepository.find({
+          where: {
+            warehouseId,
+            barcodeId: In(barcodes.map((b) => b.id)),
+            isActive: true,
+          },
+          relations: ['barcode'],
+        });
+
+        if (products.length > 0) {
+          return products.map((product) =>
+            this.formatProductForResponse(
+              product,
+              barcodes.find((b) => b.id === product.barcodeId)!
+            )
+          );
+        }
       }
     }
 
-    // Если не нашли по штрихкоду, ищем по названию
+    // Если не нашли по штрихкоду или запрос не числовой, ищем по названию
     const products = await this.warehouseProductRepository.find({
       where: {
         warehouseId,
