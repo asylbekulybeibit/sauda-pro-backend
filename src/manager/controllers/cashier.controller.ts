@@ -37,7 +37,28 @@ export class CashierController {
    */
   @Get('shift/current')
   async getCurrentShift(@Param('warehouseId') warehouseId: string, @Req() req) {
-    return this.cashierService.getCurrentShift(warehouseId, req.user.id);
+    console.log('[CashierController] getCurrentShift request:', {
+      warehouseId,
+      userId: req.user.id,
+      timestamp: new Date().toISOString(),
+    });
+    const result = await this.cashierService.getCurrentShift(
+      warehouseId,
+      req.user.id
+    );
+
+    // Преобразуем статус в верхний регистр перед отправкой на фронтенд
+    if (result) {
+      result.status = result.status.toUpperCase();
+    }
+
+    console.log('[CashierController] getCurrentShift response:', {
+      shiftId: result?.id,
+      status: result?.status,
+      startTime: result?.startTime,
+      endTime: result?.endTime,
+    });
+    return result;
   }
 
   /**

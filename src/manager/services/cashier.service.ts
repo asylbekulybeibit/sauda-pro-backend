@@ -101,35 +101,86 @@ export class CashierService {
    * Получение информации о текущей смене
    */
   async getCurrentShift(warehouseId: string, userId: string) {
-    const shift = await this.cashShiftRepository.findOne({
-      where: {
-        status: CashShiftStatus.OPEN,
-        cashRegister: {
-          warehouseId,
-        },
-      },
-      relations: ['cashRegister', 'openedBy'],
-      order: { startTime: 'DESC' },
+    console.log('[CashierService] Getting current shift:', {
+      warehouseId,
+      userId,
+      timestamp: new Date().toISOString(),
     });
 
-    if (!shift) {
-      throw new NotFoundException('Открытая смена не найдена');
-    }
+    try {
+      // Находим последнюю смену для данного склада и кассира
+      const queryBuilder = this.cashShiftRepository
+        .createQueryBuilder('shift')
+        .leftJoinAndSelect('shift.cashRegister', 'cashRegister')
+        .leftJoinAndSelect('shift.openedBy', 'openedBy')
+        .where('cashRegister.warehouseId = :warehouseId', { warehouseId })
+        .andWhere('shift.openedById = :userId', { userId })
+        .orderBy('shift.startTime', 'DESC');
 
-    return {
-      id: shift.id,
-      startTime: shift.startTime,
-      cashRegister: {
-        id: shift.cashRegister.id,
-        name: shift.cashRegister.name,
-      },
-      cashier: {
-        id: shift.openedBy.id,
-        name: `${shift.openedBy.firstName} ${shift.openedBy.lastName}`,
-      },
-      initialAmount: shift.initialAmount,
-      currentAmount: shift.currentAmount,
-    };
+      console.log('[CashierService] Executing query:', queryBuilder.getSql());
+      console.log('[CashierService] Query parameters:', {
+        warehouseId,
+        userId,
+      });
+
+      const shift = await queryBuilder.getOne();
+
+      console.log('[CashierService] Found shift:', {
+        shiftId: shift?.id,
+        status: shift?.status,
+        startTime: shift?.startTime,
+        endTime: shift?.endTime,
+        cashRegisterId: shift?.cashRegister?.id,
+        openedById: shift?.openedBy?.id,
+        rawStatus: shift?.status,
+        isStatusOpen: shift?.status === CashShiftStatus.OPEN,
+        expectedOpenStatus: CashShiftStatus.OPEN,
+      });
+
+      if (!shift) {
+        console.log('[CashierService] No shift found');
+        return null;
+      }
+
+      // Проверяем, является ли смена текущей (открытой)
+      const isOpen = shift.status === CashShiftStatus.OPEN;
+      console.log('[CashierService] Shift status check:', {
+        isOpen,
+        status: shift.status,
+        statusType: typeof shift.status,
+        expectedStatus: CashShiftStatus.OPEN,
+        expectedStatusType: typeof CashShiftStatus.OPEN,
+        areEqual: shift.status === CashShiftStatus.OPEN,
+      });
+
+      if (!isOpen) {
+        console.log('[CashierService] Shift is not open');
+        return null;
+      }
+
+      return {
+        id: shift.id,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+        initialAmount: shift.initialAmount,
+        currentAmount: shift.currentAmount,
+        finalAmount: shift.finalAmount,
+        status: shift.status.toUpperCase(),
+        cashRegister: {
+          id: shift.cashRegister.id,
+          name: shift.cashRegister.name,
+        },
+        cashier: {
+          id: shift.openedBy.id,
+          name: `${shift.openedBy.firstName || ''} ${
+            shift.openedBy.lastName || ''
+          }`.trim(),
+        },
+      };
+    } catch (error) {
+      console.error('[CashierService] Error getting current shift:', error);
+      throw error;
+    }
   }
 
   /**
@@ -353,10 +404,12 @@ export class CashierService {
     userId: string,
     addItemDto: any
   ) {
-    console.log('Received addItemDto:', {
-      ...addItemDto,
-      priceType: typeof addItemDto.price,
-      quantityType: typeof addItemDto.quantity,
+    console.log('[CashierService] Adding item to receipt:', {
+      warehouseId,
+      receiptId,
+      userId,
+      addItemDto,
+      timestamp: new Date().toISOString(),
     });
 
     // Проверяем существование чека
@@ -365,17 +418,42 @@ export class CashierService {
         id: receiptId,
         warehouseId: warehouseId,
       },
+      relations: ['cashShift', 'cashShift.cashRegister'],
+    });
+
+    console.log('[CashierService] Found receipt:', {
+      receiptId: receipt?.id,
+      status: receipt?.status,
+      cashShiftId: receipt?.cashShift?.id,
+      cashShiftStatus: receipt?.cashShift?.status,
     });
 
     if (!receipt) {
+      console.log('[CashierService] Receipt not found');
       throw new NotFoundException('Чек не найден');
     }
 
     // Проверяем статус чека
     if (receipt.status !== ReceiptStatus.CREATED) {
+      console.log('[CashierService] Invalid receipt status:', receipt.status);
       throw new BadRequestException(
         'Невозможно изменить оплаченный или отмененный чек'
       );
+    }
+
+    // Проверяем статус смены
+    if (
+      !receipt.cashShift ||
+      receipt.cashShift.status !== CashShiftStatus.OPEN
+    ) {
+      console.log('[CashierService] Invalid shift status:', {
+        shiftExists: !!receipt.cashShift,
+        shiftId: receipt.cashShift?.id,
+        shiftStatus: receipt.cashShift?.status,
+        expectedStatus: CashShiftStatus.OPEN,
+        timestamp: new Date().toISOString(),
+      });
+      throw new BadRequestException('Смена не открыта');
     }
 
     // Проверяем существование товара
@@ -387,132 +465,57 @@ export class CashierService {
       relations: ['barcode'],
     });
 
+    console.log('[CashierService] Found product:', {
+      productId: product?.id,
+      name: product?.barcode?.productName,
+      warehouseId: product?.warehouseId,
+    });
+
     if (!product) {
+      console.log('[CashierService] Product not found');
       throw new NotFoundException('Товар не найден');
     }
 
-    // Ищем существующую позицию в чеке
-    let receiptItem = await this.receiptItemRepository.findOne({
-      where: {
-        receiptId: receiptId,
-        warehouseProductId: addItemDto.warehouseProductId,
-      },
+    // Создаем новую позицию в чеке
+    const receiptItem = this.receiptItemRepository.create({
+      receiptId: receipt.id,
+      warehouseProductId: product.id,
+      name: product.barcode.productName,
+      price: addItemDto.price,
+      quantity: addItemDto.quantity,
+      amount: addItemDto.price * addItemDto.quantity,
+      discountPercent: addItemDto.discountPercent || 0,
+      discountAmount:
+        (addItemDto.price *
+          addItemDto.quantity *
+          (addItemDto.discountPercent || 0)) /
+        100,
+      finalAmount:
+        addItemDto.price * addItemDto.quantity -
+        (addItemDto.price *
+          addItemDto.quantity *
+          (addItemDto.discountPercent || 0)) /
+          100,
+      type: product.isService
+        ? ReceiptItemType.SERVICE
+        : ReceiptItemType.PRODUCT,
     });
 
-    if (receiptItem) {
-      // Обновляем существующую позицию
-      console.log('Updating existing item. Original values:', {
-        quantity: receiptItem.quantity,
-        quantityType: typeof receiptItem.quantity,
-        price: receiptItem.price,
-        priceType: typeof receiptItem.price,
-      });
-
-      // Преобразуем входящие значения в числа
-      const quantity = Number(addItemDto.quantity);
-      const price = Number(addItemDto.price);
-      const discountPercent = Number(addItemDto.discountPercent || 0);
-
-      console.log('Converted values:', {
-        quantity,
-        quantityType: typeof quantity,
-        price,
-        priceType: typeof price,
-        discountPercent,
-        discountPercentType: typeof discountPercent,
-      });
-
-      receiptItem.quantity = quantity;
-      receiptItem.price = price;
-      receiptItem.discountPercent = discountPercent;
-
-      // Выполняем расчеты
-      const amount = Number((price * quantity).toFixed(2));
-      const discountAmount = Number(
-        (amount * (discountPercent / 100)).toFixed(2)
-      );
-      const finalAmount = Number((amount - discountAmount).toFixed(2));
-
-      console.log('Calculated values:', {
-        amount,
-        amountType: typeof amount,
-        discountAmount,
-        discountAmountType: typeof discountAmount,
-        finalAmount,
-        finalAmountType: typeof finalAmount,
-      });
-
-      receiptItem.amount = amount;
-      receiptItem.discountAmount = discountAmount;
-      receiptItem.finalAmount = finalAmount;
-    } else {
-      // Создаем новую позицию
-      console.log('Creating new item with values:', {
-        quantity: addItemDto.quantity,
-        quantityType: typeof addItemDto.quantity,
-        price: addItemDto.price,
-        priceType: typeof addItemDto.price,
-      });
-
-      // Преобразуем входящие значения в числа
-      const quantity = Number(addItemDto.quantity);
-      const price = Number(addItemDto.price);
-      const discountPercent = Number(addItemDto.discountPercent || 0);
-
-      // Создаем новую позицию с преобразованными значениями
-      receiptItem = this.receiptItemRepository.create({
-        receiptId: receiptId,
-        warehouseProductId: addItemDto.warehouseProductId,
-        name: product.barcode
-          ? product.barcode.productName
-          : 'Неизвестный товар',
-        quantity,
-        price,
-        discountPercent,
-        type: product.isService
-          ? ReceiptItemType.SERVICE
-          : ReceiptItemType.PRODUCT,
-      });
-
-      // Выполняем расчеты
-      const amount = Number((price * quantity).toFixed(2));
-      const discountAmount = Number(
-        (amount * (discountPercent / 100)).toFixed(2)
-      );
-      const finalAmount = Number((amount - discountAmount).toFixed(2));
-
-      console.log('Calculated values for new item:', {
-        amount,
-        amountType: typeof amount,
-        discountAmount,
-        discountAmountType: typeof discountAmount,
-        finalAmount,
-        finalAmountType: typeof finalAmount,
-      });
-
-      receiptItem.amount = amount;
-      receiptItem.discountAmount = discountAmount;
-      receiptItem.finalAmount = finalAmount;
-    }
+    console.log('[CashierService] Created receipt item:', {
+      itemId: receiptItem.id,
+      name: receiptItem.name,
+      price: receiptItem.price,
+      quantity: receiptItem.quantity,
+      finalAmount: receiptItem.finalAmount,
+    });
 
     // Сохраняем позицию
-    console.log('Saving receipt item:', {
-      quantity: receiptItem.quantity,
-      quantityType: typeof receiptItem.quantity,
-      price: receiptItem.price,
-      priceType: typeof receiptItem.price,
-      amount: receiptItem.amount,
-      amountType: typeof receiptItem.amount,
-      finalAmount: receiptItem.finalAmount,
-      finalAmountType: typeof receiptItem.finalAmount,
-    });
-
-    const savedItem = await this.receiptItemRepository.save(receiptItem);
+    await this.receiptItemRepository.save(receiptItem);
 
     // Обновляем итоги чека
     await this.updateReceiptTotals(receiptId);
 
-    return savedItem;
+    return receiptItem;
   }
 
   /**
