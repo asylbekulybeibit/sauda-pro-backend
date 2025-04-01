@@ -7,6 +7,7 @@ import {
   Query,
   UseGuards,
   Req,
+  Delete,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -52,6 +53,42 @@ export class CashierController {
       warehouseId,
       req.user.id,
       createReceiptDto
+    );
+  }
+
+  /**
+   * Добавление товара в чек
+   */
+  @Post('receipts/:receiptId/items')
+  async addItemToReceipt(
+    @Param('warehouseId') warehouseId: string,
+    @Param('receiptId') receiptId: string,
+    @Body() addItemDto: any,
+    @Req() req
+  ) {
+    return this.cashierService.addItemToReceipt(
+      warehouseId,
+      receiptId,
+      req.user.id,
+      addItemDto
+    );
+  }
+
+  /**
+   * Удаление товара из чека
+   */
+  @Delete('receipts/:receiptId/items/:itemId')
+  async removeItemFromReceipt(
+    @Param('warehouseId') warehouseId: string,
+    @Param('receiptId') receiptId: string,
+    @Param('itemId') itemId: string,
+    @Req() req
+  ) {
+    return this.cashierService.removeItemFromReceipt(
+      warehouseId,
+      receiptId,
+      itemId,
+      req.user.id
     );
   }
 

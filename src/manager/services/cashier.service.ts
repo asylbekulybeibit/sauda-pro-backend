@@ -343,4 +343,274 @@ export class CashierService {
     // Форматируем номер чека (например: "R-0001")
     return `R-${nextNumber.toString().padStart(4, '0')}`;
   }
+
+  /**
+   * Добавление товара в чек
+   */
+  async addItemToReceipt(
+    warehouseId: string,
+    receiptId: string,
+    userId: string,
+    addItemDto: any
+  ) {
+    console.log('Received addItemDto:', {
+      ...addItemDto,
+      priceType: typeof addItemDto.price,
+      quantityType: typeof addItemDto.quantity,
+    });
+
+    // Проверяем существование чека
+    const receipt = await this.receiptRepository.findOne({
+      where: {
+        id: receiptId,
+        warehouseId: warehouseId,
+      },
+    });
+
+    if (!receipt) {
+      throw new NotFoundException('Чек не найден');
+    }
+
+    // Проверяем статус чека
+    if (receipt.status !== ReceiptStatus.CREATED) {
+      throw new BadRequestException(
+        'Невозможно изменить оплаченный или отмененный чек'
+      );
+    }
+
+    // Проверяем существование товара
+    const product = await this.warehouseProductRepository.findOne({
+      where: {
+        id: addItemDto.warehouseProductId,
+        warehouseId: warehouseId,
+      },
+      relations: ['barcode'],
+    });
+
+    if (!product) {
+      throw new NotFoundException('Товар не найден');
+    }
+
+    // Ищем существующую позицию в чеке
+    let receiptItem = await this.receiptItemRepository.findOne({
+      where: {
+        receiptId: receiptId,
+        warehouseProductId: addItemDto.warehouseProductId,
+      },
+    });
+
+    if (receiptItem) {
+      // Обновляем существующую позицию
+      console.log('Updating existing item. Original values:', {
+        quantity: receiptItem.quantity,
+        quantityType: typeof receiptItem.quantity,
+        price: receiptItem.price,
+        priceType: typeof receiptItem.price,
+      });
+
+      // Преобразуем входящие значения в числа
+      const quantity = Number(addItemDto.quantity);
+      const price = Number(addItemDto.price);
+      const discountPercent = Number(addItemDto.discountPercent || 0);
+
+      console.log('Converted values:', {
+        quantity,
+        quantityType: typeof quantity,
+        price,
+        priceType: typeof price,
+        discountPercent,
+        discountPercentType: typeof discountPercent,
+      });
+
+      receiptItem.quantity = quantity;
+      receiptItem.price = price;
+      receiptItem.discountPercent = discountPercent;
+
+      // Выполняем расчеты
+      const amount = Number((price * quantity).toFixed(2));
+      const discountAmount = Number(
+        (amount * (discountPercent / 100)).toFixed(2)
+      );
+      const finalAmount = Number((amount - discountAmount).toFixed(2));
+
+      console.log('Calculated values:', {
+        amount,
+        amountType: typeof amount,
+        discountAmount,
+        discountAmountType: typeof discountAmount,
+        finalAmount,
+        finalAmountType: typeof finalAmount,
+      });
+
+      receiptItem.amount = amount;
+      receiptItem.discountAmount = discountAmount;
+      receiptItem.finalAmount = finalAmount;
+    } else {
+      // Создаем новую позицию
+      console.log('Creating new item with values:', {
+        quantity: addItemDto.quantity,
+        quantityType: typeof addItemDto.quantity,
+        price: addItemDto.price,
+        priceType: typeof addItemDto.price,
+      });
+
+      // Преобразуем входящие значения в числа
+      const quantity = Number(addItemDto.quantity);
+      const price = Number(addItemDto.price);
+      const discountPercent = Number(addItemDto.discountPercent || 0);
+
+      // Создаем новую позицию с преобразованными значениями
+      receiptItem = this.receiptItemRepository.create({
+        receiptId: receiptId,
+        warehouseProductId: addItemDto.warehouseProductId,
+        name: product.barcode
+          ? product.barcode.productName
+          : 'Неизвестный товар',
+        quantity,
+        price,
+        discountPercent,
+        type: product.isService
+          ? ReceiptItemType.SERVICE
+          : ReceiptItemType.PRODUCT,
+      });
+
+      // Выполняем расчеты
+      const amount = Number((price * quantity).toFixed(2));
+      const discountAmount = Number(
+        (amount * (discountPercent / 100)).toFixed(2)
+      );
+      const finalAmount = Number((amount - discountAmount).toFixed(2));
+
+      console.log('Calculated values for new item:', {
+        amount,
+        amountType: typeof amount,
+        discountAmount,
+        discountAmountType: typeof discountAmount,
+        finalAmount,
+        finalAmountType: typeof finalAmount,
+      });
+
+      receiptItem.amount = amount;
+      receiptItem.discountAmount = discountAmount;
+      receiptItem.finalAmount = finalAmount;
+    }
+
+    // Сохраняем позицию
+    console.log('Saving receipt item:', {
+      quantity: receiptItem.quantity,
+      quantityType: typeof receiptItem.quantity,
+      price: receiptItem.price,
+      priceType: typeof receiptItem.price,
+      amount: receiptItem.amount,
+      amountType: typeof receiptItem.amount,
+      finalAmount: receiptItem.finalAmount,
+      finalAmountType: typeof receiptItem.finalAmount,
+    });
+
+    const savedItem = await this.receiptItemRepository.save(receiptItem);
+
+    // Обновляем итоги чека
+    await this.updateReceiptTotals(receiptId);
+
+    return savedItem;
+  }
+
+  /**
+   * Удаление товара из чека
+   */
+  async removeItemFromReceipt(
+    warehouseId: string,
+    receiptId: string,
+    itemId: string,
+    userId: string
+  ) {
+    // Проверяем существование чека
+    const receipt = await this.receiptRepository.findOne({
+      where: {
+        id: receiptId,
+        warehouseId: warehouseId,
+      },
+    });
+
+    if (!receipt) {
+      throw new NotFoundException('Чек не найден');
+    }
+
+    // Проверяем статус чека
+    if (receipt.status !== ReceiptStatus.CREATED) {
+      throw new BadRequestException(
+        'Невозможно изменить оплаченный или отмененный чек'
+      );
+    }
+
+    // Проверяем существование позиции
+    const receiptItem = await this.receiptItemRepository.findOne({
+      where: {
+        id: itemId,
+        receiptId: receiptId,
+      },
+    });
+
+    if (!receiptItem) {
+      throw new NotFoundException('Позиция в чеке не найдена');
+    }
+
+    // Удаляем позицию
+    await this.receiptItemRepository.remove(receiptItem);
+
+    // Обновляем итоги чека
+    await this.updateReceiptTotals(receiptId);
+
+    return { success: true, message: 'Позиция успешно удалена из чека' };
+  }
+
+  /**
+   * Обновление итогов чека
+   */
+  private async updateReceiptTotals(receiptId: string) {
+    // Получаем все позиции чека
+    const items = await this.receiptItemRepository.find({
+      where: { receiptId: receiptId },
+    });
+
+    console.log(
+      'Updating receipt totals. Items:',
+      items.map((item) => ({
+        id: item.id,
+        amount: item.amount,
+        amountType: typeof item.amount,
+        discountAmount: item.discountAmount,
+        discountAmountType: typeof item.discountAmount,
+      }))
+    );
+
+    // Рассчитываем итоги
+    const totalAmount = Number(
+      items.reduce((sum, item) => sum + Number(item.amount), 0).toFixed(2)
+    );
+    const discountAmount = Number(
+      items
+        .reduce((sum, item) => sum + Number(item.discountAmount), 0)
+        .toFixed(2)
+    );
+    const finalAmount = Number((totalAmount - discountAmount).toFixed(2));
+
+    console.log('Calculated totals:', {
+      totalAmount,
+      totalAmountType: typeof totalAmount,
+      discountAmount,
+      discountAmountType: typeof discountAmount,
+      finalAmount,
+      finalAmountType: typeof finalAmount,
+    });
+
+    // Обновляем чек
+    await this.receiptRepository.update(receiptId, {
+      totalAmount,
+      discountAmount,
+      finalAmount,
+    });
+
+    console.log('Receipt totals updated successfully');
+  }
 }
