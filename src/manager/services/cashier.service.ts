@@ -712,4 +712,39 @@ export class CashierService {
 
     return savedReceipt;
   }
+
+  /**
+   * Удаление пустого чека
+   */
+  async deleteReceipt(warehouseId: string, receiptId: string, userId: string) {
+    // Проверяем существование чека
+    const receipt = await this.receiptRepository.findOne({
+      where: {
+        id: receiptId,
+        warehouseId,
+      },
+      relations: ['items'],
+    });
+
+    if (!receipt) {
+      throw new NotFoundException('Чек не найден');
+    }
+
+    // Проверяем, что чек пустой
+    if (receipt.items.length > 0) {
+      throw new BadRequestException('Нельзя удалить чек с товарами');
+    }
+
+    // Проверяем статус чека
+    if (receipt.status !== ReceiptStatus.CREATED) {
+      throw new BadRequestException(
+        'Можно удалить только чек в статусе "Создан"'
+      );
+    }
+
+    // Удаляем чек
+    await this.receiptRepository.remove(receipt);
+
+    return { success: true, message: 'Чек успешно удален' };
+  }
 }

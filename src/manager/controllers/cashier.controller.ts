@@ -187,4 +187,20 @@ export class CashierController {
       req.user.id
     );
   }
+
+  /**
+   * Удаление пустого чека
+   */
+  @Delete('receipts/:receiptId')
+  async deleteReceipt(
+    @Param('warehouseId') warehouseId: string,
+    @Param('receiptId') receiptId: string,
+    @Req() req
+  ) {
+    return this.cashierService.deleteReceipt(
+      warehouseId,
+      receiptId,
+      req.user.id
+    );
+  }
 }
