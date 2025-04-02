@@ -14,6 +14,7 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { RoleType } from '../../auth/types/role.type';
 import { CashierService } from '../services/cashier.service';
+import { CreateReturnWithoutReceiptDto } from '../dto/cashier/create-return-without-receipt.dto';
 
 @Controller('manager/:warehouseId/cashier')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -47,17 +48,20 @@ export class CashierController {
       req.user.id
     );
 
-    // Преобразуем статус в верхний регистр перед отправкой на фронтенд
-    if (result) {
-      result.status = result.status.toUpperCase();
-    }
-
     console.log('[CashierController] getCurrentShift response:', {
       shiftId: result?.id,
       status: result?.status,
       startTime: result?.startTime,
       endTime: result?.endTime,
     });
+
+    if (result) {
+      return {
+        ...result,
+        displayStatus: result.status.toUpperCase(),
+      };
+    }
+
     return result;
   }
 
@@ -228,5 +232,43 @@ export class CashierController {
   @Get('receipts/current')
   async getCurrentReceipt(@Param('warehouseId') warehouseId: string) {
     return this.cashierService.getCurrentReceipt(warehouseId);
+  }
+
+  /**
+   * Создание возврата по чеку
+   */
+  @Post('receipts/:receiptId/return')
+  async createReturn(
+    @Param('warehouseId') warehouseId: string,
+    @Param('receiptId') receiptId: string,
+    @Body()
+    returnData: {
+      items: Array<{ receiptItemId: string; quantity: number }>;
+      reason: string;
+    },
+    @Req() req
+  ) {
+    return this.cashierService.createReturn(
+      warehouseId,
+      receiptId,
+      returnData,
+      req.user.id
+    );
+  }
+
+  /**
+   * Создание возврата без чека
+   */
+  @Post('returns/without-receipt')
+  async createReturnWithoutReceipt(
+    @Param('warehouseId') warehouseId: string,
+    @Body() returnData: CreateReturnWithoutReceiptDto,
+    @Req() req
+  ) {
+    return this.cashierService.createReturnWithoutReceipt(
+      warehouseId,
+      returnData,
+      req.user.id
+    );
   }
 }

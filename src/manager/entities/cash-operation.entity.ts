@@ -20,6 +20,7 @@ export enum CashOperationType {
   SERVICE = 'service',
   TRANSFER_IN = 'transfer_in',
   TRANSFER_OUT = 'transfer_out',
+  RETURN_WITHOUT_RECEIPT = 'return_without_receipt',
 }
 
 export enum PaymentMethodType {

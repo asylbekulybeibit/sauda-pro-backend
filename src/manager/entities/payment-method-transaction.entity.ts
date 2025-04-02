@@ -17,6 +17,7 @@ export enum TransactionType {
   WITHDRAWAL = 'withdrawal',
   PURCHASE = 'purchase',
   ADJUSTMENT = 'adjustment',
+  RETURN_WITHOUT_RECEIPT = 'return_without_receipt',
 }
 
 export enum ReferenceType {
