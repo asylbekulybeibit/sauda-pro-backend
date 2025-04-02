@@ -20,6 +20,7 @@ export enum ReceiptStatus {
   PAID = 'paid',
   CANCELLED = 'cancelled',
   REFUNDED = 'refunded',
+  POSTPONED = 'postponed',
 }
 
 export enum PaymentMethod {

@@ -626,4 +626,90 @@ export class CashierService {
 
     console.log('Receipt totals updated successfully');
   }
+
+  /**
+   * Получение списка отложенных чеков
+   */
+  async getPostponedReceipts(warehouseId: string) {
+    const postponedReceipts = await this.receiptRepository.find({
+      where: {
+        warehouseId,
+        status: ReceiptStatus.POSTPONED,
+      },
+      relations: ['items'],
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+
+    return postponedReceipts;
+  }
+
+  /**
+   * Отложить чек
+   */
+  async postponeReceipt(
+    warehouseId: string,
+    receiptId: string,
+    userId: string
+  ) {
+    // Проверяем существование чека
+    const receipt = await this.receiptRepository.findOne({
+      where: {
+        id: receiptId,
+        warehouseId,
+      },
+      relations: ['items'],
+    });
+
+    if (!receipt) {
+      throw new NotFoundException('Чек не найден');
+    }
+
+    // Проверяем статус чека
+    if (receipt.status !== ReceiptStatus.CREATED) {
+      throw new BadRequestException(
+        'Можно отложить только чек в статусе "Создан"'
+      );
+    }
+
+    // Обновляем статус чека
+    receipt.status = ReceiptStatus.POSTPONED;
+    const savedReceipt = await this.receiptRepository.save(receipt);
+
+    return savedReceipt;
+  }
+
+  /**
+   * Восстановить отложенный чек
+   */
+  async restorePostponedReceipt(
+    warehouseId: string,
+    receiptId: string,
+    userId: string
+  ) {
+    // Проверяем существование чека
+    const receipt = await this.receiptRepository.findOne({
+      where: {
+        id: receiptId,
+        warehouseId,
+      },
+      relations: ['items'],
+    });
+
+    if (!receipt) {
+      throw new NotFoundException('Чек не найден');
+    }
+
+    // Проверяем статус чека
+    if (receipt.status !== ReceiptStatus.POSTPONED) {
+      throw new BadRequestException('Можно восстановить только отложенный чек');
+    }
+
+    // Обновляем статус чека
+    receipt.status = ReceiptStatus.CREATED;
+    const savedReceipt = await this.receiptRepository.save(receipt);
+
+    return savedReceipt;
+  }
 }

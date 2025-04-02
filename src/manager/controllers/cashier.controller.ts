@@ -144,4 +144,47 @@ export class CashierController {
       closeShiftDto
     );
   }
+
+  /**
+   * Получение списка отложенных чеков
+   */
+  @Get('receipts/postponed')
+  async getPostponedReceipts(
+    @Param('warehouseId') warehouseId: string,
+    @Req() req
+  ) {
+    return this.cashierService.getPostponedReceipts(warehouseId);
+  }
+
+  /**
+   * Отложить чек
+   */
+  @Post('receipts/:receiptId/postpone')
+  async postponeReceipt(
+    @Param('warehouseId') warehouseId: string,
+    @Param('receiptId') receiptId: string,
+    @Req() req
+  ) {
+    return this.cashierService.postponeReceipt(
+      warehouseId,
+      receiptId,
+      req.user.id
+    );
+  }
+
+  /**
+   * Восстановить отложенный чек
+   */
+  @Post('receipts/:receiptId/restore')
+  async restorePostponedReceipt(
+    @Param('warehouseId') warehouseId: string,
+    @Param('receiptId') receiptId: string,
+    @Req() req
+  ) {
+    return this.cashierService.restorePostponedReceipt(
+      warehouseId,
+      receiptId,
+      req.user.id
+    );
+  }
 }
