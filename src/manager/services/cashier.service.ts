@@ -16,6 +16,17 @@ import {
 import { ReceiptItem, ReceiptItemType } from '../entities/receipt-item.entity';
 import { CashRegister } from '../entities/cash-register.entity';
 import { Barcode } from '../entities/barcode.entity';
+import { RegisterPaymentMethod } from '../entities/register-payment-method.entity';
+import {
+  CashOperation,
+  CashOperationType,
+  PaymentMethodType,
+} from '../entities/cash-operation.entity';
+import {
+  PaymentMethodTransaction,
+  TransactionType,
+  ReferenceType,
+} from '../entities/payment-method-transaction.entity';
 
 @Injectable()
 export class CashierService {
@@ -31,7 +42,13 @@ export class CashierService {
     @InjectRepository(Receipt)
     private readonly receiptRepository: Repository<Receipt>,
     @InjectRepository(ReceiptItem)
-    private readonly receiptItemRepository: Repository<ReceiptItem>
+    private readonly receiptItemRepository: Repository<ReceiptItem>,
+    @InjectRepository(RegisterPaymentMethod)
+    private readonly paymentMethodRepository: Repository<RegisterPaymentMethod>,
+    @InjectRepository(CashOperation)
+    private readonly cashOperationRepository: Repository<CashOperation>,
+    @InjectRepository(PaymentMethodTransaction)
+    private readonly paymentMethodTransactionRepository: Repository<PaymentMethodTransaction>
   ) {}
 
   /**
@@ -746,5 +763,160 @@ export class CashierService {
     await this.receiptRepository.remove(receipt);
 
     return { success: true, message: 'Чек успешно удален' };
+  }
+
+  /**
+   * Оплата чека
+   */
+  async payReceipt(
+    warehouseId: string,
+    receiptId: string,
+    paymentData: { paymentMethodId: string; amount: number },
+    userId: string
+  ) {
+    console.log('[CashierService] payReceipt called with:', {
+      warehouseId,
+      receiptId,
+      paymentData,
+      userId,
+    });
+
+    try {
+      // Находим чек
+      const receipt = await this.receiptRepository.findOne({
+        where: {
+          id: receiptId,
+          warehouseId,
+          status: ReceiptStatus.CREATED,
+        },
+        relations: ['cashShift', 'cashRegister'],
+      });
+
+      console.log('[CashierService] Found receipt:', receipt);
+
+      if (!receipt) {
+        throw new NotFoundException('Чек не найден или уже оплачен');
+      }
+
+      // Проверяем статус смены
+      if (receipt.cashShift.status !== CashShiftStatus.OPEN) {
+        throw new BadRequestException('Смена закрыта');
+      }
+
+      // Находим метод оплаты
+      const paymentMethod = await this.paymentMethodRepository.findOne({
+        where: {
+          id: paymentData.paymentMethodId,
+          warehouseId,
+        },
+      });
+
+      console.log('[CashierService] Found payment method:', paymentMethod);
+
+      if (!paymentMethod) {
+        throw new NotFoundException('Метод оплаты не найден');
+      }
+
+      // Проверяем сумму оплаты
+      if (paymentData.amount < receipt.finalAmount) {
+        throw new BadRequestException('Недостаточная сумма оплаты');
+      }
+
+      // Создаем операцию по кассе
+      const cashOperation = this.cashOperationRepository.create({
+        warehouseId,
+        cashRegisterId: receipt.cashRegisterId,
+        shiftId: receipt.cashShiftId,
+        userId,
+        receiptId: receipt.id,
+        operationType: CashOperationType.SALE,
+        amount: receipt.finalAmount,
+        paymentMethod: paymentMethod.systemType || PaymentMethodType.CASH,
+        description: `Оплата чека ${receipt.receiptNumber}`,
+      });
+
+      console.log('[CashierService] Created cash operation:', cashOperation);
+
+      await this.cashOperationRepository.save(cashOperation);
+
+      // Получаем текущий баланс метода оплаты и конвертируем в число с 2 десятичными знаками
+      const currentBalance = Number(
+        Number(paymentMethod.currentBalance || 0).toFixed(2)
+      );
+      const finalAmount = Number(Number(receipt.finalAmount).toFixed(2));
+
+      // Проверяем, что новый баланс не превысит максимальное значение (99999999.99)
+      const newBalance = currentBalance + finalAmount;
+      if (newBalance > 99999999.99) {
+        throw new BadRequestException(
+          'Превышено максимальное значение баланса метода оплаты'
+        );
+      }
+
+      // Создаем транзакцию метода оплаты
+      const transaction = this.paymentMethodTransactionRepository.create({
+        paymentMethodId: paymentMethod.id,
+        shiftId: receipt.cashShiftId,
+        amount: finalAmount,
+        balanceBefore: currentBalance,
+        balanceAfter: newBalance,
+        transactionType: TransactionType.SALE,
+        referenceType: ReferenceType.SALE,
+        referenceId: receipt.id,
+        note: `Оплата чека ${receipt.receiptNumber}`,
+        createdById: userId,
+      });
+
+      console.log(
+        '[CashierService] Created payment method transaction:',
+        transaction
+      );
+
+      await this.paymentMethodTransactionRepository.save(transaction);
+
+      // Обновляем баланс метода оплаты
+      await this.paymentMethodRepository.update(
+        { id: paymentMethod.id },
+        {
+          currentBalance: newBalance,
+        }
+      );
+
+      // Обновляем статус чека
+      receipt.status = ReceiptStatus.PAID;
+      receipt.paymentMethod =
+        paymentMethod.systemType === PaymentMethodType.CASH
+          ? PaymentMethod.CASH
+          : PaymentMethod.CARD;
+      receipt.cashOperationId = cashOperation.id;
+
+      const updatedReceipt = await this.receiptRepository.save(receipt);
+
+      console.log('[CashierService] Updated receipt:', updatedReceipt);
+
+      return {
+        ...updatedReceipt,
+        change: Number((paymentData.amount - receipt.finalAmount).toFixed(2)),
+      };
+    } catch (error) {
+      console.error('[CashierService] Error in payReceipt:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Получение текущего активного чека
+   */
+  async getCurrentReceipt(warehouseId: string) {
+    return this.receiptRepository.findOne({
+      where: {
+        warehouseId,
+        status: ReceiptStatus.CREATED,
+      },
+      relations: ['items', 'cashShift', 'cashRegister'],
+      order: {
+        createdAt: 'DESC',
+      },
+    });
   }
 }

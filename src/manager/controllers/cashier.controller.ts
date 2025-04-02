@@ -203,4 +203,30 @@ export class CashierController {
       req.user.id
     );
   }
+
+  /**
+   * Оплата чека
+   */
+  @Post('receipts/:receiptId/pay')
+  async payReceipt(
+    @Param('warehouseId') warehouseId: string,
+    @Param('receiptId') receiptId: string,
+    @Body() paymentData: { paymentMethodId: string; amount: number },
+    @Req() req
+  ) {
+    return this.cashierService.payReceipt(
+      warehouseId,
+      receiptId,
+      paymentData,
+      req.user.id
+    );
+  }
+
+  /**
+   * Получение текущего активного чека
+   */
+  @Get('receipts/current')
+  async getCurrentReceipt(@Param('warehouseId') warehouseId: string) {
+    return this.cashierService.getCurrentReceipt(warehouseId);
+  }
 }

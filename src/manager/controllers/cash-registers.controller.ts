@@ -39,6 +39,7 @@ export class CashRegistersController {
   }
 
   @Get('shared-payment-methods')
+  @Roles(RoleType.MANAGER, RoleType.CASHIER)
   async getSharedPaymentMethods(
     @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ) {
@@ -46,6 +47,7 @@ export class CashRegistersController {
   }
 
   @Get('payment-methods')
+  @Roles(RoleType.MANAGER, RoleType.CASHIER)
   async getAllPaymentMethods(
     @Param('warehouseId', ParseUUIDPipe) warehouseId: string
   ) {
