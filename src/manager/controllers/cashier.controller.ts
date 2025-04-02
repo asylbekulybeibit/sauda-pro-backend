@@ -271,4 +271,15 @@ export class CashierController {
       req.user.id
     );
   }
+
+  /**
+   * Поиск чеков по номеру
+   */
+  @Get('receipts/search')
+  async searchReceipts(
+    @Param('warehouseId') warehouseId: string,
+    @Query('receiptNumber') receiptNumber: string
+  ) {
+    return this.cashierService.searchReceipts(warehouseId, receiptNumber);
+  }
 }

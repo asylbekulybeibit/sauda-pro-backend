@@ -1262,4 +1262,44 @@ export class CashierService {
       throw error;
     }
   }
+
+  /**
+   * Поиск чеков по номеру
+   */
+  async searchReceipts(warehouseId: string, receiptNumber: string) {
+    console.log('[CashierService] Searching receipts:', {
+      warehouseId,
+      receiptNumber,
+      timestamp: new Date().toISOString(),
+    });
+
+    try {
+      const receipts = await this.receiptRepository.find({
+        where: {
+          warehouseId,
+          receiptNumber: Like(`%${receiptNumber}%`),
+          status: ReceiptStatus.PAID,
+        },
+        relations: ['items', 'cashShift', 'cashRegister'],
+        order: {
+          createdAt: 'DESC',
+        },
+      });
+
+      console.log('[CashierService] Found receipts:', {
+        count: receipts.length,
+        receiptIds: receipts.map((r) => r.id),
+        timestamp: new Date().toISOString(),
+      });
+
+      return receipts;
+    } catch (error) {
+      console.error('[CashierService] Error searching receipts:', {
+        error: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString(),
+      });
+      throw error;
+    }
+  }
 }
