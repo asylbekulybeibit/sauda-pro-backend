@@ -1,9 +1,9 @@
 import { IsString, IsEnum, IsBoolean, IsOptional } from 'class-validator';
-import { PaymentMethodType } from '../../entities/cash-operation.entity';
 import {
+  PaymentMethodType,
   PaymentMethodSource,
   PaymentMethodStatus,
-} from '../../entities/register-payment-method.entity';
+} from '../../enums/common.enums';
 
 export class PaymentMethodDto {
   @IsEnum(PaymentMethodSource)

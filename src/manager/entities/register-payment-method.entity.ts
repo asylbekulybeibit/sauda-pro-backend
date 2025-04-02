@@ -8,19 +8,13 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { CashRegister } from './cash-register.entity';
-import { PaymentMethodType } from './cash-operation.entity';
+import {
+  PaymentMethodType,
+  PaymentMethodSource,
+  PaymentMethodStatus,
+} from '../enums/common.enums';
 import { PaymentMethodTransaction } from './payment-method-transaction.entity';
 import { Warehouse } from './warehouse.entity';
-
-export enum PaymentMethodSource {
-  SYSTEM = 'system',
-  CUSTOM = 'custom',
-}
-
-export enum PaymentMethodStatus {
-  ACTIVE = 'active',
-  INACTIVE = 'inactive',
-}
 
 @Entity('register_payment_methods')
 export class RegisterPaymentMethod {

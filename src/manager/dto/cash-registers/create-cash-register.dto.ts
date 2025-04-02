@@ -8,11 +8,11 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
+  PaymentMethodType,
   PaymentMethodSource,
   PaymentMethodStatus,
-} from '../../entities/register-payment-method.entity';
+} from '../../enums/common.enums';
 import { CashRegisterType } from '../../entities/cash-register.entity';
-import { PaymentMethodType } from '../../entities/cash-operation.entity';
 
 export class PaymentMethodItemDto {
   @IsString()

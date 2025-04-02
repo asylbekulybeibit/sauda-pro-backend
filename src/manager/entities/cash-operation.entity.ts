@@ -11,23 +11,8 @@ import { CashRegister } from './cash-register.entity';
 import { CashShift } from './cash-shift.entity';
 import { User } from '../../users/entities/user.entity';
 import { Receipt } from './receipt.entity';
-
-export enum CashOperationType {
-  SALE = 'sale',
-  RETURN = 'return',
-  DEPOSIT = 'deposit',
-  WITHDRAWAL = 'withdrawal',
-  SERVICE = 'service',
-  TRANSFER_IN = 'transfer_in',
-  TRANSFER_OUT = 'transfer_out',
-  RETURN_WITHOUT_RECEIPT = 'return_without_receipt',
-}
-
-export enum PaymentMethodType {
-  CASH = 'cash',
-  CARD = 'card',
-  QR = 'qr',
-}
+import { RegisterPaymentMethod } from './register-payment-method.entity';
+import { CashOperationType, PaymentMethodType } from '../enums/common.enums';
 
 @Entity('cash_operations')
 export class CashOperation {
@@ -78,11 +63,21 @@ export class CashOperation {
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   amount: number;
 
+  @Column({ nullable: true })
+  paymentMethodId: string;
+
+  @ManyToOne(() => RegisterPaymentMethod, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'paymentMethodId' })
+  paymentMethod: RegisterPaymentMethod;
+
   @Column({
     type: 'enum',
     enum: PaymentMethodType,
   })
-  paymentMethod: PaymentMethodType;
+  paymentMethodType: PaymentMethodType;
 
   @Column({ nullable: true })
   description: string;

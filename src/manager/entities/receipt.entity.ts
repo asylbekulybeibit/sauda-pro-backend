@@ -14,6 +14,7 @@ import { Client } from './client.entity';
 import { CashShift } from './cash-shift.entity';
 import { CashRegister } from './cash-register.entity';
 import { CashOperation } from './cash-operation.entity';
+import { RegisterPaymentMethod } from './register-payment-method.entity';
 
 export enum ReceiptStatus {
   CREATED = 'created',
@@ -105,6 +106,16 @@ export class Receipt {
   @ManyToOne(() => CashOperation, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'cashOperationId' })
   cashOperation: CashOperation;
+
+  @Column({ nullable: true })
+  paymentMethodId: string;
+
+  @ManyToOne(() => RegisterPaymentMethod, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'paymentMethodId' })
+  registerPaymentMethod: RegisterPaymentMethod;
 
   @Column({ type: 'text', nullable: true })
   comment: string;

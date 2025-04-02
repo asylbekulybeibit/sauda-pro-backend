@@ -17,18 +17,19 @@ import { ReceiptItem, ReceiptItemType } from '../entities/receipt-item.entity';
 import { CashRegister } from '../entities/cash-register.entity';
 import { Barcode } from '../entities/barcode.entity';
 import { RegisterPaymentMethod } from '../entities/register-payment-method.entity';
-import {
-  CashOperation,
-  CashOperationType,
-  PaymentMethodType,
-} from '../entities/cash-operation.entity';
+import { CashOperation } from '../entities/cash-operation.entity';
 import {
   PaymentMethodTransaction,
   TransactionType,
   ReferenceType,
 } from '../entities/payment-method-transaction.entity';
 import { CreateReturnWithoutReceiptDto } from '../dto/cashier/create-return-without-receipt.dto';
-import { PaymentMethodSource } from '../entities/register-payment-method.entity';
+import {
+  CashOperationType,
+  PaymentMethodType,
+  PaymentMethodSource,
+  PaymentMethodStatus,
+} from '../enums/common.enums';
 
 @Injectable()
 export class CashierService {
@@ -395,13 +396,27 @@ export class CashierService {
       timestamp: new Date().toISOString(),
     });
 
+    // Проверяем и форматируем входные данные
+    const quantity = Number(addItemDto.quantity);
+    const price = Number(addItemDto.price);
+    const discountPercent = Number(addItemDto.discountPercent || 0);
+
+    if (isNaN(quantity) || isNaN(price) || isNaN(discountPercent)) {
+      console.error('[CashierService] Invalid numeric values:', {
+        quantity,
+        price,
+        discountPercent,
+      });
+      throw new BadRequestException('Некорректные числовые значения');
+    }
+
     // Проверяем существование чека
     const receipt = await this.receiptRepository.findOne({
       where: {
         id: receiptId,
         warehouseId: warehouseId,
       },
-      relations: ['cashShift', 'cashShift.cashRegister'],
+      relations: ['cashShift', 'cashShift.cashRegister', 'items'],
     });
 
     console.log('[CashierService] Found receipt:', {
@@ -459,41 +474,84 @@ export class CashierService {
       throw new NotFoundException('Товар не найден');
     }
 
-    // Создаем новую позицию в чеке
-    const receiptItem = this.receiptItemRepository.create({
-      receiptId: receipt.id,
-      warehouseProductId: product.id,
-      name: product.barcode.productName,
-      price: addItemDto.price,
-      quantity: addItemDto.quantity,
-      amount: addItemDto.price * addItemDto.quantity,
-      discountPercent: addItemDto.discountPercent || 0,
-      discountAmount:
-        (addItemDto.price *
-          addItemDto.quantity *
-          (addItemDto.discountPercent || 0)) /
-        100,
-      finalAmount:
-        addItemDto.price * addItemDto.quantity -
-        (addItemDto.price *
-          addItemDto.quantity *
-          (addItemDto.discountPercent || 0)) /
-          100,
-      type: product.isService
-        ? ReceiptItemType.SERVICE
-        : ReceiptItemType.PRODUCT,
-    });
+    // Проверяем, есть ли уже такой товар в чеке
+    const existingItem = receipt.items?.find(
+      (item) => item.warehouseProductId === product.id
+    );
 
-    console.log('[CashierService] Created receipt item:', {
+    let receiptItem;
+
+    if (existingItem) {
+      // Если товар уже есть в чеке, обновляем его количество и суммы
+      const currentQuantity = Number(existingItem.quantity);
+      if (isNaN(currentQuantity)) {
+        console.error(
+          '[CashierService] Invalid existing quantity:',
+          existingItem.quantity
+        );
+        throw new BadRequestException('Некорректное количество товара в чеке');
+      }
+
+      const newQuantity = Number((currentQuantity + quantity).toFixed(3));
+      if (newQuantity <= 0) {
+        // Если новое количество <= 0, удаляем товар
+        await this.receiptItemRepository.remove(existingItem);
+        await this.updateReceiptTotals(receiptId);
+        return null;
+      }
+
+      existingItem.quantity = newQuantity;
+      existingItem.amount = Number((price * newQuantity).toFixed(2));
+      existingItem.discountAmount = Number(
+        ((existingItem.amount * discountPercent) / 100).toFixed(2)
+      );
+      existingItem.finalAmount = Number(
+        (existingItem.amount - existingItem.discountAmount).toFixed(2)
+      );
+
+      receiptItem = await this.receiptItemRepository.save(existingItem);
+    } else {
+      // Если товара нет в чеке, создаем новую позицию
+      if (quantity <= 0) {
+        console.error(
+          '[CashierService] Attempt to add item with non-positive quantity:',
+          quantity
+        );
+        throw new BadRequestException('Количество товара должно быть больше 0');
+      }
+
+      const newQuantity = Number(quantity.toFixed(3));
+      const amount = Number((price * newQuantity).toFixed(2));
+      const discountAmount = Number(
+        ((amount * discountPercent) / 100).toFixed(2)
+      );
+      const finalAmount = Number((amount - discountAmount).toFixed(2));
+
+      receiptItem = this.receiptItemRepository.create({
+        receipt: receipt,
+        warehouseProductId: product.id,
+        name: product.barcode.productName,
+        price,
+        quantity: newQuantity,
+        amount,
+        discountPercent,
+        discountAmount,
+        finalAmount,
+        type: product.isService
+          ? ReceiptItemType.SERVICE
+          : ReceiptItemType.PRODUCT,
+      });
+
+      receiptItem = await this.receiptItemRepository.save(receiptItem);
+    }
+
+    console.log('[CashierService] Saved receipt item:', {
       itemId: receiptItem.id,
       name: receiptItem.name,
       price: receiptItem.price,
       quantity: receiptItem.quantity,
       finalAmount: receiptItem.finalAmount,
     });
-
-    // Сохраняем позицию
-    await this.receiptItemRepository.save(receiptItem);
 
     // Обновляем итоги чека
     await this.updateReceiptTotals(receiptId);
@@ -745,7 +803,7 @@ export class CashierService {
           warehouseId,
           status: ReceiptStatus.CREATED,
         },
-        relations: ['cashShift', 'cashRegister'],
+        relations: ['cashShift', 'cashRegister', 'items'],
       });
 
       console.log('[CashierService] Found receipt:', receipt);
@@ -779,21 +837,21 @@ export class CashierService {
       }
 
       // Создаем операцию по кассе
-      const cashOperation = this.cashOperationRepository.create({
-        warehouseId,
-        cashRegisterId: receipt.cashRegisterId,
-        shiftId: receipt.cashShiftId,
-        userId,
-        receiptId: receipt.id,
-        operationType: CashOperationType.SALE,
-        amount: receipt.finalAmount,
-        paymentMethod: paymentMethod.systemType || PaymentMethodType.CASH,
-        description: `Оплата чека ${receipt.receiptNumber}`,
-      });
+      const cashOperation = new CashOperation();
+      cashOperation.warehouseId = warehouseId;
+      cashOperation.cashRegisterId = receipt.cashRegisterId;
+      cashOperation.shiftId = receipt.cashShiftId;
+      cashOperation.userId = userId;
+      cashOperation.receiptId = receipt.id;
+      cashOperation.operationType = CashOperationType.SALE;
+      cashOperation.amount = receipt.finalAmount;
+      cashOperation.paymentMethodType =
+        paymentMethod.systemType || PaymentMethodType.CASH;
+      cashOperation.paymentMethodId = paymentMethod.id;
+      cashOperation.description = `Оплата чека ${receipt.receiptNumber}`;
 
-      console.log('[CashierService] Created cash operation:', cashOperation);
-
-      await this.cashOperationRepository.save(cashOperation);
+      const savedCashOperation =
+        await this.cashOperationRepository.save(cashOperation);
 
       // Получаем текущий баланс метода оплаты и конвертируем в число с 2 десятичными знаками
       const currentBalance = Number(
@@ -823,19 +881,12 @@ export class CashierService {
         createdById: userId,
       });
 
-      console.log(
-        '[CashierService] Created payment method transaction:',
-        transaction
-      );
-
       await this.paymentMethodTransactionRepository.save(transaction);
 
       // Обновляем баланс метода оплаты
       await this.paymentMethodRepository.update(
         { id: paymentMethod.id },
-        {
-          currentBalance: newBalance,
-        }
+        { currentBalance: newBalance }
       );
 
       // Обновляем статус чека
@@ -844,11 +895,49 @@ export class CashierService {
         paymentMethod.systemType === PaymentMethodType.CASH
           ? PaymentMethod.CASH
           : PaymentMethod.CARD;
-      receipt.cashOperationId = cashOperation.id;
+      receipt.paymentMethodId = paymentMethod.id;
+      receipt.cashOperationId = savedCashOperation.id;
+
+      // Уменьшаем количество товаров на складе
+      for (const item of receipt.items) {
+        if (!item.warehouseProductId || item.type === ReceiptItemType.SERVICE) {
+          continue; // Пропускаем услуги и товары без привязки к складу
+        }
+
+        const product = await this.warehouseProductRepository.findOne({
+          where: { id: item.warehouseProductId },
+        });
+
+        if (!product) {
+          console.error(`Product not found: ${item.warehouseProductId}`);
+          continue;
+        }
+
+        // Преобразуем строковые значения в числа перед сравнением
+        const productQuantity = Number(product.quantity);
+        const requiredQuantity = Number(item.quantity);
+
+        if (productQuantity < requiredQuantity) {
+          throw new BadRequestException(
+            `Недостаточное количество товара "${item.name}" на складе. В наличии: ${productQuantity}, требуется: ${requiredQuantity}`
+          );
+        }
+
+        await this.warehouseProductRepository.update(
+          { id: item.warehouseProductId },
+          { quantity: () => `quantity - ${requiredQuantity}` }
+        );
+
+        console.log('[CashierService] Updated product quantity:', {
+          productId: item.warehouseProductId,
+          name: item.name,
+          oldQuantity: productQuantity,
+          deductedQuantity: requiredQuantity,
+          newQuantity: productQuantity - requiredQuantity,
+        });
+      }
 
       const updatedReceipt = await this.receiptRepository.save(receipt);
-
-      console.log('[CashierService] Updated receipt:', updatedReceipt);
 
       return {
         ...updatedReceipt,
@@ -935,11 +1024,20 @@ export class CashierService {
       comment: `Возврат по чеку ${originalReceipt.receiptNumber}. Причина: ${returnData.reason}`,
     });
 
+    // Если items пустой массив, возвращаем весь чек целиком
+    const itemsToReturn =
+      returnData.items.length === 0
+        ? originalReceipt.items.map((item) => ({
+            receiptItemId: item.id,
+            quantity: item.quantity,
+          }))
+        : returnData.items;
+
     // Обработать возвращаемые товары
     let totalReturnAmount = 0;
     const returnItems = [];
 
-    for (const returnItem of returnData.items) {
+    for (const returnItem of itemsToReturn) {
       const originalItem = originalReceipt.items.find(
         (item) => item.id === returnItem.receiptItemId
       );
@@ -995,29 +1093,35 @@ export class CashierService {
     returnReceipt.finalAmount = totalReturnAmount;
 
     // Создать кассовую операцию возврата
-    const cashOperation = await this.cashOperationRepository.save({
-      warehouseId,
-      cashRegisterId: originalReceipt.cashRegisterId,
-      shiftId: currentShift.id,
-      operationType: CashOperationType.RETURN,
-      amount: totalReturnAmount,
-      paymentMethod: originalReceipt.cashOperation.paymentMethod,
-      description: `Возврат по чеку ${originalReceipt.receiptNumber}`,
-      userId,
-      receiptId: returnReceipt.id,
-    });
+    const cashOperation = new CashOperation();
+    cashOperation.warehouseId = warehouseId;
+    cashOperation.cashRegisterId = originalReceipt.cashRegisterId;
+    cashOperation.shiftId = currentShift.id;
+    cashOperation.operationType = CashOperationType.RETURN;
+    cashOperation.amount = totalReturnAmount;
+    cashOperation.paymentMethodType =
+      originalReceipt.cashOperation.paymentMethodType;
+    cashOperation.paymentMethodId = originalReceipt.paymentMethodId;
+    cashOperation.description = `Возврат по чеку ${originalReceipt.receiptNumber}`;
+    cashOperation.userId = userId;
+    cashOperation.receiptId = returnReceipt.id;
 
-    returnReceipt.cashOperation = cashOperation;
+    const savedCashOperation =
+      await this.cashOperationRepository.save(cashOperation);
+    returnReceipt.cashOperation = savedCashOperation;
 
     // Сохранить чек возврата с позициями
     const savedReceipt = await this.receiptRepository.save(returnReceipt);
+
+    // Обновить ссылку на сохраненный чек в позициях и сохранить их
+    returnItems.forEach((item) => (item.receipt = savedReceipt));
     await this.receiptItemRepository.save(returnItems);
 
     // Создать транзакцию возврата в методе оплаты
     const paymentMethod = await this.paymentMethodRepository.findOne({
       where: {
         cashRegisterId: originalReceipt.cashRegisterId,
-        systemType: originalReceipt.cashOperation.paymentMethod,
+        systemType: originalReceipt.cashOperation.paymentMethodType,
       },
     });
 
@@ -1092,82 +1196,6 @@ export class CashierService {
         throw new BadRequestException('No open shift found');
       }
 
-      // Форматируем данные перед отправкой
-      const formattedData = {
-        ...returnData,
-        items: returnData.items.map((item) => ({
-          ...item,
-          price: Number(Number(item.price).toFixed(2)),
-          quantity: Number(item.quantity),
-        })),
-      };
-
-      // Создаем чек возврата
-      const returnReceipt = this.receiptRepository.create({
-        warehouseId,
-        cashShiftId: currentShift.id,
-        cashRegisterId: currentShift.cashRegister.id,
-        cashierId: userId,
-        receiptNumber: await this.generateReceiptNumber(warehouseId),
-        date: new Date(),
-        status: ReceiptStatus.REFUNDED,
-        comment: `Возврат без чека. Причина: ${returnData.reason}`,
-      });
-
-      // Обрабатываем возвращаемые товары
-      let totalReturnAmount = 0;
-      const returnItems = [];
-
-      for (const item of formattedData.items) {
-        console.log('[CashierService] Processing return item:', {
-          productId: item.productId,
-          quantity: item.quantity,
-          price: item.price,
-          timestamp: new Date().toISOString(),
-        });
-
-        // Проверяем существование товара
-        const product = await this.warehouseProductRepository.findOne({
-          where: { id: item.productId, warehouseId },
-          relations: ['barcode'],
-        });
-
-        if (!product) {
-          throw new NotFoundException(`Товар с ID ${item.productId} не найден`);
-        }
-
-        // Рассчитываем сумму возврата с форматированной ценой
-        const itemReturnAmount = item.price * item.quantity;
-        totalReturnAmount += itemReturnAmount;
-
-        // Создаем позицию в чеке возврата
-        const returnItem = this.receiptItemRepository.create({
-          receipt: returnReceipt,
-          name: product.barcode.productName,
-          price: item.price,
-          quantity: item.quantity,
-          amount: itemReturnAmount,
-          finalAmount: itemReturnAmount,
-          type: product.isService
-            ? ReceiptItemType.SERVICE
-            : ReceiptItemType.PRODUCT,
-          warehouseProductId: product.id,
-        });
-
-        returnItems.push(returnItem);
-
-        // Обновляем количество на складе
-        await this.warehouseProductRepository.increment(
-          { id: product.id },
-          'quantity',
-          item.quantity
-        );
-      }
-
-      // Обновляем суммы в чеке возврата
-      returnReceipt.totalAmount = Number(totalReturnAmount.toFixed(2));
-      returnReceipt.finalAmount = Number(totalReturnAmount.toFixed(2));
-
       // Получаем метод оплаты
       const selectedPaymentMethod = await this.paymentMethodRepository.findOne({
         where: [
@@ -1198,61 +1226,134 @@ export class CashierService {
         }
       }
 
-      // Создаем кассовую операцию
-      const cashOperation = await this.cashOperationRepository.save({
-        warehouseId,
-        cashRegisterId: currentShift.cashRegister.id,
-        shiftId: currentShift.id,
-        operationType: CashOperationType.RETURN_WITHOUT_RECEIPT,
-        amount: Number(totalReturnAmount.toFixed(2)),
-        paymentMethod: paymentMethodType,
-        description: `Возврат без чека`,
-        userId,
-      });
+      // Форматируем данные перед обработкой
+      const formattedItems = returnData.items.map((item) => ({
+        ...item,
+        price: Number(Number(item.price).toFixed(2)),
+        quantity: Number(item.quantity),
+      }));
 
-      returnReceipt.cashOperation = cashOperation;
+      const savedReceipts = [];
 
-      // Сохраняем чек возврата
-      const savedReceipt = await this.receiptRepository.save(returnReceipt);
+      // Создаем отдельный чек возврата для каждого товара
+      for (const item of formattedItems) {
+        console.log('[CashierService] Processing return item:', {
+          productId: item.productId,
+          quantity: item.quantity,
+          price: item.price,
+          timestamp: new Date().toISOString(),
+        });
 
-      // Обновляем связь с сохраненным чеком для всех позиций
-      for (const item of returnItems) {
-        item.receipt = savedReceipt;
+        // Проверяем существование товара
+        const product = await this.warehouseProductRepository.findOne({
+          where: { id: item.productId, warehouseId },
+          relations: ['barcode'],
+        });
+
+        if (!product) {
+          throw new NotFoundException(`Товар с ID ${item.productId} не найден`);
+        }
+
+        // Создаем чек возврата для текущего товара
+        const returnReceipt = this.receiptRepository.create({
+          warehouseId,
+          cashShiftId: currentShift.id,
+          cashRegisterId: currentShift.cashRegister.id,
+          cashierId: userId,
+          receiptNumber: await this.generateReceiptNumber(warehouseId),
+          date: new Date(),
+          status: ReceiptStatus.REFUNDED,
+          comment: `Возврат без чека. Причина: ${returnData.reason}`,
+        });
+
+        // Рассчитываем сумму возврата для текущего товара
+        const itemReturnAmount = item.price * item.quantity;
+
+        // Создаем позицию в чеке возврата
+        const returnItem = this.receiptItemRepository.create({
+          receipt: returnReceipt,
+          name: product.barcode.productName,
+          price: item.price,
+          quantity: item.quantity,
+          amount: itemReturnAmount,
+          finalAmount: itemReturnAmount,
+          type: product.isService
+            ? ReceiptItemType.SERVICE
+            : ReceiptItemType.PRODUCT,
+          warehouseProductId: product.id,
+        });
+
+        // Обновляем суммы в чеке возврата
+        returnReceipt.totalAmount = Number(itemReturnAmount.toFixed(2));
+        returnReceipt.finalAmount = Number(itemReturnAmount.toFixed(2));
+
+        // Создаем кассовую операцию для текущего товара
+        const cashOperation = new CashOperation();
+        cashOperation.warehouseId = warehouseId;
+        cashOperation.cashRegisterId = currentShift.cashRegister.id;
+        cashOperation.shiftId = currentShift.id;
+        cashOperation.operationType = CashOperationType.RETURN_WITHOUT_RECEIPT;
+        cashOperation.amount = Number(itemReturnAmount.toFixed(2));
+        cashOperation.paymentMethodType = paymentMethodType;
+        cashOperation.paymentMethodId = selectedPaymentMethod.id;
+        cashOperation.description = `Возврат без чека`;
+        cashOperation.userId = userId;
+
+        const savedCashOperation =
+          await this.cashOperationRepository.save(cashOperation);
+
+        returnReceipt.cashOperation = savedCashOperation;
+        returnReceipt.paymentMethodId = selectedPaymentMethod.id;
+        returnReceipt.paymentMethod =
+          PaymentMethod[paymentMethodType.toUpperCase()];
+
+        // Сохраняем чек возврата
+        const savedReceipt = await this.receiptRepository.save(returnReceipt);
+
+        // Сохраняем позицию чека
+        returnItem.receipt = savedReceipt;
+        await this.receiptItemRepository.save(returnItem);
+
+        // Обновляем количество на складе
+        await this.warehouseProductRepository.increment(
+          { id: product.id },
+          'quantity',
+          item.quantity
+        );
+
+        // Создаем транзакцию метода оплаты для текущего товара
+        await this.paymentMethodTransactionRepository.save({
+          paymentMethod: { id: selectedPaymentMethod.id },
+          shift: { id: currentShift.id },
+          amount: -itemReturnAmount,
+          balanceBefore: selectedPaymentMethod.currentBalance,
+          balanceAfter: selectedPaymentMethod.currentBalance - itemReturnAmount,
+          transactionType: TransactionType.RETURN_WITHOUT_RECEIPT,
+          referenceType: ReferenceType.REFUND,
+          referenceId: savedReceipt.id,
+          createdBy: { id: userId },
+        });
+
+        // Обновляем баланс метода оплаты
+        selectedPaymentMethod.currentBalance -= itemReturnAmount;
+        await this.paymentMethodRepository.update(
+          { id: selectedPaymentMethod.id },
+          {
+            currentBalance: selectedPaymentMethod.currentBalance,
+          }
+        );
+
+        savedReceipts.push(savedReceipt);
+
+        console.log('[CashierService] Saved return receipt for item:', {
+          receiptId: savedReceipt.id,
+          productId: item.productId,
+          amount: itemReturnAmount,
+          timestamp: new Date().toISOString(),
+        });
       }
 
-      // Теперь сохраняем позиции
-      await this.receiptItemRepository.save(returnItems);
-
-      console.log('[CashierService] Saved return receipt and items:', {
-        receiptId: savedReceipt.id,
-        itemsCount: returnItems.length,
-        totalAmount: savedReceipt.totalAmount,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Создаем транзакцию метода оплаты
-      const transaction = await this.paymentMethodTransactionRepository.save({
-        paymentMethod: { id: selectedPaymentMethod.id },
-        shift: { id: currentShift.id },
-        amount: -totalReturnAmount,
-        balanceBefore: selectedPaymentMethod.currentBalance,
-        balanceAfter: selectedPaymentMethod.currentBalance - totalReturnAmount,
-        transactionType: TransactionType.RETURN_WITHOUT_RECEIPT,
-        referenceType: ReferenceType.REFUND,
-        referenceId: savedReceipt.id,
-        createdBy: { id: userId },
-      });
-
-      // Обновляем баланс метода оплаты
-      await this.paymentMethodRepository.update(
-        { id: selectedPaymentMethod.id },
-        {
-          currentBalance:
-            selectedPaymentMethod.currentBalance - totalReturnAmount,
-        }
-      );
-
-      return savedReceipt;
+      return savedReceipts;
     } catch (error) {
       console.error('[CashierService] Error in createReturnWithoutReceipt:', {
         error: error.message,
@@ -1295,6 +1396,46 @@ export class CashierService {
       return receipts;
     } catch (error) {
       console.error('[CashierService] Error searching receipts:', {
+        error: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString(),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Получение деталей чека
+   */
+  async getReceiptDetails(warehouseId: string, receiptId: string) {
+    console.log('[CashierService] Getting receipt details:', {
+      warehouseId,
+      receiptId,
+      timestamp: new Date().toISOString(),
+    });
+
+    try {
+      const receipt = await this.receiptRepository.findOne({
+        where: {
+          id: receiptId,
+          warehouseId,
+        },
+        relations: ['items', 'cashShift', 'cashRegister'],
+      });
+
+      if (!receipt) {
+        throw new NotFoundException('Чек не найден');
+      }
+
+      console.log('[CashierService] Found receipt:', {
+        receiptId: receipt.id,
+        itemsCount: receipt.items?.length,
+        timestamp: new Date().toISOString(),
+      });
+
+      return receipt;
+    } catch (error) {
+      console.error('[CashierService] Error getting receipt details:', {
         error: error.message,
         stack: error.stack,
         timestamp: new Date().toISOString(),

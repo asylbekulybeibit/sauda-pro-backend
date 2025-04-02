@@ -282,4 +282,15 @@ export class CashierController {
   ) {
     return this.cashierService.searchReceipts(warehouseId, receiptNumber);
   }
+
+  /**
+   * Получение деталей чека
+   */
+  @Get('receipts/:receiptId')
+  async getReceiptDetails(
+    @Param('warehouseId') warehouseId: string,
+    @Param('receiptId') receiptId: string
+  ) {
+    return this.cashierService.getReceiptDetails(warehouseId, receiptId);
+  }
 }

@@ -9,12 +9,12 @@ import {
   CashRegister,
   CashRegisterStatus,
 } from '../entities/cash-register.entity';
+import { RegisterPaymentMethod } from '../entities/register-payment-method.entity';
 import {
-  RegisterPaymentMethod,
+  PaymentMethodType,
   PaymentMethodSource,
   PaymentMethodStatus,
-} from '../entities/register-payment-method.entity';
-import { PaymentMethodType } from '../entities/cash-operation.entity';
+} from '../enums/common.enums';
 import { PaymentMethodDto } from '../dto/cash-registers/update-payment-methods.dto';
 import { CreateCashRegisterDto } from '../dto/cash-registers/create-cash-register.dto';
 
