@@ -181,79 +181,189 @@ export class CashierService {
   /**
    * Получение итогов смены
    */
-  private async getShiftTotals(shiftId: string) {
-    // Получаем все чеки смены
+  async getShiftTotals(shiftId: string) {
+    this.logger.log(
+      `[getShiftTotals] Starting calculation for shift: ${shiftId}`
+    );
+
+    // Get all receipts for this shift
     const receipts = await this.receiptRepository.find({
       where: {
         cashShiftId: shiftId,
         status: In([ReceiptStatus.PAID, ReceiptStatus.REFUNDED]),
       },
-      relations: ['cashOperation'],
     });
 
-    // Получаем все операции по методам оплаты
-    const paymentMethodTransactions =
-      await this.paymentMethodTransactionRepository.find({
-        where: {
-          shiftId,
-        },
-        relations: ['paymentMethod'],
-      });
+    this.logger.log(`[getShiftTotals] Found ${receipts.length} receipts`);
+    this.logger.debug(
+      '[getShiftTotals] Receipts:',
+      receipts.map((r) => ({
+        id: r.id,
+        status: r.status,
+        finalAmount: r.finalAmount,
+      }))
+    );
 
-    // Инициализируем объект для хранения итогов по методам оплаты
-    const paymentMethodTotals: {
-      [key: string]: {
+    // Get all payment method transactions for these receipts
+    const transactions = await this.paymentMethodTransactionRepository.find({
+      where: {
+        referenceId: In(receipts.map((r) => r.id)),
+        referenceType: In([ReferenceType.SALE, ReferenceType.REFUND]),
+      },
+      relations: ['paymentMethod'],
+    });
+
+    this.logger.log(
+      `[getShiftTotals] Found ${transactions.length} transactions`
+    );
+    this.logger.debug(
+      '[getShiftTotals] Transactions:',
+      transactions.map((t) => ({
+        id: t.id,
+        amount: t.amount,
+        methodId: t.paymentMethod?.id,
+        methodName: t.paymentMethod?.name,
+      }))
+    );
+
+    // Calculate total sales and returns
+    let totalSales = 0;
+    let totalReturns = 0;
+
+    // Group transactions by receipt to determine operation type
+    const receiptTransactions = new Map<string, PaymentMethodTransaction[]>();
+    for (const transaction of transactions) {
+      const receiptId = transaction.referenceId;
+      if (!receiptTransactions.has(receiptId)) {
+        receiptTransactions.set(receiptId, []);
+      }
+      receiptTransactions.get(receiptId)!.push(transaction);
+    }
+
+    this.logger.log(
+      `[getShiftTotals] Grouped transactions by ${receiptTransactions.size} receipts`
+    );
+
+    // Initialize Map for payment method totals
+    const paymentMethodTotals = new Map<
+      string,
+      {
         methodId: string;
         methodName: string;
         sales: number;
         returns: number;
         total: number;
-      };
-    } = {};
+        operationType: 'sale' | 'return';
+      }
+    >();
 
-    // Подсчитываем итоги по методам оплаты
-    for (const transaction of paymentMethodTransactions) {
-      const methodId = transaction.paymentMethod.id;
-      const methodName =
-        transaction.paymentMethod.name || transaction.paymentMethod.systemType;
+    // Process each receipt and its transactions
+    for (const receipt of receipts) {
+      const amount = Number(receipt.finalAmount) || 0;
+      const isReturn = amount < 0;
 
-      if (!paymentMethodTotals[methodId]) {
-        paymentMethodTotals[methodId] = {
-          methodId,
-          methodName,
-          sales: 0,
-          returns: 0,
-          total: 0,
-        };
+      this.logger.debug(`[getShiftTotals] Processing receipt ${receipt.id}:`, {
+        amount,
+        isReturn,
+        status: receipt.status,
+      });
+
+      // Update totals
+      if (isReturn) {
+        totalReturns += Math.abs(amount);
+      } else {
+        totalSales += amount;
       }
 
-      const amount = Number(transaction.amount);
-      if (transaction.transactionType === TransactionType.SALE) {
-        paymentMethodTotals[methodId].sales += amount;
-      } else if (
-        transaction.transactionType === TransactionType.REFUND ||
-        transaction.transactionType === TransactionType.RETURN_WITHOUT_RECEIPT
-      ) {
-        paymentMethodTotals[methodId].returns += Math.abs(amount);
+      // Get transactions for this receipt
+      const receiptTxs = receiptTransactions.get(receipt.id) || [];
+      this.logger.debug(
+        `[getShiftTotals] Receipt ${receipt.id} has ${receiptTxs.length} transactions`
+      );
+
+      // Process each transaction
+      for (const transaction of receiptTxs) {
+        const paymentMethod = transaction.paymentMethod;
+        if (!paymentMethod) {
+          this.logger.warn(
+            `[getShiftTotals] Transaction ${transaction.id} has no payment method`
+          );
+          continue;
+        }
+
+        const methodId = paymentMethod.id;
+        const methodName = paymentMethod.name || paymentMethod.systemType;
+
+        let methodTotal = paymentMethodTotals.get(methodId);
+        if (!methodTotal) {
+          methodTotal = {
+            methodId,
+            methodName,
+            sales: 0,
+            returns: 0,
+            total: 0,
+            operationType: isReturn ? 'return' : 'sale',
+          };
+          paymentMethodTotals.set(methodId, methodTotal);
+          this.logger.debug(
+            `[getShiftTotals] Created new method total for ${methodName}`
+          );
+        }
+
+        // Update amounts for payment method
+        const transactionAmount = Math.abs(Number(transaction.amount) || 0);
+        if (isReturn) {
+          methodTotal.returns += transactionAmount;
+          methodTotal.operationType = 'return';
+          this.logger.debug(
+            `[getShiftTotals] Added return ${transactionAmount} to ${methodName}`
+          );
+        } else {
+          methodTotal.sales += transactionAmount;
+          methodTotal.operationType = 'sale';
+          this.logger.debug(
+            `[getShiftTotals] Added sale ${transactionAmount} to ${methodName}`
+          );
+        }
+        methodTotal.total = methodTotal.sales - methodTotal.returns;
       }
-      paymentMethodTotals[methodId].total += amount;
     }
 
-    // Подсчитываем общие итоги
-    const totalSales = receipts
-      .filter((r) => r.status === ReceiptStatus.PAID)
-      .reduce((sum, r) => sum + Number(r.finalAmount), 0);
+    // Convert Map to array
+    const paymentMethods = Array.from(paymentMethodTotals.values());
+    this.logger.log(
+      `[getShiftTotals] Created ${paymentMethods.length} payment method records`
+    );
 
-    const totalReturns = receipts
-      .filter((r) => r.status === ReceiptStatus.REFUNDED)
-      .reduce((sum, r) => Math.abs(Number(r.finalAmount)), 0);
+    // Split methods into sales and returns
+    const salesMethods = paymentMethods.filter((method) => method.sales > 0);
+    const returnMethods = paymentMethods.filter((method) => method.returns > 0);
 
-    return {
+    this.logger.log(
+      `[getShiftTotals] Split into ${salesMethods.length} sales methods and ${returnMethods.length} return methods`
+    );
+
+    // Combine all methods, preserving correct operationType
+    const allMethods = [
+      ...salesMethods.map((method) => ({
+        ...method,
+        operationType: 'sale' as const,
+      })),
+      ...returnMethods.map((method) => ({
+        ...method,
+        operationType: 'return' as const,
+      })),
+    ];
+
+    const result = {
       totalSales,
       totalReturns,
       totalNet: totalSales - totalReturns,
-      paymentMethods: Object.values(paymentMethodTotals),
+      paymentMethods: allMethods,
     };
+
+    this.logger.log('[getShiftTotals] Final result:', result);
+    return result;
   }
 
   /**
