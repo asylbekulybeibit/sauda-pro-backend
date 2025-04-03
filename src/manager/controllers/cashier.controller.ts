@@ -294,4 +294,43 @@ export class CashierController {
   ) {
     return this.cashierService.getReceiptDetails(warehouseId, receiptId);
   }
+
+  /**
+   * Получение списка чеков для истории продаж
+   */
+  @Get('receipts')
+  async getReceipts(
+    @Param('warehouseId') warehouseId: string,
+    @Query('date') date?: string,
+    @Query('shiftId') shiftId?: string
+  ) {
+    return this.cashierService.getReceipts(warehouseId, { date, shiftId });
+  }
+
+  /**
+   * Печать чека
+   */
+  @Post('receipts/:receiptId/print')
+  async printReceipt(
+    @Param('warehouseId') warehouseId: string,
+    @Param('receiptId') receiptId: string
+  ) {
+    return this.cashierService.printReceipt(warehouseId, receiptId);
+  }
+
+  /**
+   * Печать отчета о закрытии смены
+   */
+  @Post('shift/:shiftId/print-report')
+  async printShiftReport(
+    @Param('warehouseId') warehouseId: string,
+    @Param('shiftId') shiftId: string,
+    @Req() req
+  ) {
+    return this.cashierService.printShiftReport(
+      warehouseId,
+      shiftId,
+      req.user.id
+    );
+  }
 }

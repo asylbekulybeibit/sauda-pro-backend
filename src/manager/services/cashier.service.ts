@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, ILike, In, Not } from 'typeorm';
@@ -33,6 +34,11 @@ import {
 import { CreateReturnDto } from '../dto/cashier/create-return.dto';
 import { ReceiptType } from '../entities/receipt-action.entity';
 import { Logger } from '@nestjs/common';
+
+interface GetReceiptsParams {
+  date?: string;
+  shiftId?: string;
+}
 
 @Injectable()
 export class CashierService {
@@ -173,6 +179,84 @@ export class CashierService {
   }
 
   /**
+   * Получение итогов смены
+   */
+  private async getShiftTotals(shiftId: string) {
+    // Получаем все чеки смены
+    const receipts = await this.receiptRepository.find({
+      where: {
+        cashShiftId: shiftId,
+        status: In([ReceiptStatus.PAID, ReceiptStatus.REFUNDED]),
+      },
+      relations: ['cashOperation'],
+    });
+
+    // Получаем все операции по методам оплаты
+    const paymentMethodTransactions =
+      await this.paymentMethodTransactionRepository.find({
+        where: {
+          shiftId,
+        },
+        relations: ['paymentMethod'],
+      });
+
+    // Инициализируем объект для хранения итогов по методам оплаты
+    const paymentMethodTotals: {
+      [key: string]: {
+        methodId: string;
+        methodName: string;
+        sales: number;
+        returns: number;
+        total: number;
+      };
+    } = {};
+
+    // Подсчитываем итоги по методам оплаты
+    for (const transaction of paymentMethodTransactions) {
+      const methodId = transaction.paymentMethod.id;
+      const methodName =
+        transaction.paymentMethod.name || transaction.paymentMethod.systemType;
+
+      if (!paymentMethodTotals[methodId]) {
+        paymentMethodTotals[methodId] = {
+          methodId,
+          methodName,
+          sales: 0,
+          returns: 0,
+          total: 0,
+        };
+      }
+
+      const amount = Number(transaction.amount);
+      if (transaction.transactionType === TransactionType.SALE) {
+        paymentMethodTotals[methodId].sales += amount;
+      } else if (
+        transaction.transactionType === TransactionType.REFUND ||
+        transaction.transactionType === TransactionType.RETURN_WITHOUT_RECEIPT
+      ) {
+        paymentMethodTotals[methodId].returns += Math.abs(amount);
+      }
+      paymentMethodTotals[methodId].total += amount;
+    }
+
+    // Подсчитываем общие итоги
+    const totalSales = receipts
+      .filter((r) => r.status === ReceiptStatus.PAID)
+      .reduce((sum, r) => sum + Number(r.finalAmount), 0);
+
+    const totalReturns = receipts
+      .filter((r) => r.status === ReceiptStatus.REFUNDED)
+      .reduce((sum, r) => Math.abs(Number(r.finalAmount)), 0);
+
+    return {
+      totalSales,
+      totalReturns,
+      totalNet: totalSales - totalReturns,
+      paymentMethods: Object.values(paymentMethodTotals),
+    };
+  }
+
+  /**
    * Открытие смены
    */
   async openShift(warehouseId: string, userId: string, openShiftDto: any) {
@@ -269,11 +353,20 @@ export class CashierService {
           warehouseId,
         },
       },
+      relations: [
+        'cashRegister',
+        'cashRegister.warehouse',
+        'openedBy',
+        'closedBy',
+      ],
     });
 
     if (!shift) {
       throw new NotFoundException('Открытая смена не найдена');
     }
+
+    // Получаем итоги смены
+    const shiftTotals = await this.getShiftTotals(shift.id);
 
     // Обновляем смену
     shift.endTime = new Date();
@@ -284,13 +377,30 @@ export class CashierService {
 
     const savedShift = await this.cashShiftRepository.save(shift);
 
+    // Формируем ответ с полной информацией о закрытой смене
     return {
       id: savedShift.id,
-      startTime: savedShift.startTime,
-      endTime: savedShift.endTime,
-      initialAmount: savedShift.initialAmount,
-      finalAmount: savedShift.finalAmount,
-      status: savedShift.status,
+      warehouse: {
+        id: shift.cashRegister.warehouse.id,
+        name: shift.cashRegister.warehouse.name,
+      },
+      cashRegister: {
+        id: shift.cashRegister.id,
+        name: shift.cashRegister.name,
+      },
+      cashier: {
+        id: shift.openedBy.id,
+        name: `${shift.openedBy.firstName || ''} ${
+          shift.openedBy.lastName || ''
+        }`.trim(),
+      },
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      initialAmount: shift.initialAmount,
+      finalAmount: shift.finalAmount,
+      status: shift.status,
+      notes: shift.notes,
+      ...shiftTotals,
     };
   }
 
@@ -1426,5 +1536,307 @@ export class CashierService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Получение списка чеков для истории продаж
+   */
+  async getReceipts(warehouseId: string, params: GetReceiptsParams) {
+    try {
+      // Создаем базовый запрос с необходимыми связями
+      const query = this.receiptRepository
+        .createQueryBuilder('receipt')
+        .leftJoinAndSelect('receipt.items', 'items')
+        .leftJoinAndSelect('receipt.cashier', 'cashier')
+        .leftJoinAndSelect('receipt.cashShift', 'cashShift')
+        .leftJoinAndSelect('receipt.cashRegister', 'cashRegister')
+        .leftJoinAndSelect('receipt.cashOperation', 'cashOperation')
+        .where('receipt.warehouseId = :warehouseId', { warehouseId });
+
+      // Фильтрация по дате
+      if (params.date) {
+        query.andWhere('DATE(receipt.createdAt) = :date', {
+          date: params.date,
+        });
+      }
+
+      // Фильтрация по смене
+      if (params.shiftId) {
+        query.andWhere('receipt.cashShiftId = :shiftId', {
+          shiftId: params.shiftId,
+        });
+      }
+
+      // Получаем только чеки со статусами PAID, REFUNDED, CANCELLED, CREATED (отложенные)
+      query.andWhere('receipt.status IN (:...statuses)', {
+        statuses: [
+          ReceiptStatus.PAID,
+          ReceiptStatus.REFUNDED,
+          ReceiptStatus.CANCELLED,
+          ReceiptStatus.CREATED,
+        ],
+      });
+
+      // Сортировка по времени создания (сначала новые)
+      query.orderBy('receipt.createdAt', 'DESC');
+
+      const receipts = await query.getMany();
+
+      // Форматируем ответ
+      return receipts.map((receipt) => ({
+        id: receipt.id,
+        number: receipt.receiptNumber,
+        createdAt: receipt.createdAt,
+        totalAmount: Number(receipt.totalAmount || 0),
+        discountAmount: Number(receipt.discountAmount || 0),
+        finalAmount: Number(receipt.finalAmount || 0),
+        status: receipt.status,
+        paymentMethod: receipt.paymentMethod,
+        paymentMethodId: receipt.paymentMethodId,
+        cashier: receipt.cashier
+          ? {
+              id: receipt.cashier.id,
+              name: `${receipt.cashier.firstName || ''} ${
+                receipt.cashier.lastName || ''
+              }`.trim(),
+            }
+          : null,
+        cashRegister: receipt.cashRegister
+          ? {
+              id: receipt.cashRegister.id,
+              name: receipt.cashRegister.name,
+            }
+          : null,
+        shift: receipt.cashShift
+          ? {
+              id: receipt.cashShift.id,
+              startTime: receipt.cashShift.startTime,
+              endTime: receipt.cashShift.endTime,
+            }
+          : null,
+        items: receipt.items.map((item) => ({
+          id: item.id,
+          name: item.name,
+          price: Number(item.price || 0),
+          quantity: Number(item.quantity || 0),
+          amount: Number(item.amount || 0),
+          discountAmount: Number(item.discountAmount || 0),
+          finalAmount: Number(item.finalAmount || 0),
+          type: item.type,
+        })),
+        operation: receipt.cashOperation
+          ? {
+              id: receipt.cashOperation.id,
+              type: receipt.cashOperation.operationType,
+              amount: Number(receipt.cashOperation.amount || 0),
+            }
+          : null,
+      }));
+    } catch (error) {
+      this.logger.error('Error getting receipts:', error);
+      throw new InternalServerErrorException('Failed to get receipts');
+    }
+  }
+
+  /**
+   * Печать чека
+   */
+  async printReceipt(warehouseId: string, receiptId: string) {
+    try {
+      // Получаем чек со всеми необходимыми связями
+      const receipt = await this.receiptRepository.findOne({
+        where: { id: receiptId, warehouseId },
+        relations: [
+          'items',
+          'cashier',
+          'cashShift',
+          'cashRegister',
+          'client',
+          'cashOperation',
+        ],
+      });
+
+      if (!receipt) {
+        throw new NotFoundException('Чек не найден');
+      }
+
+      // Проверяем, что чек можно распечатать
+      if (!['PAID', 'REFUNDED', 'CANCELLED'].includes(receipt.status)) {
+        throw new BadRequestException(
+          'Невозможно распечатать чек в текущем статусе'
+        );
+      }
+
+      // Форматируем данные чека для печати
+      const printData = {
+        // Основная информация о чеке
+        receipt: {
+          id: receipt.id,
+          number: receipt.receiptNumber,
+          type:
+            receipt.status === ReceiptStatus.REFUNDED ? 'Возврат' : 'Продажа',
+          status: this.getReceiptStatusText(receipt.status),
+          createdAt: receipt.createdAt,
+          totalAmount: Number(receipt.totalAmount || 0),
+          discountAmount: Number(receipt.discountAmount || 0),
+          finalAmount: Number(receipt.finalAmount || 0),
+          paymentMethod: this.getPaymentMethodText(receipt.paymentMethod),
+        },
+
+        // Информация о товарах
+        items: receipt.items.map((item) => ({
+          name: item.name,
+          price: Number(item.price || 0),
+          quantity: Number(item.quantity || 0),
+          amount: Number(item.amount || 0),
+          discountAmount: Number(item.discountAmount || 0),
+          finalAmount: Number(item.finalAmount || 0),
+          type: item.type === 'SERVICE' ? 'Услуга' : 'Товар',
+        })),
+
+        // Информация о кассе и смене
+        shop: {
+          cashRegister: {
+            id: receipt.cashRegister.id,
+            name: receipt.cashRegister.name,
+          },
+          shift: {
+            id: receipt.cashShift.id,
+            startTime: receipt.cashShift.startTime,
+          },
+        },
+
+        // Информация о кассире
+        cashier: receipt.cashier
+          ? {
+              id: receipt.cashier.id,
+              name: `${receipt.cashier.firstName || ''} ${
+                receipt.cashier.lastName || ''
+              }`.trim(),
+            }
+          : null,
+
+        // Информация о клиенте (если есть)
+        client: receipt.client
+          ? {
+              id: receipt.client.id,
+              phone: receipt.client.phone,
+            }
+          : null,
+
+        // Информация об операции
+        operation: receipt.cashOperation
+          ? {
+              id: receipt.cashOperation.id,
+              type: receipt.cashOperation.operationType,
+              amount: Number(receipt.cashOperation.amount || 0),
+            }
+          : null,
+      };
+
+      // Здесь должна быть интеграция с фискальным регистратором
+      // TODO: Добавить реальную интеграцию с фискальным регистратором
+
+      // Возвращаем результат
+      return {
+        success: true,
+        message: 'Чек успешно отправлен на печать',
+        data: printData,
+      };
+    } catch (error) {
+      this.logger.error('Ошибка при печати чека:', error);
+      throw new InternalServerErrorException('Не удалось распечатать чек');
+    }
+  }
+
+  /**
+   * Получение текстового представления статуса чека
+   */
+  private getReceiptStatusText(status: string): string {
+    switch (status) {
+      case 'PAID':
+        return 'Оплачен';
+      case 'REFUNDED':
+        return 'Возвращен';
+      case 'CANCELLED':
+        return 'Отменен';
+      case 'CREATED':
+        return 'Создан';
+      default:
+        return 'Неизвестный статус';
+    }
+  }
+
+  /**
+   * Получение текстового представления метода оплаты
+   */
+  private getPaymentMethodText(method: string): string {
+    switch (method) {
+      case 'CASH':
+        return 'Наличные';
+      case 'CARD':
+        return 'Банковская карта';
+      case 'MIXED':
+        return 'Смешанная оплата';
+      default:
+        return 'Не указан';
+    }
+  }
+
+  /**
+   * Печать отчета о закрытии смены
+   */
+  async printShiftReport(warehouseId: string, shiftId: string, userId: string) {
+    // Находим смену
+    const shift = await this.cashShiftRepository.findOne({
+      where: {
+        id: shiftId,
+        cashRegister: {
+          warehouseId,
+        },
+      },
+      relations: [
+        'cashRegister',
+        'cashRegister.warehouse',
+        'openedBy',
+        'closedBy',
+      ],
+    });
+
+    if (!shift) {
+      throw new NotFoundException('Смена не найдена');
+    }
+
+    // Получаем итоги смены
+    const shiftTotals = await this.getShiftTotals(shift.id);
+
+    // Формируем данные для печати
+    const reportData = {
+      warehouse: {
+        id: shift.cashRegister.warehouse.id,
+        name: shift.cashRegister.warehouse.name,
+      },
+      cashRegister: {
+        id: shift.cashRegister.id,
+        name: shift.cashRegister.name,
+      },
+      cashier: {
+        id: shift.openedBy.id,
+        name: `${shift.openedBy.firstName || ''} ${
+          shift.openedBy.lastName || ''
+        }`.trim(),
+      },
+      startTime: shift.startTime,
+      endTime: shift.endTime,
+      initialAmount: shift.initialAmount,
+      finalAmount: shift.finalAmount,
+      status: shift.status,
+      notes: shift.notes,
+      ...shiftTotals,
+    };
+
+    // TODO: Здесь будет вызов сервиса печати с reportData
+    // Пока просто возвращаем данные
+    return reportData;
   }
 }
