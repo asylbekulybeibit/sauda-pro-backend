@@ -245,6 +245,7 @@ export class CashierController {
     returnData: {
       items: Array<{ receiptItemId: string; quantity: number }>;
       reason: string;
+      paymentMethodId: string;
     },
     @Req() req
   ) {
