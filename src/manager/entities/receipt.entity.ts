@@ -11,6 +11,7 @@ import {
 import { Warehouse } from './warehouse.entity';
 import { User } from '../../users/entities/user.entity';
 import { Client } from './client.entity';
+import { Vehicle } from './vehicle.entity';
 import { CashShift } from './cash-shift.entity';
 import { CashRegister } from './cash-register.entity';
 import { CashOperation } from './cash-operation.entity';
@@ -70,6 +71,13 @@ export class Receipt {
   @ManyToOne(() => Client, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'clientId' })
   client: Client;
+
+  @Column({ nullable: true })
+  vehicleId: string;
+
+  @ManyToOne(() => Vehicle, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'vehicleId' })
+  vehicle: Vehicle;
 
   @Column()
   receiptNumber: string;

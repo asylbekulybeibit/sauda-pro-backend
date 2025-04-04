@@ -29,6 +29,7 @@ import { Receipt } from './entities/receipt.entity';
 import { ReceiptItem } from './entities/receipt-item.entity';
 import { CashShift } from './entities/cash-shift.entity';
 import { CashOperation } from './entities/cash-operation.entity';
+import { User } from '../users/entities/user.entity';
 
 import { WarehouseProductsController } from './controllers/warehouse-products.controller';
 import { CategoriesController } from './controllers/categories.controller';
@@ -48,6 +49,7 @@ import { VehicleController } from './controllers/vehicle.controller';
 import { NotificationsController } from './controllers/notifications.controller';
 import { DebtsController } from './controllers/debts.controller';
 import { CashierController } from './controllers/cashier.controller';
+import { SalesController } from './controllers/sales.controller';
 
 import { WarehouseProductsService } from './services/warehouse-products.service';
 import { CategoriesService } from './services/categories.service';
@@ -68,6 +70,8 @@ import { NotificationsService } from './services/notifications.service';
 import { DebtsService } from './services/debts.service';
 import { CashierService } from './services/cashier.service';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
+import { SalesService } from './services/sales.service';
+import { SalesModule } from './sales.module';
 
 @Module({
   imports: [
@@ -99,8 +103,10 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
       ReceiptItem,
       CashShift,
       CashOperation,
+      User,
     ]),
     WhatsappModule,
+    SalesModule,
   ],
   controllers: [
     ManagerController,
@@ -122,6 +128,7 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
     NotificationsController,
     DebtsController,
     CashierController,
+    SalesController,
   ],
   providers: [
     ManagerService,
@@ -143,6 +150,7 @@ import { WhatsappModule } from '../whatsapp/whatsapp.module';
     NotificationsService,
     DebtsService,
     CashierService,
+    SalesService,
   ],
   exports: [ManagerService, NotificationsService],
 })

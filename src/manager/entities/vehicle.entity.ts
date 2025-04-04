@@ -64,7 +64,7 @@ export class Vehicle {
   engineVolume: number;
 
   @Column()
-  licensePlate: string;
+  plateNumber: string;
 
   @Column({ nullable: true })
   vin: string;
