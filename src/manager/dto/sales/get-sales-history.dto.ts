@@ -36,4 +36,9 @@ export class GetSalesHistoryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  paymentMethod?: string;
 }

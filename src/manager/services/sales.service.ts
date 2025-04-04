@@ -9,9 +9,12 @@ import { UserRole } from '../../roles/entities/user-role.entity';
 import { RoleType } from '../../auth/types/role.type';
 import { GetSalesHistoryDto } from '../dto/sales/get-sales-history.dto';
 import { CashOperation } from '../entities/cash-operation.entity';
-import { CashOperationType } from '../enums/common.enums';
+import { CashOperationType, PaymentMethodStatus } from '../enums/common.enums';
 import { Warehouse } from '../entities/warehouse.entity';
 import { PaymentMethodSource } from '../enums/common.enums';
+import { RegisterPaymentMethod } from '../entities/register-payment-method.entity';
+import { CashRegister } from '../entities/cash-register.entity';
+import { In } from 'typeorm';
 
 @Injectable()
 export class SalesService {
@@ -29,7 +32,11 @@ export class SalesService {
     @InjectRepository(CashOperation)
     private readonly cashOperationRepository: Repository<CashOperation>,
     @InjectRepository(Warehouse)
-    private readonly warehouseRepository: Repository<Warehouse>
+    private readonly warehouseRepository: Repository<Warehouse>,
+    @InjectRepository(RegisterPaymentMethod)
+    private readonly paymentMethodRepository: Repository<RegisterPaymentMethod>,
+    @InjectRepository(CashRegister)
+    private readonly cashRegisterRepository: Repository<CashRegister>
   ) {}
 
   private async getShopIdByWarehouseId(warehouseId: string): Promise<string> {
@@ -119,6 +126,19 @@ export class SalesService {
         query.andWhere(
           "(LOWER(receipt.receiptNumber) LIKE LOWER(:search) OR LOWER(CONCAT(cashier.firstName, ' ', cashier.lastName)) LIKE LOWER(:search))",
           { search: `%${filters.search}%` }
+        );
+      }
+
+      if (filters.paymentMethod) {
+        console.log('💳 Adding paymentMethod filter:', filters.paymentMethod);
+        query.andWhere('operation.paymentMethodId = :paymentMethodId', {
+          paymentMethodId: filters.paymentMethod,
+        });
+
+        // Логируем SQL запрос для отладки
+        console.log(
+          '💳 SQL query with payment method filter:',
+          query.getSql().replace(/\n/g, ' ').replace(/\s+/g, ' ')
         );
       }
 
@@ -341,7 +361,10 @@ export class SalesService {
       totalAmount: Number(operation.amount),
       paymentMethod: {
         id: operation.paymentMethod?.id,
-        name: operation.paymentMethod?.name,
+        name:
+          operation.paymentMethod?.source === PaymentMethodSource.SYSTEM
+            ? this.translatePaymentMethod(operation.paymentMethod?.systemType)
+            : operation.paymentMethod?.name,
       },
       cashier: operation.receipt.cashier
         ? {
@@ -378,11 +401,128 @@ export class SalesService {
   }
 
   private translatePaymentMethod(systemType?: string): string {
+    if (!systemType) return 'Н/Д';
+
+    const lowerCaseType = systemType.toLowerCase();
     const translations: { [key: string]: string } = {
       cash: 'Наличные',
       card: 'Банковская карта',
       qr: 'QR-код',
+      online: 'Онлайн оплата',
+      transfer: 'Банковский перевод',
+      mixed: 'Смешанная оплата',
+      other: 'Другое',
     };
-    return translations[systemType?.toLowerCase() ?? ''] || systemType || 'Н/Д';
+
+    return translations[lowerCaseType] || systemType || 'Н/Д';
+  }
+
+  async getPaymentMethods(warehouseId: string) {
+    console.log('🔍 Getting payment methods for warehouse:', warehouseId);
+
+    // Сначала получим активные кассы для склада
+    const activeCashRegisters = await this.cashRegisterRepository.find({
+      where: {
+        warehouseId,
+        isActive: true,
+      },
+      select: ['id'],
+    });
+
+    const activeCashRegisterIds = activeCashRegisters.map(
+      (register) => register.id
+    );
+    console.log(
+      `✅ Found ${activeCashRegisterIds.length} active cash registers with IDs:`,
+      activeCashRegisterIds
+    );
+
+    // Запрос методов оплаты с учетом только активных касс
+    const methods = await this.paymentMethodRepository.find({
+      where: [
+        // Методы активных касс
+        {
+          warehouseId,
+          cashRegisterId: In(
+            activeCashRegisterIds.length > 0
+              ? activeCashRegisterIds
+              : ['00000000-0000-0000-0000-000000000000']
+          ), // добавляем фиктивный ID если нет активных касс
+          isActive: true,
+          status: PaymentMethodStatus.ACTIVE,
+        },
+        // Общие методы склада
+        {
+          warehouseId,
+          isShared: true,
+          isActive: true,
+          status: PaymentMethodStatus.ACTIVE,
+        },
+        // Системные методы
+        {
+          warehouseId,
+          source: PaymentMethodSource.SYSTEM,
+          isActive: true,
+          status: PaymentMethodStatus.ACTIVE,
+        },
+      ],
+      relations: ['cashRegister'],
+    });
+
+    console.log('🔍 Raw methods before filtering:', methods.length);
+
+    // Дополнительная фильтрация после получения данных
+    // Отфильтруем методы, привязанные к неактивным кассам
+    const filteredMethods = methods.filter((method) => {
+      // Если это общий метод (isShared = true), показываем его независимо от статуса кассы
+      if (method.isShared) {
+        return true;
+      }
+
+      // Если метод привязан к кассе, проверяем активность кассы
+      if (method.cashRegisterId) {
+        // Метод разрешен только если его касса активна
+        return activeCashRegisterIds.includes(method.cashRegisterId);
+      }
+
+      // Если метод не привязан к кассе (system без cashRegisterId), разрешаем его
+      return true;
+    });
+
+    console.log('✅ Payment methods after filtering:', {
+      beforeFiltering: methods.length,
+      afterFiltering: filteredMethods.length,
+      removed: methods.length - filteredMethods.length,
+      methods: filteredMethods.map((m) => ({
+        id: m.id,
+        source: m.source,
+        systemType: m.systemType,
+        name: m.name,
+        cashRegisterId: m.cashRegisterId,
+        cashRegisterName: m.cashRegister?.name,
+        cashRegisterIsActive: m.cashRegister?.isActive,
+        isShared: m.isShared,
+      })),
+    });
+
+    // Трансформируем результаты, добавляя переводы для системных методов
+    const result = filteredMethods.map((method) => ({
+      id: method.id,
+      name:
+        method.source === PaymentMethodSource.SYSTEM
+          ? this.translatePaymentMethod(method.systemType)
+          : method.name,
+      systemType: method.systemType,
+      source: method.source,
+      cashRegister: method.cashRegister
+        ? { id: method.cashRegister.id, name: method.cashRegister.name }
+        : undefined,
+    }));
+
+    console.log('✅ Transformed payment methods:', {
+      count: result.length,
+    });
+
+    return result;
   }
 }

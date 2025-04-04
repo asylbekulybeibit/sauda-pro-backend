@@ -9,6 +9,8 @@ import { SalesService } from './services/sales.service';
 import { SalesController } from './controllers/sales.controller';
 import { CashOperation } from './entities/cash-operation.entity';
 import { Warehouse } from './entities/warehouse.entity';
+import { RegisterPaymentMethod } from './entities/register-payment-method.entity';
+import { CashRegister } from './entities/cash-register.entity';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { Warehouse } from './entities/warehouse.entity';
       UserRole,
       CashOperation,
       Warehouse,
+      RegisterPaymentMethod,
+      CashRegister,
     ]),
   ],
   providers: [SalesService],

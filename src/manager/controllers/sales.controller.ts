@@ -26,6 +26,7 @@ export class SalesController {
   @ApiQuery({ name: 'clientId', required: false })
   @ApiQuery({ name: 'vehicleId', required: false })
   @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'paymentMethod', required: false })
   async getSalesHistory(
     @Param('warehouseId') warehouseId: string,
     @Query(ValidationPipe) query: GetSalesHistoryDto
@@ -58,5 +59,11 @@ export class SalesController {
   @ApiOperation({ summary: 'Get vehicles list' })
   async getVehicles(@Param('warehouseId') warehouseId: string) {
     return this.salesService.getVehicles(warehouseId);
+  }
+
+  @Get('payment-methods')
+  @ApiOperation({ summary: 'Get active payment methods' })
+  async getPaymentMethods(@Param('warehouseId') warehouseId: string) {
+    return this.salesService.getPaymentMethods(warehouseId);
   }
 }
