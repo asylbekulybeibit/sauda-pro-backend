@@ -11,6 +11,7 @@ import { GetSalesHistoryDto } from '../dto/sales/get-sales-history.dto';
 import { CashOperation } from '../entities/cash-operation.entity';
 import { CashOperationType } from '../enums/common.enums';
 import { Warehouse } from '../entities/warehouse.entity';
+import { PaymentMethodSource } from '../enums/common.enums';
 
 @Injectable()
 export class SalesService {
@@ -165,7 +166,12 @@ export class SalesService {
           totalAmount: Number(operation.amount),
           paymentMethod: {
             id: operation.paymentMethod?.id,
-            name: operation.paymentMethod?.name,
+            name:
+              operation.paymentMethod?.source === PaymentMethodSource.SYSTEM
+                ? this.translatePaymentMethod(
+                    operation.paymentMethod?.systemType
+                  )
+                : operation.paymentMethod?.name,
           },
           cashier: operation.receipt?.cashier
             ? {
@@ -369,5 +375,14 @@ export class SalesService {
         amount: Number(item.amount),
       })),
     };
+  }
+
+  private translatePaymentMethod(systemType?: string): string {
+    const translations: { [key: string]: string } = {
+      cash: 'Наличные',
+      card: 'Банковская карта',
+      qr: 'QR-код',
+    };
+    return translations[systemType?.toLowerCase() ?? ''] || systemType || 'Н/Д';
   }
 }
