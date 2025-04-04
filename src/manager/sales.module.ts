@@ -8,6 +8,7 @@ import { UserRole } from '../roles/entities/user-role.entity';
 import { SalesService } from './services/sales.service';
 import { SalesController } from './controllers/sales.controller';
 import { CashOperation } from './entities/cash-operation.entity';
+import { Warehouse } from './entities/warehouse.entity';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { CashOperation } from './entities/cash-operation.entity';
       User,
       UserRole,
       CashOperation,
+      Warehouse,
     ]),
   ],
   providers: [SalesService],

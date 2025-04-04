@@ -10,6 +10,7 @@ import { RoleType } from '../../auth/types/role.type';
 import { GetSalesHistoryDto } from '../dto/sales/get-sales-history.dto';
 import { CashOperation } from '../entities/cash-operation.entity';
 import { CashOperationType } from '../enums/common.enums';
+import { Warehouse } from '../entities/warehouse.entity';
 
 @Injectable()
 export class SalesService {
@@ -25,8 +26,23 @@ export class SalesService {
     @InjectRepository(UserRole)
     private readonly userRoleRepository: Repository<UserRole>,
     @InjectRepository(CashOperation)
-    private readonly cashOperationRepository: Repository<CashOperation>
+    private readonly cashOperationRepository: Repository<CashOperation>,
+    @InjectRepository(Warehouse)
+    private readonly warehouseRepository: Repository<Warehouse>
   ) {}
+
+  private async getShopIdByWarehouseId(warehouseId: string): Promise<string> {
+    const warehouse = await this.warehouseRepository.findOne({
+      where: { id: warehouseId },
+      select: ['shopId'],
+    });
+
+    if (!warehouse) {
+      throw new NotFoundException('Warehouse not found');
+    }
+
+    return warehouse.shopId;
+  }
 
   async getSalesHistory(warehouseId: string, filters: GetSalesHistoryDto) {
     console.log('\n=== 🚀 getSalesHistory called ===');
@@ -166,7 +182,13 @@ export class SalesService {
           vehicle: operation.receipt?.vehicle
             ? {
                 id: operation.receipt.vehicle.id,
-                number: operation.receipt.vehicle.plateNumber,
+                name: `${operation.receipt.vehicle.make} ${
+                  operation.receipt.vehicle.model
+                }${
+                  operation.receipt.vehicle.client
+                    ? ` (${operation.receipt.vehicle.client.firstName} ${operation.receipt.vehicle.client.lastName})`
+                    : ''
+                }`.trim(),
               }
             : undefined,
           items: operation.receipt?.items?.map((item) => ({
@@ -220,31 +242,67 @@ export class SalesService {
   }
 
   async getClients(warehouseId: string) {
+    const shopId = await this.getShopIdByWarehouseId(warehouseId);
+    console.log('🏪 Getting clients for shop:', shopId);
+
     const clients = await this.clientRepository.find({
       where: {
-        warehouseId,
+        shopId,
+        isActive: true,
       },
       select: {
         id: true,
         firstName: true,
+        lastName: true,
+      },
+      order: {
+        firstName: 'ASC',
+        lastName: 'ASC',
       },
     });
 
+    console.log(`✅ Found ${clients.length} clients`);
     return clients;
   }
 
   async getVehicles(warehouseId: string) {
+    const shopId = await this.getShopIdByWarehouseId(warehouseId);
+    console.log('🏪 Getting vehicles for shop:', shopId);
+
     const vehicles = await this.vehicleRepository.find({
       where: {
-        warehouseId,
+        shopId,
+        isActive: true,
+      },
+      relations: {
+        client: true,
       },
       select: {
         id: true,
         plateNumber: true,
+        make: true,
+        model: true,
+        client: {
+          id: true,
+          firstName: true,
+          lastName: true,
+        },
+      },
+      order: {
+        make: 'ASC',
+        model: 'ASC',
       },
     });
 
-    return vehicles;
+    console.log(`✅ Found ${vehicles.length} vehicles`);
+    return vehicles.map((vehicle) => ({
+      id: vehicle.id,
+      name: `${vehicle.make} ${vehicle.model} ${vehicle.plateNumber}${
+        vehicle.client
+          ? ` (${vehicle.client.firstName} ${vehicle.client.lastName})`
+          : ''
+      }`.trim(),
+    }));
   }
 
   async getReceiptDetails(warehouseId: string, operationId: string) {
@@ -294,7 +352,13 @@ export class SalesService {
       vehicle: operation.receipt.vehicle
         ? {
             id: operation.receipt.vehicle.id,
-            number: operation.receipt.vehicle.plateNumber,
+            name: `${operation.receipt.vehicle.make} ${
+              operation.receipt.vehicle.model
+            }${
+              operation.receipt.vehicle.client
+                ? ` (${operation.receipt.vehicle.client.firstName} ${operation.receipt.vehicle.client.lastName})`
+                : ''
+            }`.trim(),
           }
         : undefined,
       items: operation.receipt.items?.map((item) => ({
