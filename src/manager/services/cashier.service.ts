@@ -1410,54 +1410,91 @@ export class CashierService {
       `[getCurrentReceipt] Ищем чек со статусом "${currentStatus}"`
     );
 
-    // Создаем запрос с точным статусом
-    const receipt = await this.receiptRepository.findOne({
+    // Получаем активную смену для склада, чтобы убедиться, что чек принадлежит открытой смене
+    const activeShift = await this.cashShiftRepository.findOne({
       where: {
-        warehouseId,
-        status: currentStatus, // Используем 'created' в нижнем регистре
+        status: CashShiftStatus.OPEN,
+        cashRegister: { warehouseId },
       },
-      relations: ['items', 'cashShift', 'cashRegister'],
-      order: {
-        createdAt: 'DESC',
-      },
+      select: ['id'],
     });
 
-    if (receipt) {
-      this.logger.log(
-        `[getCurrentReceipt] Найден чек в статусе "${currentStatus}":`,
-        {
-          id: receipt.id,
-          status: receipt.status,
-          receiptNumber: receipt.receiptNumber,
-          itemsCount: receipt.items?.length || 0,
-        }
-      );
-    } else {
-      this.logger.log(
-        `[getCurrentReceipt] Не найдено чеков в статусе "${currentStatus}" для склада ${warehouseId}`
-      );
+    this.logger.log(
+      `[getCurrentReceipt] Активная смена для склада ${warehouseId}:`,
+      activeShift ? { shiftId: activeShift.id } : 'Не найдена'
+    );
 
-      // Для отладки проверим, есть ли вообще какие-то чеки для этого склада
-      const anyReceipts = await this.receiptRepository.find({
-        where: { warehouseId },
-        select: ['id', 'status', 'createdAt', 'receiptNumber'],
-        take: 5,
-        order: { createdAt: 'DESC' },
+    // Создаем запрос с точным статусом и проверкой активной смены
+    const queryBuilder = this.receiptRepository
+      .createQueryBuilder('receipt')
+      .leftJoinAndSelect('receipt.items', 'items')
+      .leftJoinAndSelect('receipt.cashShift', 'cashShift')
+      .leftJoinAndSelect('receipt.cashRegister', 'cashRegister')
+      .where('receipt.warehouseId = :warehouseId', { warehouseId })
+      .andWhere('receipt.status = :status', { status: currentStatus });
+
+    // Добавляем условие проверки смены, если найдена активная смена
+    if (activeShift) {
+      queryBuilder.andWhere('receipt.cashShiftId = :shiftId', {
+        shiftId: activeShift.id,
       });
+    } else {
+      // Если нет активной смены, то и активного чека быть не должно
+      this.logger.log(
+        `[getCurrentReceipt] Нет активной смены для склада ${warehouseId}, возвращаем null`
+      );
+      return null;
+    }
 
-      if (anyReceipts.length > 0) {
+    queryBuilder.orderBy('receipt.createdAt', 'DESC');
+
+    try {
+      const receipt = await queryBuilder.getOne();
+
+      if (receipt) {
         this.logger.log(
-          `[getCurrentReceipt] Последние чеки для склада ${warehouseId}:`,
-          anyReceipts
+          `[getCurrentReceipt] Найден чек в статусе "${currentStatus}":`,
+          {
+            id: receipt.id,
+            status: receipt.status,
+            receiptNumber: receipt.receiptNumber,
+            itemsCount: receipt.items?.length || 0,
+            cashShiftId: receipt.cashShiftId,
+          }
         );
       } else {
         this.logger.log(
-          `[getCurrentReceipt] Нет чеков для склада ${warehouseId}`
+          `[getCurrentReceipt] Не найдено чеков в статусе "${currentStatus}" для активной смены`
         );
-      }
-    }
 
-    return receipt;
+        // Для отладки проверим, есть ли вообще какие-то чеки для этого склада
+        const anyReceipts = await this.receiptRepository.find({
+          where: { warehouseId },
+          select: ['id', 'status', 'createdAt', 'receiptNumber', 'cashShiftId'],
+          take: 5,
+          order: { createdAt: 'DESC' },
+        });
+
+        if (anyReceipts.length > 0) {
+          this.logger.log(
+            `[getCurrentReceipt] Последние чеки для склада ${warehouseId}:`,
+            anyReceipts
+          );
+        } else {
+          this.logger.log(
+            `[getCurrentReceipt] Нет чеков для склада ${warehouseId}`
+          );
+        }
+      }
+
+      return receipt;
+    } catch (error) {
+      this.logger.error(
+        `[getCurrentReceipt] Ошибка при поиске текущего чека:`,
+        error
+      );
+      return null; // Возвращаем null при любой ошибке
+    }
   }
 
   async createReturn(
