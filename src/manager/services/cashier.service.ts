@@ -1563,7 +1563,9 @@ export class CashierService {
         finalAmount: -receipt.finalAmount,
         status: ReceiptStatus.PAID,
         paymentMethodId: paymentMethod.id,
-        comment: returnData.reason || 'Возврат товара',
+        comment: `Возврат по чеку ${receipt.receiptNumber}${
+          returnData.reason ? '. Причина: ' + returnData.reason : ''
+        }`,
       });
 
       // Сохраняем возвратный чек
@@ -1764,38 +1766,38 @@ export class CashierService {
           cashierId: userId,
           receiptNumber: await this.generateReceiptNumber(warehouseId),
           date: new Date(),
-          status: ReceiptStatus.REFUNDED,
+          status: ReceiptStatus.PAID, // Изменено с REFUNDED на PAID
           comment: `Возврат без чека. Причина: ${returnReason}`,
         });
 
         // Рассчитываем сумму возврата для текущего товара
         const itemReturnAmount = item.price * item.quantity;
 
-        // Создаем позицию в чеке возврата
+        // Создаем позицию в чеке возврата с отрицательными значениями
         const returnItem = this.receiptItemRepository.create({
           receipt: returnReceipt,
           name: product.barcode.productName,
           price: item.price,
-          quantity: item.quantity,
-          amount: itemReturnAmount,
-          finalAmount: itemReturnAmount,
+          quantity: -item.quantity, // Отрицательное количество для возврата
+          amount: -itemReturnAmount, // Отрицательная сумма
+          finalAmount: -itemReturnAmount, // Отрицательная итоговая сумма
           type: product.isService
             ? ReceiptItemType.SERVICE
             : ReceiptItemType.PRODUCT,
           warehouseProductId: product.id,
         });
 
-        // Обновляем суммы в чеке возврата
-        returnReceipt.totalAmount = Number(itemReturnAmount.toFixed(2));
-        returnReceipt.finalAmount = Number(itemReturnAmount.toFixed(2));
+        // Обновляем суммы в чеке возврата (отрицательные значения)
+        returnReceipt.totalAmount = -Number(itemReturnAmount.toFixed(2));
+        returnReceipt.finalAmount = -Number(itemReturnAmount.toFixed(2));
 
-        // Создаем кассовую операцию для текущего товара
+        // Создаем кассовую операцию для текущего товара с отрицательным значением
         const cashOperation = new CashOperation();
         cashOperation.warehouseId = warehouseId;
         cashOperation.cashRegisterId = currentShift.cashRegister.id;
         cashOperation.shiftId = currentShift.id;
         cashOperation.operationType = CashOperationType.RETURN_WITHOUT_RECEIPT;
-        cashOperation.amount = Number(itemReturnAmount.toFixed(2));
+        cashOperation.amount = -Number(itemReturnAmount.toFixed(2)); // Отрицательная сумма
         cashOperation.paymentMethodType = paymentMethodType;
         cashOperation.paymentMethodId = selectedPaymentMethod.id;
         cashOperation.description = `Возврат без чека`;
@@ -1812,6 +1814,10 @@ export class CashierService {
         // Сохраняем чек возврата
         const savedReceipt = await this.receiptRepository.save(returnReceipt);
 
+        // Добавляем ссылку на чек в кассовой операции
+        savedCashOperation.receiptId = savedReceipt.id;
+        await this.cashOperationRepository.save(savedCashOperation);
+
         // Сохраняем позицию чека
         returnItem.receipt = savedReceipt;
         await this.receiptItemRepository.save(returnItem);
@@ -1827,7 +1833,7 @@ export class CashierService {
         await this.paymentMethodTransactionRepository.save({
           paymentMethod: { id: selectedPaymentMethod.id },
           shift: { id: currentShift.id },
-          amount: -itemReturnAmount,
+          amount: -itemReturnAmount, // Транзакция уже с отрицательной суммой, оставляем как есть
           balanceBefore: selectedPaymentMethod.currentBalance,
           balanceAfter: selectedPaymentMethod.currentBalance - itemReturnAmount,
           transactionType: TransactionType.RETURN_WITHOUT_RECEIPT,
@@ -1838,6 +1844,7 @@ export class CashierService {
         });
 
         // Обновляем баланс метода оплаты
+        // Обратите внимание: мы вычитаем положительное число, что уменьшает баланс
         selectedPaymentMethod.currentBalance -= itemReturnAmount;
         await this.paymentMethodRepository.update(
           { id: selectedPaymentMethod.id },
