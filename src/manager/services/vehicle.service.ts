@@ -85,6 +85,7 @@ export class VehicleService {
     // Создание записи
     const vehicle = this.vehicleRepository.create({
       ...createVehicleDto,
+      plateNumber: createVehicleDto.licensePlate,
       shopId,
     });
 
