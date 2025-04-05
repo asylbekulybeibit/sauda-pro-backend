@@ -978,7 +978,25 @@ export class CashierService {
   /**
    * Удаление пустого чека
    */
-  async deleteReceipt(warehouseId: string, receiptId: string, userId: string) {
+  async deleteReceipt(
+    warehouseId: string,
+    receiptId: string,
+    userId: string,
+    forceDelete: boolean = false
+  ) {
+    // Подробное логирование входящих параметров запроса
+    this.logger.log(
+      `[deleteReceipt] НАЧАЛО ОБРАБОТКИ запроса на удаление чека:`,
+      {
+        warehouseId,
+        receiptId,
+        userId,
+        forceDelete,
+        forceDeleteType: typeof forceDelete,
+        timestamp: new Date().toISOString(),
+      }
+    );
+
     // Проверяем существование чека
     const receipt = await this.receiptRepository.findOne({
       where: {
@@ -989,23 +1007,138 @@ export class CashierService {
     });
 
     if (!receipt) {
+      this.logger.warn(`[deleteReceipt] Чек ${receiptId} не найден`);
       throw new NotFoundException('Чек не найден');
     }
 
-    // Проверяем, что чек пустой
-    if (receipt.items.length > 0) {
-      throw new BadRequestException('Нельзя удалить чек с товарами');
-    }
+    // Логируем информацию о чеке и запросе
+    this.logger.log(`[deleteReceipt] Запрос на удаление чека ${receiptId}:`, {
+      id: receipt.id,
+      status: receipt.status,
+      statusLower: String(receipt.status).toLowerCase(),
+      itemsCount: receipt.items.length,
+      forceDelete,
+      userId,
+    });
 
-    // Проверяем статус чека
-    if (receipt.status !== ReceiptStatus.CREATED) {
+    // Получаем статусы в нижнем регистре, как они определены в enum
+    const createdStatus = ReceiptStatus.CREATED; // 'created'
+    const postponedStatus = ReceiptStatus.POSTPONED; // 'postponed'
+
+    // Для надежности приводим статус чека к строке и нижнему регистру
+    const currentStatus = String(receipt.status).toLowerCase();
+
+    // Проверяем, соответствует ли статус чека CREATED или POSTPONED
+    const isCreated = currentStatus === createdStatus;
+    const isPostponed = currentStatus === postponedStatus;
+
+    this.logger.log(
+      `[deleteReceipt] Сравнение статусов: текущий="${currentStatus}", created="${createdStatus}", postponed="${postponedStatus}", isCreated=${isCreated}, isPostponed=${isPostponed}`
+    );
+
+    // Всегда проверяем статус чека, даже при forceDelete=true
+    // Разрешаем удалять только чеки в статусах CREATED и POSTPONED
+    if (!isCreated && !isPostponed) {
+      this.logger.warn(
+        `[deleteReceipt] Попытка удалить чек ${receiptId} в недопустимом статусе: ${receipt.status}`
+      );
       throw new BadRequestException(
-        'Можно удалить только чек в статусе "Создан"'
+        'Можно удалить только чек в статусе "Создан" или "Отложен"'
       );
     }
 
-    // Удаляем чек
-    await this.receiptRepository.remove(receipt);
+    // Проверяем, что чек пустой (но пропускаем проверку при forceDelete=true)
+    if (!forceDelete && receipt.items.length > 0) {
+      this.logger.warn(
+        `[deleteReceipt] Попытка удалить непустой чек ${receiptId}`
+      );
+      throw new BadRequestException('Нельзя удалить чек с товарами');
+    }
+
+    // Если установлен forceDelete и есть товары, удаляем их сначала
+    if (forceDelete && receipt.items.length > 0) {
+      this.logger.log(
+        `[deleteReceipt] Принудительное удаление ${receipt.items.length} товаров из чека ${receiptId}`
+      );
+      try {
+        // Используем delete вместо remove для более надежного удаления
+        await this.receiptItemRepository.delete({ receiptId: receiptId });
+        this.logger.log(
+          `[deleteReceipt] Товары чека ${receiptId} успешно удалены через delete`
+        );
+
+        // Перезагружаем чек после удаления товаров для проверки
+        const updatedReceipt = await this.receiptRepository.findOne({
+          where: { id: receiptId },
+          relations: ['items'],
+        });
+
+        this.logger.log(
+          `[deleteReceipt] Состояние чека ${receiptId} после удаления товаров:`,
+          {
+            itemsCount: updatedReceipt?.items?.length || 0,
+          }
+        );
+      } catch (error) {
+        this.logger.error(
+          `[deleteReceipt] Ошибка при удалении товаров чека ${receiptId}:`,
+          error
+        );
+        throw new InternalServerErrorException(
+          'Ошибка при удалении товаров чека'
+        );
+      }
+    }
+
+    // Удаляем сам чек, используя delete вместо remove для более надежного удаления
+    try {
+      this.logger.log(
+        `[deleteReceipt] Начинаем удаление чека ${receiptId} через delete`
+      );
+
+      // Для отладки проверим, что происходит с чеком перед удалением
+      const checkReceiptBeforeDelete = await this.receiptRepository.findOne({
+        where: { id: receiptId },
+      });
+
+      if (!checkReceiptBeforeDelete) {
+        this.logger.warn(
+          `[deleteReceipt] Странно: чек ${receiptId} не найден перед удалением`
+        );
+      } else {
+        this.logger.log(
+          `[deleteReceipt] Чек ${receiptId} найден перед удалением, статус: ${checkReceiptBeforeDelete.status}`
+        );
+      }
+
+      const deleteResult = await this.receiptRepository.delete({
+        id: receiptId,
+      });
+      this.logger.log(`[deleteReceipt] Результат удаления чека ${receiptId}:`, {
+        affected: deleteResult.affected,
+      });
+
+      // Проверяем, действительно ли чек удален
+      const checkReceipt = await this.receiptRepository.findOne({
+        where: { id: receiptId },
+      });
+
+      if (checkReceipt) {
+        this.logger.warn(
+          `[deleteReceipt] Чек ${receiptId} всё еще существует после удаления! Статус: ${checkReceipt.status}`
+        );
+      } else {
+        this.logger.log(
+          `[deleteReceipt] Чек ${receiptId} успешно удален из базы данных`
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `[deleteReceipt] Ошибка при удалении чека ${receiptId}:`,
+        error
+      );
+      throw new InternalServerErrorException('Ошибка при удалении чека');
+    }
 
     return { success: true, message: 'Чек успешно удален' };
   }
@@ -1266,16 +1399,65 @@ export class CashierService {
    * Получение текущего активного чека
    */
   async getCurrentReceipt(warehouseId: string) {
-    return this.receiptRepository.findOne({
+    this.logger.log(
+      `[getCurrentReceipt] Запрос текущего чека для склада ${warehouseId}`
+    );
+
+    // Используем точный статус в нижнем регистре, как он определен в enum
+    const currentStatus = ReceiptStatus.CREATED; // 'created'
+
+    this.logger.log(
+      `[getCurrentReceipt] Ищем чек со статусом "${currentStatus}"`
+    );
+
+    // Создаем запрос с точным статусом
+    const receipt = await this.receiptRepository.findOne({
       where: {
         warehouseId,
-        status: ReceiptStatus.CREATED,
+        status: currentStatus, // Используем 'created' в нижнем регистре
       },
       relations: ['items', 'cashShift', 'cashRegister'],
       order: {
         createdAt: 'DESC',
       },
     });
+
+    if (receipt) {
+      this.logger.log(
+        `[getCurrentReceipt] Найден чек в статусе "${currentStatus}":`,
+        {
+          id: receipt.id,
+          status: receipt.status,
+          receiptNumber: receipt.receiptNumber,
+          itemsCount: receipt.items?.length || 0,
+        }
+      );
+    } else {
+      this.logger.log(
+        `[getCurrentReceipt] Не найдено чеков в статусе "${currentStatus}" для склада ${warehouseId}`
+      );
+
+      // Для отладки проверим, есть ли вообще какие-то чеки для этого склада
+      const anyReceipts = await this.receiptRepository.find({
+        where: { warehouseId },
+        select: ['id', 'status', 'createdAt', 'receiptNumber'],
+        take: 5,
+        order: { createdAt: 'DESC' },
+      });
+
+      if (anyReceipts.length > 0) {
+        this.logger.log(
+          `[getCurrentReceipt] Последние чеки для склада ${warehouseId}:`,
+          anyReceipts
+        );
+      } else {
+        this.logger.log(
+          `[getCurrentReceipt] Нет чеков для склада ${warehouseId}`
+        );
+      }
+    }
+
+    return receipt;
   }
 
   async createReturn(

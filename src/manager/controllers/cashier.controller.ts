@@ -8,6 +8,7 @@ import {
   UseGuards,
   Req,
   Delete,
+  Logger,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -20,6 +21,8 @@ import { CreateReturnWithoutReceiptDto } from '../dto/cashier/create-return-with
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(RoleType.CASHIER, RoleType.MANAGER, RoleType.SUPERADMIN, RoleType.OWNER)
 export class CashierController {
+  private readonly logger = new Logger(CashierController.name);
+
   constructor(private readonly cashierService: CashierService) {}
 
   /**
@@ -259,12 +262,21 @@ export class CashierController {
   async deleteReceipt(
     @Param('warehouseId') warehouseId: string,
     @Param('receiptId') receiptId: string,
+    @Query('forceDelete') forceDelete: string,
     @Req() req
   ) {
+    // Преобразуем строковый параметр в boolean
+    const shouldForceDelete = forceDelete === 'true';
+
+    this.logger.log(
+      `[deleteReceipt] Получен запрос на удаление чека ${receiptId} с параметром forceDelete=${shouldForceDelete}`
+    );
+
     return this.cashierService.deleteReceipt(
       warehouseId,
       receiptId,
-      req.user.id
+      req.user.id,
+      shouldForceDelete
     );
   }
 
