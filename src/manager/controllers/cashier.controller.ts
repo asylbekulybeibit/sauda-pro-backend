@@ -161,6 +161,66 @@ export class CashierController {
   }
 
   /**
+   * Поиск клиентов по имени, фамилии или телефону
+   */
+  @Get('clients/search')
+  async searchClients(
+    @Param('warehouseId') warehouseId: string,
+    @Query('query') query: string,
+    @Req() req
+  ) {
+    return this.cashierService.searchClients(warehouseId, query, req.user.id);
+  }
+
+  /**
+   * Получение автомобилей клиента
+   */
+  @Get('clients/:clientId/vehicles')
+  async getClientVehicles(
+    @Param('warehouseId') warehouseId: string,
+    @Param('clientId') clientId: string,
+    @Req() req
+  ) {
+    return this.cashierService.getClientVehicles(
+      warehouseId,
+      clientId,
+      req.user.id
+    );
+  }
+
+  /**
+   * Получение всех автомобилей для выбора в интерфейсе кассира
+   */
+  @Get('vehicles')
+  async getAllVehicles(
+    @Param('warehouseId') warehouseId: string,
+    @Query('query') query: string,
+    @Req() req
+  ) {
+    return this.cashierService.getAllVehicles(
+      warehouseId,
+      query || '',
+      req.user.id
+    );
+  }
+
+  /**
+   * Получение информации об автомобиле вместе с данными о владельце
+   */
+  @Get('vehicles/:vehicleId')
+  async getVehicleWithClient(
+    @Param('warehouseId') warehouseId: string,
+    @Param('vehicleId') vehicleId: string,
+    @Req() req
+  ) {
+    return this.cashierService.getVehicleWithClient(
+      warehouseId,
+      vehicleId,
+      req.user.id
+    );
+  }
+
+  /**
    * Отложить чек
    */
   @Post('receipts/:receiptId/postpone')
@@ -215,7 +275,13 @@ export class CashierController {
   async payReceipt(
     @Param('warehouseId') warehouseId: string,
     @Param('receiptId') receiptId: string,
-    @Body() paymentData: { paymentMethodId: string; amount: number },
+    @Body()
+    paymentData: {
+      paymentMethodId: string;
+      amount: number;
+      clientId?: string;
+      vehicleId?: string;
+    },
     @Req() req
   ) {
     return this.cashierService.payReceipt(

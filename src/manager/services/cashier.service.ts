@@ -34,6 +34,8 @@ import {
 import { CreateReturnDto } from '../dto/cashier/create-return.dto';
 import { ReceiptType } from '../entities/receipt-action.entity';
 import { Logger } from '@nestjs/common';
+import { Client } from '../entities/client.entity';
+import { Vehicle } from '../entities/vehicle.entity';
 
 interface GetReceiptsParams {
   date?: string;
@@ -62,7 +64,11 @@ export class CashierService {
     @InjectRepository(CashOperation)
     private readonly cashOperationRepository: Repository<CashOperation>,
     @InjectRepository(PaymentMethodTransaction)
-    private readonly paymentMethodTransactionRepository: Repository<PaymentMethodTransaction>
+    private readonly paymentMethodTransactionRepository: Repository<PaymentMethodTransaction>,
+    @InjectRepository(Client)
+    private readonly clientRepository: Repository<Client>,
+    @InjectRepository(Vehicle)
+    private readonly vehicleRepository: Repository<Vehicle>
   ) {}
 
   /**
@@ -1010,7 +1016,12 @@ export class CashierService {
   async payReceipt(
     warehouseId: string,
     receiptId: string,
-    paymentData: { paymentMethodId: string; amount: number },
+    paymentData: {
+      paymentMethodId: string;
+      amount: number;
+      clientId?: string;
+      vehicleId?: string;
+    },
     userId: string
   ) {
     console.log('[CashierService] payReceipt called with:', {
@@ -1040,6 +1051,83 @@ export class CashierService {
       // Проверяем статус смены
       if (receipt.cashShift.status !== CashShiftStatus.OPEN) {
         throw new BadRequestException('Смена закрыта');
+      }
+
+      // Если передан только vehicleId без clientId, проверяем наличие клиента у автомобиля
+      if (paymentData.vehicleId && !paymentData.clientId) {
+        this.logger.log(
+          `[payReceipt] Vehicle provided without client, checking if vehicle has client: ${paymentData.vehicleId}`
+        );
+
+        const vehicle = await this.vehicleRepository.findOne({
+          where: { id: paymentData.vehicleId, isActive: true },
+          relations: ['client'],
+        });
+
+        if (vehicle && vehicle.clientId) {
+          this.logger.log(
+            `[payReceipt] Found client for vehicle: Client ID ${vehicle.clientId}`
+          );
+          // Автоматически устанавливаем clientId из данных автомобиля
+          paymentData.clientId = vehicle.clientId;
+        }
+      }
+
+      // Если передан ID клиента, связываем чек с клиентом и применяем скидку
+      if (paymentData.clientId) {
+        this.logger.log(
+          `[payReceipt] Processing client ${paymentData.clientId} for receipt ${receiptId}`
+        );
+        const client = await this.clientRepository.findOne({
+          where: { id: paymentData.clientId, isActive: true },
+        });
+
+        if (client) {
+          receipt.clientId = client.id;
+
+          // Применяем скидку клиента, если она есть
+          if (client.discountPercent > 0) {
+            const discountPercent = Number(client.discountPercent);
+            const discountAmount =
+              (Number(receipt.totalAmount) * discountPercent) / 100;
+            receipt.discountAmount = discountAmount;
+            receipt.finalAmount = Number(receipt.totalAmount) - discountAmount;
+
+            this.logger.log(
+              `[payReceipt] Applied client discount: ${discountPercent}%, amount: ${discountAmount}`
+            );
+          }
+        }
+      }
+
+      // Если передан ID автомобиля, связываем чек с автомобилем
+      if (paymentData.vehicleId) {
+        this.logger.log(
+          `[payReceipt] Processing vehicle ${paymentData.vehicleId} for receipt ${receiptId}`
+        );
+        const vehicle = await this.vehicleRepository.findOne({
+          where: {
+            id: paymentData.vehicleId,
+            isActive: true,
+          },
+        });
+
+        if (vehicle) {
+          // Проверяем, что автомобиль принадлежит выбранному клиенту (если клиент указан)
+          if (
+            paymentData.clientId &&
+            vehicle.clientId !== paymentData.clientId
+          ) {
+            this.logger.warn(
+              `[payReceipt] Vehicle ${paymentData.vehicleId} does not belong to client ${paymentData.clientId}`
+            );
+          } else {
+            receipt.vehicleId = vehicle.id;
+            this.logger.log(
+              `[payReceipt] Associated vehicle ${vehicle.id} with receipt ${receiptId}`
+            );
+          }
+        }
       }
 
       // Находим метод оплаты
@@ -1948,5 +2036,189 @@ export class CashierService {
     // TODO: Здесь будет вызов сервиса печати с reportData
     // Пока просто возвращаем данные
     return reportData;
+  }
+
+  /**
+   * Поиск клиентов по имени, фамилии или телефону
+   */
+  async searchClients(warehouseId: string, query: string, userId: string) {
+    this.logger.log(`[searchClients] Searching clients with query: ${query}`);
+
+    if (!query || query.trim().length < 2) {
+      return [];
+    }
+
+    // Поиск клиентов по имени, фамилии или телефону
+    const clients = await this.clientRepository.find({
+      where: [
+        { firstName: ILike(`%${query}%`), isActive: true },
+        { lastName: ILike(`%${query}%`), isActive: true },
+        { phone: ILike(`%${query}%`), isActive: true },
+      ],
+      take: 10, // Ограничиваем результаты для производительности
+    });
+
+    this.logger.log(`[searchClients] Found ${clients.length} clients`);
+
+    return clients.map((client) => ({
+      id: client.id,
+      firstName: client.firstName,
+      lastName: client.lastName,
+      phone: client.phone,
+      discountPercent: client.discountPercent,
+      email: client.email,
+    }));
+  }
+
+  /**
+   * Получение автомобилей клиента
+   */
+  async getClientVehicles(
+    warehouseId: string,
+    clientId: string,
+    userId: string
+  ) {
+    this.logger.log(
+      `[getClientVehicles] Getting vehicles for client: ${clientId}`
+    );
+
+    // Проверяем существование клиента
+    const client = await this.clientRepository.findOne({
+      where: { id: clientId, isActive: true },
+    });
+
+    if (!client) {
+      throw new NotFoundException('Клиент не найден');
+    }
+
+    // Получаем все автомобили клиента
+    const vehicles = await this.vehicleRepository.find({
+      where: { clientId, isActive: true },
+    });
+
+    this.logger.log(
+      `[getClientVehicles] Found ${vehicles.length} vehicles for client ${clientId}`
+    );
+
+    return vehicles.map((vehicle) => ({
+      id: vehicle.id,
+      make: vehicle.make,
+      model: vehicle.model,
+      year: vehicle.year,
+      plateNumber: vehicle.plateNumber,
+      bodyType: vehicle.bodyType,
+      engineVolume: vehicle.engineVolume,
+      vin: vehicle.vin,
+      clientId: vehicle.clientId,
+      hasClient: !!vehicle.clientId,
+    }));
+  }
+
+  /**
+   * Получение всех автомобилей для выбора в интерфейсе кассира
+   */
+  async getAllVehicles(warehouseId: string, query: string, userId: string) {
+    this.logger.log(
+      `[getAllVehicles] Getting all vehicles with search query: ${query}`
+    );
+
+    // Базовое условие поиска
+    const whereConditions = { isActive: true };
+
+    let vehicles = [];
+
+    // Если есть поисковый запрос, добавляем условия поиска
+    if (query && query.trim().length > 0) {
+      const searchQuery = query.trim();
+      vehicles = await this.vehicleRepository.find({
+        where: [
+          { make: ILike(`%${searchQuery}%`), ...whereConditions },
+          { model: ILike(`%${searchQuery}%`), ...whereConditions },
+          { plateNumber: ILike(`%${searchQuery}%`), ...whereConditions },
+          { vin: ILike(`%${searchQuery}%`), ...whereConditions },
+        ],
+        relations: ['client'],
+        take: 20, // Ограничиваем количество результатов
+      });
+    } else {
+      // Если поисковый запрос не задан, возвращаем последние добавленные автомобили
+      vehicles = await this.vehicleRepository.find({
+        where: whereConditions,
+        relations: ['client'],
+        order: { createdAt: 'DESC' },
+        take: 20, // Ограничиваем количество результатов
+      });
+    }
+
+    // Форматируем результаты
+    this.logger.log(`[getAllVehicles] Found ${vehicles.length} vehicles`);
+    return vehicles.map((vehicle) => {
+      const hasClient = !!vehicle.client;
+      return {
+        id: vehicle.id,
+        make: vehicle.make,
+        model: vehicle.model,
+        year: vehicle.year,
+        plateNumber: vehicle.plateNumber,
+        bodyType: vehicle.bodyType,
+        engineVolume: vehicle.engineVolume,
+        vin: vehicle.vin,
+        clientId: vehicle.clientId,
+        hasClient: hasClient,
+        clientInfo: hasClient
+          ? {
+              id: vehicle.client.id,
+              firstName: vehicle.client.firstName,
+              lastName: vehicle.client.lastName,
+              discountPercent: vehicle.client.discountPercent,
+            }
+          : null,
+      };
+    });
+  }
+
+  /**
+   * Получение информации об автомобиле вместе с данными о владельце
+   */
+  async getVehicleWithClient(
+    warehouseId: string,
+    vehicleId: string,
+    userId: string
+  ) {
+    this.logger.log(
+      `[getVehicleWithClient] Getting vehicle with client data: ${vehicleId}`
+    );
+
+    // Получаем автомобиль с информацией о клиенте
+    const vehicle = await this.vehicleRepository.findOne({
+      where: { id: vehicleId, isActive: true },
+      relations: ['client'],
+    });
+
+    if (!vehicle) {
+      throw new NotFoundException('Автомобиль не найден');
+    }
+
+    const hasClient = !!vehicle.client;
+    return {
+      id: vehicle.id,
+      make: vehicle.make,
+      model: vehicle.model,
+      year: vehicle.year,
+      plateNumber: vehicle.plateNumber,
+      bodyType: vehicle.bodyType,
+      engineVolume: vehicle.engineVolume,
+      vin: vehicle.vin,
+      clientId: vehicle.clientId,
+      hasClient: hasClient,
+      clientInfo: hasClient
+        ? {
+            id: vehicle.client.id,
+            firstName: vehicle.client.firstName,
+            lastName: vehicle.client.lastName,
+            discountPercent: vehicle.client.discountPercent,
+          }
+        : null,
+    };
   }
 }
